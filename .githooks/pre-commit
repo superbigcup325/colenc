@@ -1,0 +1,24 @@
+#!/bin/sh
+# Pre-commit gate: type-check with warnings denied, and reject unformatted code.
+#
+# Deliberately non-mutating: `moon fmt` rewrites files, and a hook that rewrites
+# them mid-commit changes what you staged without saying so. Run `moon fmt`
+# yourself, re-stage, and commit again.
+#
+# One-shot install (per clone):
+#   git config core.hooksPath .githooks
+
+set -e
+
+moon check --deny-warn
+
+# `moon fmt --check` errors out while the module has no packages, so this half
+# of the gate arms itself as soon as the first moon.pkg lands.
+if find . -name 'moon.pkg' -not -path './_build/*' | grep -q .; then
+  if ! moon fmt --check; then
+    echo "pre-commit: formatting check failed — run 'moon fmt', re-stage, and commit again" >&2
+    exit 1
+  fi
+else
+  echo "pre-commit: no packages yet — skipping the format check"
+fi

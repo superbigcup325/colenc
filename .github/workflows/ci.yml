@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install MoonBit
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+      - name: Toolchain version
+        run: moon version --all
+      - name: Fetch dependencies
+        run: |
+          moon update
+          # the toolchain enforces moon.mod's manifest format: a dependency that
+          # still ships the legacy moon.mod.json fails here, loudly
+          moon install
+      - name: Lint (check --deny-warn)
+        run: moon check --deny-warn
+      - name: Format check
+        run: |
+          # `moon fmt --check` errors out while the module has no packages, so
+          # this gate arms itself as soon as the first moon.pkg lands.
+          if find . -name 'moon.pkg' -not -path './_build/*' | grep -q .; then
+            moon fmt --check
+          else
+            echo "no packages yet — skipping the format check"
+          fi
+      - name: Interface freshness (info)
+        run: |
+          moon info
+          git diff --exit-code -- '*.mbti'
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The library promises identical behaviour on native and wasm-gc, so
+        # both backends are exercised from the start.
+        target:
+          - wasm-gc
+          - native
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install MoonBit
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+      - name: Fetch dependencies
+        run: |
+          moon update
+          moon install
+      - name: Test (${{ matrix.target }})
+        run: moon test --target ${{ matrix.target }}

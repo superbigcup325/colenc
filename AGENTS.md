@@ -14,18 +14,27 @@ milestone plan and the acceptance criteria this repo is built around.
 Design settled; at **P0 (acceptance harness)**. No code yet — do not assume any
 package described below exists.
 
-## Planned layout
+## Layout
 
-> PLANNED — none of these directories exist yet. The target structure is kept
-> here so the first commits land in the right place.
+Published (tracked) today:
 
 ```
-colpack/
-  primitives/   # L1: varint / zigzag / bit packing and unpacking / bit width / cursors
-  encoders/     # L2: one file per encoding family, each with its property / battery tests
-  facade.mbt    # L3: dispatch — Encoding / EncodingStats / column-vector conversion
-  harness/      # acceptance rig: Python reference generation and diffing, minimal writer
-  docs/         # ROADMAP.md — the public roadmap
+AGENTS.md  README.md  CHANGELOG.md  LICENSE
+moon.mod                 module manifest
+docs/ROADMAP.md          the public roadmap
+.githooks/               pre-commit gate
+.github/workflows/       CI gate
+.gitignore .moonignore .gitattributes
+```
+
+Planned — no packages exist yet, so treat this as the target structure the
+first commits should land in:
+
+```
+primitives/   # L1: varint / zigzag / bit packing and unpacking / bit width / cursors
+encoders/     # L2: one file per encoding family, each with its property / battery tests
+facade.mbt    # L3: dispatch — Encoding / EncodingStats / column-vector conversion
+harness/      # acceptance rig: Python reference generation and diffing, minimal writer
 ```
 
 - MoonBit packages are organized per directory, one `moon.pkg` each; `moon.mod`
@@ -37,8 +46,12 @@ colpack/
 ## Tooling
 
 - `moon check` / `moon test` / `moon fmt` / `moon info` / `moon run`
-- **Pre-commit quartet** (the same gate idea as moonlake):
+- **Before committing**, run the quartet:
   `moon info && moon fmt && moon check --deny-warn && moon test`
+- `.githooks/pre-commit` enforces the non-mutating half of that gate
+  (`moon check --deny-warn`, `moon fmt --check`); enable it once per clone with
+  `git config core.hooksPath .githooks`. CI (`.github/workflows/ci.yml`) runs the
+  same gate on both wasm-gc and native.
 - Backend differences must be tested explicitly: the default local target does
   not cover native, so anything touching bytes or buffers needs
   `moon test --target native`

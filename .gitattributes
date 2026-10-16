@@ -1,0 +1,4 @@
+# Fixture and reference files are compared byte-for-byte, so git's newline
+# translation must not touch them: a checkout with autocrlf would rewrite
+# LF to CRLF and silently corrupt the bytes the judge compares against.
+/harness/fixtures/** -text
