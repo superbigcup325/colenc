@@ -50,14 +50,14 @@ Physical types: `Int32` / `Int64` / `Float` / `Double` / `ByteArray` / `Bool`
 
 | # | Family | Applies to | Criteria strength | Status |
 |---|---|---|---|---|
-| E0 | PLAIN | all | round-trip + container interop | planned |
-| E1 | RLE / bit-packed hybrid | Int32/Int64/Bool + levels | round-trip + byte diff | planned |
-| E2 | Dictionary | low-cardinality ByteArray/Int | round-trip + byte diff | planned |
-| E3 | DELTA_BINARY_PACKED | Int32/Int64 | round-trip + byte diff | planned |
-| E4 | DELTA_LENGTH_BYTE_ARRAY | ByteArray | round-trip + byte diff | planned |
-| E5 | DELTA_BYTE_ARRAY | ByteArray (shared prefixes) | round-trip + byte diff | planned |
-| E6 | BYTE_STREAM_SPLIT | Float/Double | round-trip + byte diff | planned |
-| E7 | FSST | ByteArray (high-cardinality short strings) | round-trip + compression scoreboard | planned, see the §4 exception |
+| E0 | PLAIN | all | round-trip + container interop | done — container interop |
+| E1 | RLE / bit-packed hybrid | Int32/Int64/Bool + levels | round-trip + byte diff | done — byte-identical |
+| E2 | Dictionary | low-cardinality ByteArray/Int | round-trip + byte diff | done — byte-identical, per-column fallback |
+| E3 | DELTA_BINARY_PACKED | Int32/Int64 | round-trip + byte diff | done — byte-identical |
+| E4 | DELTA_LENGTH_BYTE_ARRAY | ByteArray | round-trip + byte diff | done — byte-identical |
+| E5 | DELTA_BYTE_ARRAY | ByteArray (shared prefixes) | round-trip + byte diff | done — byte-identical |
+| E6 | BYTE_STREAM_SPLIT | Float/Double | round-trip + byte diff | done — byte-identical |
+| E7 | FSST | ByteArray (high-cardinality short strings) | round-trip + compression scoreboard | done — round trip + scoreboard, no byte diff (§4 exception) |
 
 E0–E6 follow the Parquet spec; **choice bits align with the reference implementation** (RLE's run-selection heuristic, the dictionary threshold and bit-width derivation, DELTA's block 128 / miniblock 4). If the choice bits drift, byte diffing becomes meaningless — so these rules are spelled out one by one in the README
 

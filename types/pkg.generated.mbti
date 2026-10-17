@@ -15,6 +15,7 @@ pub(all) suberror EncodingError {
   TypeMismatch(PhysicalType, Encoding)
   Incomplete(Int, Int)
   InvalidIndex(Int, Int)
+  InvalidTag(Int)
 }
 pub fn EncodingError::message(Self) -> String
 
