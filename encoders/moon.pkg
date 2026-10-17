@@ -1,7 +1,10 @@
 import {
   "superbigcup325/colpack/types",
+  "superbigcup325/colpack/primitives",
   "moonbitlang/core/buffer",
 }
 
 import {
+  "moonbitlang/quickcheck" @qc,
+  "moonbitlang/core/quickcheck" @gen,
 } for "test"

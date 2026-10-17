@@ -4,7 +4,7 @@
 
 ///|
 /// Read a 32-bit little-endian integer. Callers check the bounds first.
-fn read_u32_le(data : BytesView, offset : Int32) -> Int32 {
+pub fn read_u32_le(data : BytesView, offset : Int32) -> Int32 {
   data[offset].to_int() |
   (data[offset + 1].to_int() << 8) |
   (data[offset + 2].to_int() << 16) |

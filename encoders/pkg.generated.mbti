@@ -9,6 +9,8 @@ import {
 // Values
 pub fn decode_bool(BytesView, Int) -> Array[Bool] raise @types.EncodingError
 
+pub fn decode_bool_rle(BytesView, Int) -> Array[Bool] raise @types.EncodingError
+
 pub fn decode_byte_arrays(BytesView, Int) -> Array[Bytes] raise @types.EncodingError
 
 pub fn decode_double(BytesView, Int) -> Array[Double] raise @types.EncodingError
@@ -19,7 +21,11 @@ pub fn decode_int32(BytesView, Int) -> Array[Int] raise @types.EncodingError
 
 pub fn decode_int64(BytesView, Int) -> Array[Int64] raise @types.EncodingError
 
+pub fn decode_rle_hybrid(BytesView, Int, Int, offset? : Int) -> (Array[Int64], Int) raise @types.EncodingError
+
 pub fn encode_bool(Array[Bool], @buffer.Buffer) -> Unit
+
+pub fn encode_bool_rle(Array[Bool], @buffer.Buffer) -> Unit raise @types.EncodingError
 
 pub fn encode_byte_arrays(Array[Bytes], @buffer.Buffer) -> Unit
 
@@ -30,6 +36,10 @@ pub fn encode_float(Array[Float], @buffer.Buffer) -> Unit
 pub fn encode_int32(Array[Int], @buffer.Buffer) -> Unit
 
 pub fn encode_int64(Array[Int64], @buffer.Buffer) -> Unit
+
+pub fn encode_rle_hybrid(ArrayView[Int64], Int, @buffer.Buffer) -> Unit raise @types.EncodingError
+
+pub fn read_u32_le(BytesView, Int) -> Int
 
 // Errors
 

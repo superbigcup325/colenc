@@ -41,5 +41,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   produced by `encode_column`, and both modes produce identical files that
   DuckDB and pyarrow read back
 
-The RLE/bit-packed hybrid is next. — the project is at P0, with the MoonBit minimal writer
+- RLE / bit-packed hybrid (`encoders/rle.mbt`) with the reference implementation's
+  run-selection heuristic: eight-value buffering, repeated runs from eight
+  values, literal runs capped at 63 groups, end-flush padding. Byte-identical
+  to parquet-cpp on boolean streams and dictionary indices
+- Boolean RLE values carry the spec's 4-byte length prefix; the facade wires
+  `Encoding::Rle` for boolean columns and reports `TypeMismatch` elsewhere
+- Harness: `make_rle_cases.py` + `check_rle.py` + `rle_probe/` diff the
+  library's stream against the reference, and `writer_min --rle` proves the
+  container path with both judges
+
+The CI side of the harness (T1.4) is next. — the project is at P0, with the MoonBit minimal writer
 still to land.

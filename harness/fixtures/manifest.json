@@ -120,6 +120,24 @@
       "values": "rle_bool.values.bin",
       "values_bytes": 125,
       "values_sha256": "54ad20a34a427633d4074cb2bfd02ad1a015ccae7695d3553ab86192b94cb486"
+    },
+    {
+      "column": "flags",
+      "count": 676,
+      "encoding": "RLE",
+      "has_dictionary_page": false,
+      "name": "rle_bool_runs",
+      "observed_encodings": [
+        "RLE"
+      ],
+      "parquet": "rle_bool_runs.parquet",
+      "parquet_bytes": 255,
+      "parquet_sha256": "8221d92f3ac58b765de27f974f323c7ec03be79e4f7fb8deafc25d51987caa5a",
+      "physical_type": "BOOLEAN",
+      "row_groups": 1,
+      "values": "rle_bool_runs.values.bin",
+      "values_bytes": 85,
+      "values_sha256": "a39328013d3024da2716d4e21e426e3fd9fb01cf057e72cccc22a62ff9fb1d69"
     }
   ],
   "store_arrow_schema": false,

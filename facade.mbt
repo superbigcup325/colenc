@@ -14,18 +14,24 @@ pub fn encode_column(
   encoding : @types.Encoding,
   out : @buffer.Buffer,
 ) -> @types.EncodingStats raise @types.EncodingError {
-  match encoding {
-    Plain => ()
-    other => raise @types.EncodingError::Unsupported(other)
-  }
   let start = out.length()
-  match column {
-    Int32s(values) => @encoders.encode_int32(values, out)
-    Int64s(values) => @encoders.encode_int64(values, out)
-    Floats(values) => @encoders.encode_float(values, out)
-    Doubles(values) => @encoders.encode_double(values, out)
-    ByteArrays(values) => @encoders.encode_byte_arrays(values, out)
-    Bools(values) => @encoders.encode_bool(values, out)
+  match encoding {
+    Plain =>
+      match column {
+        Int32s(values) => @encoders.encode_int32(values, out)
+        Int64s(values) => @encoders.encode_int64(values, out)
+        Floats(values) => @encoders.encode_float(values, out)
+        Doubles(values) => @encoders.encode_double(values, out)
+        ByteArrays(values) => @encoders.encode_byte_arrays(values, out)
+        Bools(values) => @encoders.encode_bool(values, out)
+      }
+    Rle =>
+      match column {
+        Bools(values) => @encoders.encode_bool_rle(values, out)
+        _ =>
+          raise @types.EncodingError::TypeMismatch(column.physical_type(), Rle)
+      }
+    other => raise @types.EncodingError::Unsupported(other)
   }
   { value_count: column.value_count(), encoded_bytes: out.length() - start, }
 }
@@ -40,16 +46,21 @@ pub fn decode_column(
   count : Int32,
 ) -> @types.ColBuf raise @types.EncodingError {
   match encoding {
-    Plain => ()
+    Plain =>
+      match ty {
+        Int32 => @types.ColBuf::Int32s(@encoders.decode_int32(data, count))
+        Int64 => @types.ColBuf::Int64s(@encoders.decode_int64(data, count))
+        Float => @types.ColBuf::Floats(@encoders.decode_float(data, count))
+        Double => @types.ColBuf::Doubles(@encoders.decode_double(data, count))
+        ByteArray =>
+          @types.ColBuf::ByteArrays(@encoders.decode_byte_arrays(data, count))
+        Bool => @types.ColBuf::Bools(@encoders.decode_bool(data, count))
+      }
+    Rle =>
+      match ty {
+        Bool => @types.ColBuf::Bools(@encoders.decode_bool_rle(data, count))
+        _ => raise @types.EncodingError::TypeMismatch(ty, Rle)
+      }
     other => raise @types.EncodingError::Unsupported(other)
-  }
-  match ty {
-    Int32 => @types.ColBuf::Int32s(@encoders.decode_int32(data, count))
-    Int64 => @types.ColBuf::Int64s(@encoders.decode_int64(data, count))
-    Float => @types.ColBuf::Floats(@encoders.decode_float(data, count))
-    Double => @types.ColBuf::Doubles(@encoders.decode_double(data, count))
-    ByteArray =>
-      @types.ColBuf::ByteArrays(@encoders.decode_byte_arrays(data, count))
-    Bool => @types.ColBuf::Bools(@encoders.decode_bool(data, count))
   }
 }

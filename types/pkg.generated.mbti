@@ -11,6 +11,9 @@ pub(all) suberror EncodingError {
   Truncated(Int, Int, Int)
   Unsupported(Encoding)
   InvalidCount(Int)
+  InvalidBitWidth(Int)
+  TypeMismatch(PhysicalType, Encoding)
+  Incomplete(Int, Int)
 }
 pub fn EncodingError::message(Self) -> String
 

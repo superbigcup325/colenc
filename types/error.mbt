@@ -9,6 +9,12 @@ pub(all) suberror EncodingError {
   Unsupported(Encoding)
   /// A negative value count or length.
   InvalidCount(Int32)
+  /// A bit width outside the supported 0..64 range.
+  InvalidBitWidth(Int32)
+  /// The encoding exists but does not apply to this physical type.
+  TypeMismatch(PhysicalType, Encoding)
+  /// The stream ended before the requested values: decoded, expected.
+  Incomplete(Int32, Int32)
 }
 
 ///|
@@ -19,6 +25,11 @@ pub fn EncodingError::message(self : EncodingError) -> String {
     Unsupported(encoding) =>
       "encoding not implemented: \{encoding_name(encoding)}"
     InvalidCount(count) => "negative value count \{count}"
+    InvalidBitWidth(width) => "bit width \{width} outside 0..64"
+    TypeMismatch(ty, encoding) =>
+      "\{encoding_name(encoding)} does not apply to \{physical_type_name(ty)}"
+    Incomplete(decoded, expected) =>
+      "stream ended after \{decoded} values, \{expected} requested"
   }
 }
 

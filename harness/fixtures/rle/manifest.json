@@ -1,0 +1,34 @@
+{
+  "cases": [
+    {
+      "count": 1000,
+      "input": "rle_bool.input.bin",
+      "input_sha256": "39b3c8a54bca21eb92a6e7584502f30ebf5d9af49b02e833b544a6a5bfa0ab69",
+      "name": "rle_bool",
+      "reference": "rle_bool.ref.bin",
+      "reference_sha256": "c1e65852669ea49be9afd4d95c328fb6b93a152cec9cc2670cce476181f3a1bb",
+      "source": "rle_bool.parquet",
+      "width": 1
+    },
+    {
+      "count": 676,
+      "input": "rle_bool_runs.input.bin",
+      "input_sha256": "3602d9baee106a0130edb7c8daa892376d93b0529ae38c24579dac49e9e87279",
+      "name": "rle_bool_runs",
+      "reference": "rle_bool_runs.ref.bin",
+      "reference_sha256": "26da76ec3b7a596d17f415113ac39a90a0eb428728d94f501e5929cfd92c4a4d",
+      "source": "rle_bool_runs.parquet",
+      "width": 1
+    },
+    {
+      "count": 1000,
+      "input": "dict_string.input.bin",
+      "input_sha256": "e6613c0250ce1441171afe7cfa1a3cfd39f75d1a83be40383c6cb560b1a3d0d1",
+      "name": "dict_string",
+      "reference": "dict_string.ref.bin",
+      "reference_sha256": "efc2036cd9bf91dd4070ed27ced61637b5bfff9fbd9ccf79ca5cc9e5f1b54603",
+      "source": "dict_string.parquet",
+      "width": 2
+    }
+  ]
+}

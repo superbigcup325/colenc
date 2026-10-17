@@ -45,6 +45,22 @@ DICT_VALUES = [DICT_STRING[(i * 7 + i // 10) % 4] for i in range(1000)]
 DELTA_INT64 = [7 + 3 * i for i in range(1000)]
 BSS_FLOAT32 = [i / 7.0 for i in range(1000)]
 RLE_BOOL = [i % 3 == 0 for i in range(1000)]
+# Runs on both sides of the eight-value threshold, a stretch long enough to
+# force the 63-group literal cap, and mixed tails so the end-of-stream flush
+# and padding paths are exercised.
+RLE_RUNS = (
+    [False] * 9
+    + [True] * 8
+    + [False] * 7
+    + [True]
+    + [False] * 3
+    + [True] * 20
+    + [False] * 20
+    + [i % 2 == 0 for i in range(600)]
+    + [True] * 5
+    + [False]
+    + [True] * 2
+)
 
 
 @dataclass(frozen=True)
@@ -155,6 +171,18 @@ SAMPLES = [
         arrow_type=pa.bool_(),
         physical_type="BOOLEAN",
         values=RLE_BOOL,
+        encoding="RLE",
+        write_options={
+            "use_dictionary": False,
+            "column_encoding": {"flags": "RLE"},
+        },
+    ),
+    Sample(
+        name="rle_bool_runs",
+        column="flags",
+        arrow_type=pa.bool_(),
+        physical_type="BOOLEAN",
+        values=RLE_RUNS,
         encoding="RLE",
         write_options={
             "use_dictionary": False,

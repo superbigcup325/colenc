@@ -11,9 +11,10 @@ milestone plan and the acceptance criteria this repo is built around.
 
 ## Status
 
-Design settled; **P0 is complete**, and **P1 is in progress**: the `primitives`
-package, the neutral `types` model, PLAIN in `encoders` and the facade dispatch
-have landed. Next is the RLE/bit-packed hybrid (E1) with byte-identical output.
+Design settled; **P0 is complete**, and **P1 is in progress**: `primitives`, the
+neutral `types` model, PLAIN, the RLE/bit-packed hybrid and the facade dispatch
+have landed, with the hybrid byte-identical to the reference. Next is T1.4, the
+CI side of the harness, then the P1 exit.
 
 ## Layout
 
@@ -25,7 +26,7 @@ moon.mod                 module manifest
 docs/ROADMAP.md          the public roadmap
 types/                   neutral model: PhysicalType / Encoding / ColBuf / errors
 primitives/              L1: varint / zigzag / bit packing / bit width
-encoders/                L2: one file per encoding family, with its tests
+encoders/                L2: PLAIN and the RLE/bit-packed hybrid, with tests
 facade.mbt               L3: encode_column / decode_column dispatch
 harness/                 acceptance rig: Python judges, fixtures, minimal writer
 .githooks/               pre-commit gate
@@ -142,6 +143,14 @@ tracked documents ship in the release archive.
 - **`moon fmt --check` arms itself with the first package** → the pre-commit
   hook and CI skip the format half only while no `moon.pkg` exists; run
   `moon fmt` before committing once packages land
+- **RLE-encoded boolean values carry a 4-byte length prefix** while dictionary
+  data pages carry a 1-byte bit width before the same hybrid stream; a byte
+  diff against either must keep or strip the right prefix
+- **pyarrow refuses RLE for non-boolean columns** (`RLE only supports
+  BOOLEAN`) so widths above 1 have to be referenced through dictionary indices
+- **The hybrid's literal runs stop at 63 groups** (504 values) because the
+  indicator is one byte; the next group forces the run out, and a trailing
+  run shorter than eight still becomes a repeated run at the end flush
 - **Prefer prelude and non-deprecated core APIs** → `Buffer()` replaces
   `@buffer.new()`, and `String::to_bytes` is deprecated in favour of
   `@utf8.encode`; `--deny-warn` turns both into build failures

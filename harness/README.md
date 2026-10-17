@@ -14,6 +14,9 @@ parquet_pages.py   Thrift compact page-header reader used by extract_pages
 diff_bytes.py      byte diff with first-divergence offset and hex context
 read_back.py       judge a Parquet file with DuckDB and pyarrow
 duck_read.sh       thin wrapper around read_back.py
+make_rle_cases.py  build RLE byte-diff cases from the fixtures
+check_rle.py       run the RLE probe over every case and diff the bytes
+rle_probe/         minimal MoonBit CLI around the library's RLE encoder
 requirements.txt   pinned judge versions (pyarrow, duckdb)
 fixtures/          committed reference samples + manifest
 writer_min/        minimal MoonBit Parquet writer (T0.2)
@@ -121,7 +124,26 @@ harness/duck_read.sh /tmp/writer_min.parquet \
 
 `--library` takes the page body from `colpack.encode_column` instead of the
 writer's own loop, so the container check exercises the library's PLAIN output;
-both modes must produce byte-identical files.
+both modes must produce byte-identical files. `--rle` writes a boolean column
+encoded as the RLE hybrid through the library, which is the E1 container check.
+
+## RLE byte diff
+
+The hybrid encoder is only correct if its run selection matches the reference
+implementation byte for byte. Two sources feed the check:
+
+- boolean fixtures, whose value section is the hybrid stream behind a 4-byte
+  length prefix
+- dictionary fixtures, whose data page is a bit-width byte followed by the
+  hybrid stream over the indices, so widths above 1 are covered too
+
+```bash
+python3 harness/make_rle_cases.py        # fixtures/rle/*.input.bin + *.ref.bin
+python3 harness/check_rle.py             # run the probe and diff every case
+```
+
+`rle_probe` reads the value sequence as little-endian u64 and writes the raw
+stream; `check_rle.py` reports the first differing byte, not just pass/fail.
 
 The writer emits the same 1000-row sequence as the `plain_int32` fixture, so the
 page payload can be diffed against the fixture as a third check on top of the
@@ -161,3 +183,12 @@ mismatch, `2` unreadable file.
   `plain_int32` fixture, and repeated runs produce the same MD5
 - `extract_pages.py` parses the writer's own page headers and tiling, so the
   extractor and the writer agree on the container independent of pyarrow
+
+## P1 evidence
+
+- `check_rle.py`: three cases, all byte-identical to the reference, covering
+  width 1 (1000 values), a run-heavy width 1 stream of 676 values, and width 2
+  dictionary indices (1000 values)
+- `moon run harness/writer_min -- out.parquet --rle` writes a boolean RLE page
+  that DuckDB and pyarrow read back with equal values, and whose value section
+  is byte-identical to the reference page (4-byte prefix included)

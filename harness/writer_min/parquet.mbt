@@ -1,4 +1,5 @@
-/// The minimum Parquet container: one required flat column, PLAIN, uncompressed.
+/// The minimum Parquet container: one required flat column, uncompressed.
+/// Plain and RLE-boolean pages are the two shapes built here.
 ///
 /// Layout produced:
 ///
@@ -21,6 +22,9 @@ const ENCODING_PLAIN : Int32 = 0
 const ENCODING_RLE : Int32 = 3
 
 ///|
+const TYPE_BOOLEAN : Int32 = 0
+
+///|
 const TYPE_INT32 : Int32 = 1
 
 ///|
@@ -40,11 +44,11 @@ fn write_magic(buf : @buffer.Buffer) -> Unit {
 ///|
 /// PageHeader.data_page_header. Level encodings are declared even though a
 /// required column carries no level bytes; both are required fields.
-fn data_page_header(num_values : Int32) -> Bytes {
+fn data_page_header(num_values : Int32, encoding_id : Int32) -> Bytes {
   let buf = Buffer()
   let mut last = 0
   last = field_i32(buf, last, 1, num_values)
-  last = field_i32(buf, last, 2, ENCODING_PLAIN)
+  last = field_i32(buf, last, 2, encoding_id)
   last = field_i32(buf, last, 3, ENCODING_RLE)
   last = field_i32(buf, last, 4, ENCODING_RLE)
   put_stop(buf)
@@ -53,8 +57,12 @@ fn data_page_header(num_values : Int32) -> Bytes {
 
 ///|
 /// PageHeader for a single V1 data page whose body is exactly the value bytes.
-fn page_header(body_len : Int32, num_values : Int32) -> Bytes {
-  let data_header = data_page_header(num_values)
+fn page_header(
+  body_len : Int32,
+  num_values : Int32,
+  encoding_id : Int32,
+) -> Bytes {
+  let data_header = data_page_header(num_values, encoding_id)
   let buf = Buffer()
   let mut last = 0
   last = field_i32(buf, last, 1, PAGE_TYPE_DATA_PAGE)
@@ -78,10 +86,10 @@ fn schema_element_root() -> Bytes {
 }
 
 ///|
-fn schema_element_int32(name : String) -> Bytes {
+fn schema_element(name : String, type_id : Int32) -> Bytes {
   let buf = Buffer()
   let mut last = 0
-  last = field_i32(buf, last, 1, TYPE_INT32)
+  last = field_i32(buf, last, 1, type_id)
   last = field_i32(buf, last, 3, REPETITION_REQUIRED)
   last = field_binary(buf, last, 4, name)
   put_stop(buf)
@@ -92,16 +100,20 @@ fn schema_element_int32(name : String) -> Bytes {
 /// ColumnMetaData. Sizes include the page header, as the spec defines them.
 fn column_meta_data(
   path : String,
+  type_id : Int32,
+  encodings : Array[Int32],
   num_values : Int32,
   total_size : Int32,
   data_page_offset : Int32,
 ) -> Bytes {
   let buf = Buffer()
   let mut last = 0
-  last = field_i32(buf, last, 1, TYPE_INT32)
+  last = field_i32(buf, last, 1, type_id)
   last = put_field_header(buf, last, 2, THRIFT_LIST)
-  put_list_header(buf, 1, THRIFT_I32)
-  put_i32(buf, ENCODING_PLAIN)
+  put_list_header(buf, encodings.length(), THRIFT_I32)
+  for encoding in encodings {
+    put_i32(buf, encoding)
+  }
   last = put_field_header(buf, last, 3, THRIFT_LIST)
   put_list_header(buf, 1, THRIFT_BINARY)
   put_binary(buf, path)
@@ -170,6 +182,39 @@ fn file_meta_data(
 }
 
 ///|
+/// Assemble a one-column Parquet file around an already-encoded page body.
+pub fn build_page(
+  column : String,
+  type_id : Int32,
+  encoding_id : Int32,
+  encodings : Array[Int32],
+  body_bytes : Bytes,
+  count : Int32,
+) -> Bytes {
+  let header = page_header(body_bytes.length(), count, encoding_id)
+  let data_page_offset = 4
+  let total_size = header.length() + body_bytes.length()
+
+  let file = Buffer()
+  write_magic(file)
+  file.write_bytes(header)
+  file.write_bytes(body_bytes)
+
+  let schema = [schema_element_root(), schema_element(column, type_id)]
+  let meta = column_meta_data(
+    column, type_id, encodings, count, total_size, data_page_offset,
+  )
+  let chunk = column_chunk(data_page_offset, meta)
+  let groups = [row_group([chunk], total_size, count)]
+  let footer = file_meta_data(schema, count, groups)
+
+  file.write_bytes(footer)
+  file.write_int_le(footer.length())
+  write_magic(file)
+  file.to_bytes()
+}
+
+///|
 /// Build a complete Parquet file holding one required int32 column in PLAIN.
 pub fn build_int32_plain(column : String, values : Array[Int32]) -> Bytes {
   let body = Buffer()
@@ -180,31 +225,36 @@ pub fn build_int32_plain(column : String, values : Array[Int32]) -> Bytes {
 }
 
 ///|
-/// Assemble a one-column Parquet file around an already-encoded PLAIN body.
-/// This is what lets the rig wrap bytes produced by the library under test
-/// without duplicating its encoder.
+/// Wrap an already-encoded PLAIN int32 body.
 pub fn build_plain_page(
   column : String,
   body_bytes : Bytes,
   count : Int32,
 ) -> Bytes {
-  let header = page_header(body_bytes.length(), count)
-  let data_page_offset = 4
-  let total_size = header.length() + body_bytes.length()
+  build_page(
+    column,
+    TYPE_INT32,
+    ENCODING_PLAIN,
+    [ENCODING_PLAIN],
+    body_bytes,
+    count,
+  )
+}
 
-  let file = Buffer()
-  write_magic(file)
-  file.write_bytes(header)
-  file.write_bytes(body_bytes)
-
-  let schema = [schema_element_root(), schema_element_int32(column)]
-  let meta = column_meta_data(column, count, total_size, data_page_offset)
-  let chunk = column_chunk(data_page_offset, meta)
-  let groups = [row_group([chunk], total_size, count)]
-  let footer = file_meta_data(schema, count, groups)
-
-  file.write_bytes(footer)
-  file.write_int_le(footer.length())
-  write_magic(file)
-  file.to_bytes()
+///|
+/// Wrap an already-encoded RLE boolean body, which starts with the 4-byte
+/// length prefix the spec requires for RLE-encoded boolean values.
+pub fn build_bool_rle_page(
+  column : String,
+  body_bytes : Bytes,
+  count : Int32,
+) -> Bytes {
+  build_page(
+    column,
+    TYPE_BOOLEAN,
+    ENCODING_RLE,
+    [ENCODING_RLE],
+    body_bytes,
+    count,
+  )
 }
