@@ -11,11 +11,10 @@ milestone plan and the acceptance criteria this repo is built around.
 
 ## Status
 
-Design settled; **P0 is complete**. The acceptance rig exists end to end:
-reference generation, page extraction, byte diffing, and a minimal MoonBit
-writer whose file both judges read back. **P1 (primitives + PLAIN + RLE) is
-next.** No library packages exist yet — do not assume any package described
-below exists.
+Design settled; **P0 is complete**, and **P1 is in progress**: the `primitives`
+package (ULEB128 / zigzag varints, bit packing and unpacking, bit width) has
+landed with whitebox and property tests. Next are PLAIN, the RLE/bit-packed
+hybrid and the dispatch skeleton. Encoder packages do not exist yet.
 
 ## Layout
 
@@ -25,6 +24,7 @@ Published (tracked) today:
 AGENTS.md  README.md  CHANGELOG.md  LICENSE
 moon.mod                 module manifest
 docs/ROADMAP.md          the public roadmap
+primitives/              L1: varint / zigzag / bit packing / bit width
 harness/                 acceptance rig: Python judges, fixtures, minimal writer
 .githooks/               pre-commit gate
 .github/workflows/       CI gate
@@ -35,7 +35,6 @@ Planned — no packages exist yet, so treat this as the target structure the
 first commits should land in:
 
 ```
-primitives/   # L1: varint / zigzag / bit packing and unpacking / bit width / cursors
 encoders/     # L2: one file per encoding family, each with its property / battery tests
 facade.mbt    # L3: dispatch — Encoding / EncodingStats / column-vector conversion
 ```
@@ -49,6 +48,9 @@ facade.mbt    # L3: dispatch — Encoding / EncodingStats / column-vector conver
 ## Tooling
 
 - `moon check` / `moon test` / `moon fmt` / `moon info` / `moon run`
+- Whitebox tests are `*_wbtest.mbt`, blackbox tests `*_test.mbt`; blackbox
+  tests refer to the package under test by alias (`@primitives.bit_pack`), and
+  test-only imports live in a `for "test"` block in `moon.pkg`
 - Acceptance rig (see `harness/README.md`):
   `python3 harness/make_refs.py [--check]` regenerates or verifies the fixtures,
   `python3 harness/extract_pages.py <parquet> --out <dir>` carves pages,

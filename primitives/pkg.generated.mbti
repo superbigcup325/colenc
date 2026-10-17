@@ -1,0 +1,40 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "superbigcup325/colpack/primitives"
+
+import {
+  "moonbitlang/core/buffer",
+}
+
+// Values
+pub fn bit_pack(ArrayView[Int64], Int, @buffer.Buffer) -> Unit raise PrimitivesError
+
+pub fn bit_unpack(BytesView, Int, Int) -> Array[Int64] raise PrimitivesError
+
+pub fn bit_width_for(UInt64) -> Int
+
+pub fn put_uleb128(@buffer.Buffer, UInt64) -> Unit
+
+pub fn put_zigzag(@buffer.Buffer, Int64) -> Unit
+
+pub fn read_uleb128(BytesView, offset? : Int) -> (UInt64, Int) raise PrimitivesError
+
+pub fn read_zigzag(BytesView, offset? : Int) -> (Int64, Int) raise PrimitivesError
+
+pub fn zigzag_decode(UInt64) -> Int64
+
+pub fn zigzag_encode(Int64) -> UInt64
+
+// Errors
+pub(all) suberror PrimitivesError {
+  Truncated(Int, Int, Int)
+  InvalidVarint(Int)
+  InvalidBitWidth(Int)
+  InvalidCount(Int)
+}
+pub fn PrimitivesError::message(Self) -> String
+
+// Types and methods
+
+// Type aliases
+
+// Traits

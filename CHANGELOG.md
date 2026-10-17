@@ -24,6 +24,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Dual-judge read-back (`harness/read_back.py`, `harness/duck_read.sh`) so the
   container layer is checked by both readers and, when given, the expected
   PLAIN bytes
+- `primitives` package: ULEB128 and zigzag varints with offset-carrying decode
+  errors, contiguous LSB-first bit packing and unpacking, bit width from a
+  maximum value; whitebox byte-level tests plus quickcheck round-trip
+  properties for every width from 0 to 64
+- `primitives` is the first library package; `moonbitlang/quickcheck` is a
+  test-only dependency
 
-No library code yet — the project is at P0, with the MoonBit minimal writer
+PLAIN and the RLE/bit-packed hybrid are next. — the project is at P0, with the MoonBit minimal writer
 still to land.

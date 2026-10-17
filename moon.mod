@@ -17,4 +17,5 @@ description = "Columnar encoding kernel for MoonBit: the Parquet page-level enco
 
 import {
   "moonbitlang/x@0.5.5",
+  "moonbitlang/quickcheck@0.15.0",
 }
