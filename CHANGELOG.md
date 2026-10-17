@@ -30,6 +30,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   properties for every width from 0 to 64
 - `primitives` is the first library package; `moonbitlang/quickcheck` is a
   test-only dependency
+- `types` package: the neutral column model (`PhysicalType`, `Encoding`,
+  `ColBuf`, `EncodingStats`) and `EncodingError` with byte offsets
+- PLAIN encoding and decoding for all six physical types (`encoders/plain.mbt`),
+  with little-endian fixed-width values, length-prefixed byte arrays and
+  LSB-first bit-packed booleans
+- `facade.mbt`: `encode_column` / `decode_column`, keyed by `ColBuf`, reporting
+  value count and bytes appended; unimplemented families raise `Unsupported`
+- The minimal Parquet writer gains a `--library` mode that wraps the body
+  produced by `encode_column`, and both modes produce identical files that
+  DuckDB and pyarrow read back
 
-PLAIN and the RLE/bit-packed hybrid are next. — the project is at P0, with the MoonBit minimal writer
+The RLE/bit-packed hybrid is next. — the project is at P0, with the MoonBit minimal writer
 still to land.

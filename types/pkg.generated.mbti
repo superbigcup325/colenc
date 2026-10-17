@@ -1,0 +1,56 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "superbigcup325/colpack/types"
+
+// Values
+pub fn encoding_name(Encoding) -> String
+
+pub fn physical_type_name(PhysicalType) -> String
+
+// Errors
+pub(all) suberror EncodingError {
+  Truncated(Int, Int, Int)
+  Unsupported(Encoding)
+  InvalidCount(Int)
+}
+pub fn EncodingError::message(Self) -> String
+
+// Types and methods
+pub(all) enum ColBuf {
+  Int32s(Array[Int])
+  Int64s(Array[Int64])
+  Floats(Array[Float])
+  Doubles(Array[Double])
+  ByteArrays(Array[Bytes])
+  Bools(Array[Bool])
+}
+pub fn ColBuf::physical_type(Self) -> PhysicalType
+pub fn ColBuf::value_count(Self) -> Int
+
+pub(all) enum Encoding {
+  Plain
+  Rle
+  Dictionary
+  DeltaBinaryPacked
+  DeltaLength
+  DeltaByteArray
+  ByteStreamSplit
+  Fsst
+}
+
+pub(all) struct EncodingStats {
+  value_count : Int
+  encoded_bytes : Int
+}
+
+pub(all) enum PhysicalType {
+  Int32
+  Int64
+  Float
+  Double
+  ByteArray
+  Bool
+}
+
+// Type aliases
+
+// Traits

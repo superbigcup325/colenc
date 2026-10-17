@@ -12,9 +12,8 @@ milestone plan and the acceptance criteria this repo is built around.
 ## Status
 
 Design settled; **P0 is complete**, and **P1 is in progress**: the `primitives`
-package (ULEB128 / zigzag varints, bit packing and unpacking, bit width) has
-landed with whitebox and property tests. Next are PLAIN, the RLE/bit-packed
-hybrid and the dispatch skeleton. Encoder packages do not exist yet.
+package, the neutral `types` model, PLAIN in `encoders` and the facade dispatch
+have landed. Next is the RLE/bit-packed hybrid (E1) with byte-identical output.
 
 ## Layout
 
@@ -24,20 +23,18 @@ Published (tracked) today:
 AGENTS.md  README.md  CHANGELOG.md  LICENSE
 moon.mod                 module manifest
 docs/ROADMAP.md          the public roadmap
+types/                   neutral model: PhysicalType / Encoding / ColBuf / errors
 primitives/              L1: varint / zigzag / bit packing / bit width
+encoders/                L2: one file per encoding family, with its tests
+facade.mbt               L3: encode_column / decode_column dispatch
 harness/                 acceptance rig: Python judges, fixtures, minimal writer
 .githooks/               pre-commit gate
 .github/workflows/       CI gate
 .gitignore .moonignore .gitattributes
 ```
 
-Planned — no packages exist yet, so treat this as the target structure the
-first commits should land in:
-
-```
-encoders/     # L2: one file per encoding family, each with its property / battery tests
-facade.mbt    # L3: dispatch — Encoding / EncodingStats / column-vector conversion
-```
+Further encoders land as files under `encoders/`, each with its own tests and
+its branch in `facade.mbt`.
 
 - MoonBit packages are organized per directory, one `moon.pkg` each; `moon.mod`
   at the top level

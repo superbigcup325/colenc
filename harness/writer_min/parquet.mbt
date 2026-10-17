@@ -176,9 +176,19 @@ pub fn build_int32_plain(column : String, values : Array[Int32]) -> Bytes {
   for value in values {
     body.write_int_le(value)
   }
-  let body_bytes = body.to_bytes()
+  build_plain_page(column, body.to_bytes(), values.length())
+}
 
-  let header = page_header(body_bytes.length(), values.length())
+///|
+/// Assemble a one-column Parquet file around an already-encoded PLAIN body.
+/// This is what lets the rig wrap bytes produced by the library under test
+/// without duplicating its encoder.
+pub fn build_plain_page(
+  column : String,
+  body_bytes : Bytes,
+  count : Int32,
+) -> Bytes {
+  let header = page_header(body_bytes.length(), count)
   let data_page_offset = 4
   let total_size = header.length() + body_bytes.length()
 
@@ -188,15 +198,10 @@ pub fn build_int32_plain(column : String, values : Array[Int32]) -> Bytes {
   file.write_bytes(body_bytes)
 
   let schema = [schema_element_root(), schema_element_int32(column)]
-  let meta = column_meta_data(
-    column,
-    values.length(),
-    total_size,
-    data_page_offset,
-  )
+  let meta = column_meta_data(column, count, total_size, data_page_offset)
   let chunk = column_chunk(data_page_offset, meta)
-  let groups = [row_group([chunk], total_size, values.length())]
-  let footer = file_meta_data(schema, values.length(), groups)
+  let groups = [row_group([chunk], total_size, count)]
+  let footer = file_meta_data(schema, count, groups)
 
   file.write_bytes(footer)
   file.write_int_le(footer.length())

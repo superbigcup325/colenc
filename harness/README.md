@@ -114,9 +114,14 @@ not a general writer.
 
 ```bash
 moon run harness/writer_min -- /tmp/writer_min.parquet
+moon run harness/writer_min -- /tmp/writer_min.parquet --library
 harness/duck_read.sh /tmp/writer_min.parquet \
   --values harness/fixtures/plain_int32.values.bin --type INT32
 ```
+
+`--library` takes the page body from `colpack.encode_column` instead of the
+writer's own loop, so the container check exercises the library's PLAIN output;
+both modes must produce byte-identical files.
 
 The writer emits the same 1000-row sequence as the `plain_int32` fixture, so the
 page payload can be diffed against the fixture as a third check on top of the

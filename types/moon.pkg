@@ -1,0 +1,2 @@
+// Neutral model types shared by the encoders and the facade. No dependencies:
+// this is the layer that keeps consumer types out of the public API.

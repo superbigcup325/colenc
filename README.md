@@ -9,6 +9,6 @@ reusable, verifiable, pluggable library. Pure MoonBit, zero FFI.
 
 **Status**: design settled, **P0 complete** — reference samples, page
 extraction, byte diffing and a minimal MoonBit writer, all verified by DuckDB
-and pyarrow. **P1 in progress**: the `primitives` package (varints, bit packing,
-bit width) has landed with whitebox and property tests. No encoding families
-yet.
+and pyarrow. **P1 in progress**: `primitives` (varints, bit packing, bit width),
+the neutral `types` model, PLAIN and the facade dispatch have landed; the
+RLE/bit-packed hybrid is next.

@@ -1,0 +1,40 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "superbigcup325/colpack/encoders"
+
+import {
+  "moonbitlang/core/buffer",
+  "superbigcup325/colpack/types",
+}
+
+// Values
+pub fn decode_bool(BytesView, Int) -> Array[Bool] raise @types.EncodingError
+
+pub fn decode_byte_arrays(BytesView, Int) -> Array[Bytes] raise @types.EncodingError
+
+pub fn decode_double(BytesView, Int) -> Array[Double] raise @types.EncodingError
+
+pub fn decode_float(BytesView, Int) -> Array[Float] raise @types.EncodingError
+
+pub fn decode_int32(BytesView, Int) -> Array[Int] raise @types.EncodingError
+
+pub fn decode_int64(BytesView, Int) -> Array[Int64] raise @types.EncodingError
+
+pub fn encode_bool(Array[Bool], @buffer.Buffer) -> Unit
+
+pub fn encode_byte_arrays(Array[Bytes], @buffer.Buffer) -> Unit
+
+pub fn encode_double(Array[Double], @buffer.Buffer) -> Unit
+
+pub fn encode_float(Array[Float], @buffer.Buffer) -> Unit
+
+pub fn encode_int32(Array[Int], @buffer.Buffer) -> Unit
+
+pub fn encode_int64(Array[Int64], @buffer.Buffer) -> Unit
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits
