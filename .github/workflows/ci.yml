@@ -90,5 +90,9 @@ jobs:
         run: python3 harness/make_rle_cases.py --check
       - name: RLE byte diff
         run: python3 harness/check_rle.py
+      - name: Dictionary cases are reproducible
+        run: python3 harness/make_dict_cases.py --check
+      - name: Dictionary byte diff
+        run: python3 harness/check_dict.py
       - name: Container interop
         run: harness/check_container.sh

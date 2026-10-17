@@ -3,13 +3,15 @@
 ///   moon run harness/writer_min -- /tmp/writer_min.parquet
 ///   moon run harness/writer_min -- /tmp/writer_min.parquet --library
 ///   moon run harness/writer_min -- /tmp/writer_min.parquet --rle
+///   moon run harness/writer_min -- /tmp/writer_min.parquet --dict
 ///
 /// The values are the same 1000 row sequence as the PLAIN reference fixture.
 /// `--library` takes the page body from `colpack.encode_column` instead of the
 /// hand-written encoder here, so the container interop check exercises the
 /// library's PLAIN output. Both modes must produce identical files.
 /// `--rle` writes a boolean column encoded as the RLE hybrid, again through the
-/// library, so the E1 container path is judged the same way.
+/// library, so the E1 container path is judged the same way. `--dict` writes a
+/// dictionary-encoded int32 column and places the dictionary page first.
 
 ///|
 fn main {
@@ -20,7 +22,31 @@ fn main {
   }
   let path = args[1]
   let values = Array::makei(1000, fn(index) { index * 7 - 300 })
-  let bytes = if args.contains("--rle") {
+  let bytes = if args.contains("--dict") {
+    let values = Array::makei(1000, fn(index) { (index * 3 + index / 7) % 8 })
+    let encoding = @colpack.encode_dictionary(@types.ColBuf::Int32s(values)) catch {
+      error => {
+        eprintln(
+          "writer_min: dictionary failed: \{@types.EncodingError::message(error)}",
+        )
+        return
+      }
+    }
+    let encoding = match encoding {
+      Some(encoding) => encoding
+      None => {
+        eprintln("writer_min: dictionary fell back to plain")
+        return
+      }
+    }
+    build_dictionary_int32_page(
+      "i32",
+      encoding.dictionary,
+      encoding.indices,
+      encoding.dictionary_size,
+      values.length(),
+    )
+  } else if args.contains("--rle") {
     let flags = Array::makei(1000, fn(index) { index % 3 == 0 })
     let column = @types.ColBuf::Bools(flags)
     let body = Buffer()

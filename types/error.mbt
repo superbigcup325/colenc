@@ -15,6 +15,8 @@ pub(all) suberror EncodingError {
   TypeMismatch(PhysicalType, Encoding)
   /// The stream ended before the requested values: decoded, expected.
   Incomplete(Int32, Int32)
+  /// A dictionary index outside the dictionary: index, dictionary size.
+  InvalidIndex(Int32, Int32)
 }
 
 ///|
@@ -30,6 +32,8 @@ pub fn EncodingError::message(self : EncodingError) -> String {
       "\{encoding_name(encoding)} does not apply to \{physical_type_name(ty)}"
     Incomplete(decoded, expected) =>
       "stream ended after \{decoded} values, \{expected} requested"
+    InvalidIndex(index, size) =>
+      "dictionary index \{index} outside 0..\{size - 1}"
   }
 }
 

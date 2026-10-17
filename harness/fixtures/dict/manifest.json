@@ -1,0 +1,34 @@
+{
+  "cases": [
+    {
+      "count": 1000,
+      "dictionary_file": "dict_int32.dict.bin",
+      "dictionary_sha256": "5bae4856af06ff08e4d2d1a5791c7b15d700c7c4edf210c5231e5724c7fa041b",
+      "dictionary_size": 8,
+      "indices_file": "dict_int32.indices.bin",
+      "indices_sha256": "4b8efdb65dc706f76d5d131864e45c5a98b6708a9f344d8715b0c8c04bfd0629",
+      "input_file": "dict_int32.input.bin",
+      "input_sha256": "f57d49aa2674ed2845e51642bb243a04b2fb6541e038993a7d1765f727b65b59",
+      "name": "dict_int32",
+      "plain_bytes": 4000,
+      "source": "dict_int32.parquet",
+      "type": "int32",
+      "width": 3
+    },
+    {
+      "count": 1000,
+      "dictionary_file": "dict_string.dict.bin",
+      "dictionary_sha256": "0e558e20fb3d128a40e9bc317b699c6f703f19ccae81ccc934686d2244956477",
+      "dictionary_size": 4,
+      "indices_file": "dict_string.indices.bin",
+      "indices_sha256": "21a4d44ba9c960bb34011763c15c5c7f4fefcdbe3f750cb9ef9a34cb5aceb8f3",
+      "input_file": "dict_string.input.bin",
+      "input_sha256": "0e54b76eb3c42242e624d0e8517ef6ca898c4c63882bd61f2d326cf765145142",
+      "name": "dict_string",
+      "plain_bytes": 8500,
+      "source": "dict_string.parquet",
+      "type": "string",
+      "width": 2
+    }
+  ]
+}

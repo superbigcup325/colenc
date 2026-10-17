@@ -64,3 +64,27 @@ pub fn decode_column(
     other => raise @types.EncodingError::Unsupported(other)
   }
 }
+
+///|
+/// Build a dictionary encoding for a column. Returns `None` when the PLAIN
+/// dictionary payload exceeds `max_dictionary_bytes`, meaning the caller should
+/// fall back to PLAIN. Dictionary encoding has two output streams, so it does
+/// not go through `encode_column`.
+pub fn encode_dictionary(
+  column : @types.ColBuf,
+  max_dictionary_bytes~ : Int32 = @encoders.DEFAULT_DICTIONARY_BYTE_LIMIT,
+) -> @types.DictionaryEncoding? raise @types.EncodingError {
+  @encoders.encode_dictionary(column, max_dictionary_bytes~)
+}
+
+///|
+/// Decode a dictionary page plus its index stream back into values.
+pub fn decode_dictionary(
+  dictionary : BytesView,
+  indices : BytesView,
+  ty : @types.PhysicalType,
+  count : Int32,
+  dictionary_size : Int32,
+) -> @types.ColBuf raise @types.EncodingError {
+  @encoders.decode_dictionary(dictionary, indices, ty, count, dictionary_size)
+}

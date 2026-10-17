@@ -9,7 +9,11 @@ import {
 // Values
 pub fn decode_column(BytesView, @types.PhysicalType, @types.Encoding, Int) -> @types.ColBuf raise @types.EncodingError
 
+pub fn decode_dictionary(BytesView, BytesView, @types.PhysicalType, Int, Int) -> @types.ColBuf raise @types.EncodingError
+
 pub fn encode_column(@types.ColBuf, @types.Encoding, @buffer.Buffer) -> @types.EncodingStats raise @types.EncodingError
+
+pub fn encode_dictionary(@types.ColBuf, max_dictionary_bytes? : Int) -> @types.DictionaryEncoding? raise @types.EncodingError
 
 // Errors
 

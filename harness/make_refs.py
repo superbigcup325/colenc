@@ -43,6 +43,9 @@ PLAIN_STRING = [f"bead-{i:04d}" for i in range(200)]
 DICT_STRING = ["black", "white", "red", "green"]
 DICT_VALUES = [DICT_STRING[(i * 7 + i // 10) % 4] for i in range(1000)]
 DELTA_INT64 = [7 + 3 * i for i in range(1000)]
+# Eight distinct integers, with runs and jumps so the index stream exercises
+# both repeated and literal runs at a width above one bit.
+DICT_INT32 = [(i * 3 + i // 7) % 8 for i in range(1000)]
 BSS_FLOAT32 = [i / 7.0 for i in range(1000)]
 RLE_BOOL = [i % 3 == 0 for i in range(1000)]
 # Runs on both sides of the eight-value threshold, a stretch long enough to
@@ -138,6 +141,15 @@ SAMPLES = [
         arrow_type=pa.string(),
         physical_type="BYTE_ARRAY",
         values=DICT_VALUES,
+        encoding="RLE_DICTIONARY",
+        write_options={"use_dictionary": True},
+    ),
+    Sample(
+        name="dict_int32",
+        column="i32",
+        arrow_type=pa.int32(),
+        physical_type="INT32",
+        values=DICT_INT32,
         encoding="RLE_DICTIONARY",
         write_options={"use_dictionary": True},
     ),

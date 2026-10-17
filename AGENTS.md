@@ -11,11 +11,12 @@ milestone plan and the acceptance criteria this repo is built around.
 
 ## Status
 
-Design settled; **P0 and P1 are complete**. The library has `primitives`, the
-neutral `types` model, PLAIN and the RLE/bit-packed hybrid behind the facade
-dispatch, with E1 byte-identical to the reference implementation; CI runs the
-three-backend test matrix plus the harness jobs (fixture reproducibility, RLE
-byte diff, container interop). **P2, the dictionary encoding, is next.**
+Design settled; **P0, P1 and P2 are complete**. The library has `primitives`,
+the neutral `types` model, PLAIN, the RLE/bit-packed hybrid and dictionary
+encoding behind the facade dispatch, with E1 and E2 byte-identical to the
+reference; CI runs the three-backend test matrix plus the harness jobs
+(fixture reproducibility, RLE and dictionary byte diffs, container interop).
+**P3, the delta family (E3/E4/E5), is next.**
 
 ## Layout
 
@@ -27,7 +28,7 @@ moon.mod                 module manifest
 docs/ROADMAP.md          the public roadmap
 types/                   neutral model: PhysicalType / Encoding / ColBuf / errors
 primitives/              L1: varint / zigzag / bit packing / bit width
-encoders/                L2: PLAIN and the RLE/bit-packed hybrid, with tests
+encoders/                L2: PLAIN, RLE hybrid and dictionary, with tests
 facade.mbt               L3: encode_column / decode_column dispatch
 harness/                 acceptance rig: Python judges, fixtures, minimal writer
 .githooks/               pre-commit gate
@@ -56,6 +57,7 @@ its branch in `facade.mbt`.
   `python3 harness/diff_bytes.py ours.bin ref.bin` reports the first divergence,
   `harness/duck_read.sh <parquet> [--values ref.bin]` runs both judges,
   `python3 harness/check_rle.py` byte-diffs the hybrid encoder,
+  `python3 harness/check_dict.py` byte-diffs dictionary encoding,
   `harness/check_container.sh` proves the container path end to end
 - `moon run harness/writer_min -- <out.parquet>` writes the minimal container
 - **Before committing**, run the quartet:
@@ -157,6 +159,12 @@ tracked documents ship in the release archive.
 - **Harness executables run on native in CI** → `moon test --target js` covers
   the library packages, but `writer_min` and `rle_probe` use `moonbitlang/x/fs`
   and are invoked with `--target native` by the harness scripts
+- **Dictionary fallback differs in scope from the reference** → parquet-cpp
+  falls back mid-column when the dictionary outgrows its page limit, colpack
+  decides per column (returns `None`), so byte diffs only cover columns under
+  the limit
+- **A dictionary with one entry uses bit width 1, not 0**, and five entries use
+  three bits; widths follow `max(1, bit_width_for(size - 1))`
 - **Prefer prelude and non-deprecated core APIs** → `Buffer()` replaces
   `@buffer.new()`, and `String::to_bytes` is deprecated in favour of
   `@utf8.encode`; `--deny-warn` turns both into build failures

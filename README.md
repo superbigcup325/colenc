@@ -9,7 +9,8 @@ reusable, verifiable, pluggable library. Pure MoonBit, zero FFI.
 
 **Status**: design settled, **P0 complete** — reference samples, page
 extraction, byte diffing and a minimal MoonBit writer, all verified by DuckDB
-and pyarrow. **P0 complete, P1 complete**: `primitives`, the neutral `types`
-model, PLAIN and the RLE/bit-packed hybrid behind the facade dispatch, with E1
-byte-identical to the reference. CI covers native, wasm-gc and js plus the
-harness byte-diff and container jobs. The dictionary encoding (P2) is next.
+and pyarrow. **P0, P1 and P2 complete**: `primitives`, the neutral `types` model,
+PLAIN, the RLE/bit-packed hybrid and dictionary encoding behind the facade
+dispatch, with E1 and E2 byte-identical to the reference. CI covers native,
+wasm-gc and js plus the harness byte-diff and container jobs. The delta family
+(P3) is next.

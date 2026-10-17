@@ -7,11 +7,15 @@ import {
 }
 
 // Values
+pub const DEFAULT_DICTIONARY_BYTE_LIMIT : Int = 1048576
+
 pub fn decode_bool(BytesView, Int) -> Array[Bool] raise @types.EncodingError
 
 pub fn decode_bool_rle(BytesView, Int) -> Array[Bool] raise @types.EncodingError
 
 pub fn decode_byte_arrays(BytesView, Int) -> Array[Bytes] raise @types.EncodingError
+
+pub fn decode_dictionary(BytesView, BytesView, @types.PhysicalType, Int, Int) -> @types.ColBuf raise @types.EncodingError
 
 pub fn decode_double(BytesView, Int) -> Array[Double] raise @types.EncodingError
 
@@ -28,6 +32,8 @@ pub fn encode_bool(Array[Bool], @buffer.Buffer) -> Unit
 pub fn encode_bool_rle(Array[Bool], @buffer.Buffer) -> Unit raise @types.EncodingError
 
 pub fn encode_byte_arrays(Array[Bytes], @buffer.Buffer) -> Unit
+
+pub fn encode_dictionary(@types.ColBuf, max_dictionary_bytes? : Int) -> @types.DictionaryEncoding? raise @types.EncodingError
 
 pub fn encode_double(Array[Double], @buffer.Buffer) -> Unit
 

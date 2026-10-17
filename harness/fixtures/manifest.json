@@ -46,6 +46,26 @@
       "values_sha256": "a0554f9446ce4f8eede3e1ffd13968e2514e2288fffa1027c34c265ce05c7f7a"
     },
     {
+      "column": "i32",
+      "count": 1000,
+      "encoding": "RLE_DICTIONARY",
+      "has_dictionary_page": true,
+      "name": "dict_int32",
+      "observed_encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+      ],
+      "parquet": "dict_int32.parquet",
+      "parquet_bytes": 593,
+      "parquet_sha256": "97498e73bd6bc0bdf44b0f46e29ae3ab0b573889fc13733e716b5b9f4292ad9f",
+      "physical_type": "INT32",
+      "row_groups": 1,
+      "values": "dict_int32.values.bin",
+      "values_bytes": 4000,
+      "values_sha256": "27a62fd6633ec3d3bf4d8632235723e2e1baaee6aa2301c809eed1c128e35184"
+    },
+    {
       "column": "labels",
       "count": 1000,
       "encoding": "RLE_DICTIONARY",

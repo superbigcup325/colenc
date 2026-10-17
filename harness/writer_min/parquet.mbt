@@ -22,6 +22,12 @@ const ENCODING_PLAIN : Int32 = 0
 const ENCODING_RLE : Int32 = 3
 
 ///|
+const ENCODING_RLE_DICTIONARY : Int32 = 8
+
+///|
+const PAGE_TYPE_DICTIONARY_PAGE : Int32 = 2
+
+///|
 const TYPE_BOOLEAN : Int32 = 0
 
 ///|
@@ -75,6 +81,32 @@ fn page_header(
 }
 
 ///|
+/// PageHeader.dictionary_page_header.
+fn dictionary_page_data_header(num_values : Int32) -> Bytes {
+  let buf = Buffer()
+  let mut last = 0
+  last = field_i32(buf, last, 1, num_values)
+  last = field_i32(buf, last, 2, ENCODING_PLAIN)
+  put_stop(buf)
+  buf.to_bytes()
+}
+
+///|
+/// PageHeader for a dictionary page whose body is the PLAIN dictionary values.
+fn dictionary_page_header(body_len : Int32, num_values : Int32) -> Bytes {
+  let page = dictionary_page_data_header(num_values)
+  let buf = Buffer()
+  let mut last = 0
+  last = field_i32(buf, last, 1, PAGE_TYPE_DICTIONARY_PAGE)
+  last = field_i32(buf, last, 2, body_len)
+  last = field_i32(buf, last, 3, body_len)
+  last = put_field_header(buf, last, 7, THRIFT_STRUCT)
+  buf.write_bytes(page)
+  put_stop(buf)
+  buf.to_bytes()
+}
+
+///|
 /// Root of the schema tree: a group with one child.
 fn schema_element_root() -> Bytes {
   let buf = Buffer()
@@ -105,6 +137,7 @@ fn column_meta_data(
   num_values : Int32,
   total_size : Int32,
   data_page_offset : Int32,
+  dictionary_page_offset~ : Int32 = -1,
 ) -> Bytes {
   let buf = Buffer()
   let mut last = 0
@@ -122,6 +155,9 @@ fn column_meta_data(
   last = field_i64(buf, last, 6, total_size.to_int64())
   last = field_i64(buf, last, 7, total_size.to_int64())
   last = field_i64(buf, last, 9, data_page_offset.to_int64())
+  if dictionary_page_offset >= 0 {
+    last = field_i64(buf, last, 11, dictionary_page_offset.to_int64())
+  }
   put_stop(buf)
   buf.to_bytes()
 }
@@ -257,4 +293,56 @@ pub fn build_bool_rle_page(
     body_bytes,
     count,
   )
+}
+
+///|
+/// Build a dictionary-encoded int32 file: a dictionary page followed by one
+/// data page whose body is the bit-width byte plus the index stream.
+pub fn build_dictionary_int32_page(
+  column : String,
+  dictionary : Bytes,
+  indices : Bytes,
+  dictionary_size : Int32,
+  count : Int32,
+) -> Bytes {
+  let dict_header = dictionary_page_header(dictionary.length(), dictionary_size)
+  let data_header = page_header(
+    indices.length(),
+    count,
+    ENCODING_RLE_DICTIONARY,
+  )
+  let dict_page_offset = 4
+  let data_page_offset = dict_page_offset +
+    dict_header.length() +
+    dictionary.length()
+  let total_size = dict_header.length() +
+    dictionary.length() +
+    data_header.length() +
+    indices.length()
+
+  let file = Buffer()
+  write_magic(file)
+  file.write_bytes(dict_header)
+  file.write_bytes(dictionary)
+  file.write_bytes(data_header)
+  file.write_bytes(indices)
+
+  let schema = [schema_element_root(), schema_element(column, TYPE_INT32)]
+  let meta = column_meta_data(
+    column,
+    TYPE_INT32,
+    [ENCODING_PLAIN, ENCODING_RLE_DICTIONARY],
+    count,
+    total_size,
+    data_page_offset,
+    dictionary_page_offset=dict_page_offset,
+  )
+  let chunk = column_chunk(dict_page_offset, meta)
+  let groups = [row_group([chunk], total_size, count)]
+  let footer = file_meta_data(schema, count, groups)
+
+  file.write_bytes(footer)
+  file.write_int_le(footer.length())
+  write_magic(file)
+  file.to_bytes()
 }

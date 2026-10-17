@@ -4,6 +4,8 @@ package "superbigcup325/colpack/harness/writer_min"
 // Values
 pub fn build_bool_rle_page(String, Bytes, Int) -> Bytes
 
+pub fn build_dictionary_int32_page(String, Bytes, Bytes, Int, Int) -> Bytes
+
 pub fn build_int32_plain(String, Array[Int]) -> Bytes
 
 pub fn build_page(String, Int, Int, Array[Int], Bytes, Int) -> Bytes

@@ -66,6 +66,17 @@ pub fn ColBuf::physical_type(self : ColBuf) -> PhysicalType {
 }
 
 ///|
+/// A dictionary-encoded column: the distinct values as their page payload, the
+/// data page payload (bit-width byte plus hybrid indices), and the size and
+/// width a reader needs.
+pub(all) struct DictionaryEncoding {
+  dictionary : Bytes
+  indices : Bytes
+  dictionary_size : Int32
+  bit_width : Int32
+}
+
+///|
 /// What an encode reports: how many values went in and how many bytes came out.
 /// Compression ratios against the PLAIN baseline are computed from this.
 pub(all) struct EncodingStats {

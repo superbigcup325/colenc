@@ -14,6 +14,7 @@ pub(all) suberror EncodingError {
   InvalidBitWidth(Int)
   TypeMismatch(PhysicalType, Encoding)
   Incomplete(Int, Int)
+  InvalidIndex(Int, Int)
 }
 pub fn EncodingError::message(Self) -> String
 
@@ -28,6 +29,13 @@ pub(all) enum ColBuf {
 }
 pub fn ColBuf::physical_type(Self) -> PhysicalType
 pub fn ColBuf::value_count(Self) -> Int
+
+pub(all) struct DictionaryEncoding {
+  dictionary : Bytes
+  indices : Bytes
+  dictionary_size : Int
+  bit_width : Int
+}
 
 pub(all) enum Encoding {
   Plain
