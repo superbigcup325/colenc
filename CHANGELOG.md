@@ -15,9 +15,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Acceptance rig, Python half (`harness/`): reference sample generator with
   reproducibility check (`make_refs.py`), Thrift-compact page extractor
   (`parquet_pages.py`, `extract_pages.py`), byte differ with first-divergence
-  reporting (`diff_bytes.py`), pinned judge versions and six reference samples
-  covering PLAIN, RLE_DICTIONARY, DELTA_BINARY_PACKED, BYTE_STREAM_SPLIT and
-  RLE
+  reporting (`diff_bytes.py`), pinned judge versions and the reference samples covering
+  PLAIN, RLE_DICTIONARY, DELTA_BINARY_PACKED, BYTE_STREAM_SPLIT and RLE
 - Minimal Parquet writer in MoonBit (`harness/writer_min/`): Thrift compact
   metadata, one V1 data page, `PAR1` container; writes a required int32 column
   that DuckDB and pyarrow both read back with equal values
@@ -84,5 +83,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Scoreboard: BYTE_STREAM_SPLIT is size-neutral by design; FSST reaches 60.38%
   and 74.51% of PLAIN on the two string fixtures
 
-P4 is complete; moonlake integration (P5) is next. — the project is at P0, with the MoonBit minimal writer
-still to land.
+- A runnable demo (`examples/encode_demo`): encodes one column with every
+  applicable family, decodes it back and prints bytes against the PLAIN
+  baseline; the README now carries the encoding table, fixture scoreboard,
+  boundaries and seam table
+- FSST stores raw values when compression does not pay (never larger than the
+  raw size by more than a byte) and builds its symbol table from a bounded
+  sample, so high-entropy and large inputs stay cheap
+- A throughput bench (`harness/bench`, `harness/scoreboard.py`) and
+  `docs/scoreboard.md`: on the reference machine native reaches 2.3 GB/s
+  encoding and 3.2 GB/s decoding for monotonic INT64 deltas; wasm-gc 1.1 and
+  1.0 GB/s
+- P5 was validated against moonlake on a local branch (read side, write path,
+  spill re-encoding); it is not part of this package and is not merged
+
+P0 through P4 are complete; the package is ready to publish once the repository
+link and the release are in place.

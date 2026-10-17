@@ -10,7 +10,8 @@ it never touches files, containers or query plans, and it is not a byte-stream
 compressor.
 
 - Design, milestones and acceptance criteria: [`docs/ROADMAP.md`](docs/ROADMAP.md)
-- Acceptance rig (fixtures, byte diffing, container judges): [`harness/README.md`](harness/README.md)
+- Acceptance rig: lives in the source repository under `harness/` (not shipped in
+  the package); the summary is below
 - Throughput scoreboard: [`docs/scoreboard.md`](docs/scoreboard.md)
 - License: [Apache-2.0](LICENSE)
 
@@ -130,8 +131,14 @@ monotonic INT64 deltas on native, and about 1.1 GB/s / 1.0 GB/s on wasm-gc.
 Three layers, each stricter than the last: property tests (round trip plus
 boundary batteries on every backend), byte-level diffs against parquet-cpp
 reference pages, and container interop where files we assemble are read back by
-DuckDB **and** pyarrow with equal values. The rig and its commands are in
-[`harness/README.md`](harness/README.md); CI runs it on every push.
+DuckDB **and** pyarrow with equal values.
+
+The rig lives in the source repository under `harness/` and is not shipped in
+the package: `make_refs.py --check` regenerates the fixtures, `check_rle.py`,
+`check_dict.py`, `check_delta.py` and `check_bss.py` byte-diff each family,
+`check_fsst.py` verifies the FSST round trip and ratio, and
+`check_container.sh` runs the container interop end to end. CI runs all of them
+on every push.
 
 ## Layout
 

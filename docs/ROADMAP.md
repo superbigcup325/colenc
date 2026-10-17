@@ -2,11 +2,13 @@
 
 > A pure-MoonBit, zero-FFI **columnar encoding kernel**: the column encodings an
 > analytical engine needs, packaged as a reusable, verifiable, pluggable library
+>
 > Peer references: Parquet's `parquet-encoding` crate, DuckDB's built-in encoders
 > License: Apache-2.0
 
-**Status (2026-10)**: project scoped, design settled; **P0 through P4 complete** — every v1 encoding family sits behind the facade dispatch, E1 to E6 are byte-identical to the reference, E7 round-trips with its scoreboard measured, and CI runs the three-backend matrix plus the byte-diff and container jobs
-**Next step**: P5 — integration with moonlake: read-side hookup, a write path, and spill serialization switched to colpack encodings
+**Status (2026-10)**: project scoped, design settled; **P0 through P4 complete in this package** — every v1 encoding family sits behind the facade dispatch, E1 to E6 are byte-identical to the reference, E7 round-trips with its scoreboard measured, and CI runs the three-backend matrix plus the byte-diff and container jobs
+**Integration (P5)**: validated against moonlake on a local branch — the Parquet reader routed through colpack, a write path added, and the spill format re-encoded (8.08 → 4.86 MiB on the bake-off workload). It is not merged, and this package is not published yet
+**Next step**: publish the package, land the consumer integration, then phase two — bitmap indexes and approximate aggregations
 
 ---
 

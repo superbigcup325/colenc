@@ -11,12 +11,13 @@ milestone plan and the acceptance criteria this repo is built around.
 
 ## Status
 
-Design settled; **P0 through P4 are complete**. Every v1 encoding family is in
-place: PLAIN, the RLE/bit-packed hybrid, dictionary, the delta family,
-BYTE_STREAM_SPLIT and FSST, with E1 to E6 byte-identical to the reference and
-E7 measured by round trip plus the scoreboard (no Parquet-native FSST exists).
-CI runs the three-backend test matrix plus the harness jobs. **P5, integration
-with moonlake, is next.**
+Design settled; **P0 through P4 are complete in this package**. Every v1
+encoding family is in place: PLAIN, the RLE/bit-packed hybrid, dictionary, the
+delta family, BYTE_STREAM_SPLIT and FSST, with E1 to E6 byte-identical to the
+reference and E7 measured by round trip plus the scoreboard (no Parquet-native
+FSST exists). CI runs the three-backend test matrix plus the harness jobs.
+**P5 (moonlake) is validated on a local branch**, not merged; the package is
+not published yet.
 
 ## Layout
 
@@ -31,7 +32,7 @@ primitives/              L1: varint / zigzag / bit packing / bit width
 encoders/                L2: PLAIN, RLE hybrid, dictionary, delta family,
                          BYTE_STREAM_SPLIT and FSST
 facade.mbt               L3: encode_column / decode_column dispatch
-harness/                 acceptance rig: Python judges, fixtures, minimal writer
+harness/                 acceptance rig (repository only, excluded from the package)
 .githooks/               pre-commit gate
 .github/workflows/       CI gate
 .gitignore .moonignore .gitattributes
@@ -52,7 +53,7 @@ its branch in `facade.mbt`.
 - Whitebox tests are `*_wbtest.mbt`, blackbox tests `*_test.mbt`; blackbox
   tests refer to the package under test by alias (`@primitives.bit_pack`), and
   test-only imports live in a `for "test"` block in `moon.pkg`
-- Acceptance rig (see `harness/README.md`):
+- Acceptance rig (repository-only, see `harness/README.md`):
   `python3 harness/make_refs.py [--check]` regenerates or verifies the fixtures,
   `python3 harness/extract_pages.py <parquet> --out <dir>` carves pages,
   `python3 harness/diff_bytes.py ours.bin ref.bin` reports the first divergence,
@@ -199,5 +200,6 @@ moon info && moon fmt     # refresh interfaces, format
 moon info && moon fmt && moon check --deny-warn && moon test
 ```
 
-The acceptance rig's Python side lives in `harness/`; its setup, commands and
-the fixture contract are documented in `harness/README.md`.
+The acceptance rig's Python side lives in `harness/` in the source repository
+(excluded from the published package); its setup, commands and the fixture
+contract are documented in `harness/README.md`.
