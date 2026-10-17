@@ -12,5 +12,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   roadmap in `docs/ROADMAP.md`
 - Apache-2.0 license
 - Pre-commit hook (`.githooks/`) and a CI gate (`.github/workflows/ci.yml`)
+- Acceptance rig, Python half (`harness/`): reference sample generator with
+  reproducibility check (`make_refs.py`), Thrift-compact page extractor
+  (`parquet_pages.py`, `extract_pages.py`), byte differ with first-divergence
+  reporting (`diff_bytes.py`), pinned judge versions and six reference samples
+  covering PLAIN, RLE_DICTIONARY, DELTA_BINARY_PACKED, BYTE_STREAM_SPLIT and
+  RLE
 
-No code yet — the project is at P0, building the acceptance harness.
+No library code yet — the project is at P0, with the MoonBit minimal writer
+still to land.

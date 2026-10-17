@@ -7,4 +7,6 @@ reusable, verifiable, pluggable library. Pure MoonBit, zero FFI.
 - **Design, milestones and acceptance criteria**: [`docs/ROADMAP.md`](docs/ROADMAP.md)
 - **License**: [Apache-2.0](LICENSE)
 
-**Status**: design settled, at P0 — building the acceptance harness. No code yet.
+**Status**: design settled, at P0 — the acceptance rig's Python judges are in
+place (reference generation, page extraction, byte diffing); the MoonBit
+minimal writer is next. No library code yet.

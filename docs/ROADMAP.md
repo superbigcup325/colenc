@@ -5,7 +5,7 @@
 > Peer references: Parquet's `parquet-encoding` crate, DuckDB's built-in encoders
 > License: Apache-2.0
 
-**Status (2026-10)**: project scoped, design settled; currently at P0 (acceptance harness)
+**Status (2026-10)**: project scoped, design settled; at P0 (acceptance harness) — the rig's Python judges and reference samples have landed, the minimal Parquet writer is in progress
 **Next step**: build `harness/` and prove the chain — our bytes match a reference implementation byte-for-byte, and DuckDB reads them back
 
 ---

@@ -11,8 +11,10 @@ milestone plan and the acceptance criteria this repo is built around.
 
 ## Status
 
-Design settled; at **P0 (acceptance harness)**. No code yet — do not assume any
-package described below exists.
+Design settled; at **P0 (acceptance harness)**. The Python half of the rig is in
+place (`harness/`: reference generation, page extraction, byte diffing); the
+MoonBit minimal writer is next. No library packages exist yet — do not assume
+any package described below exists.
 
 ## Layout
 
@@ -22,6 +24,7 @@ Published (tracked) today:
 AGENTS.md  README.md  CHANGELOG.md  LICENSE
 moon.mod                 module manifest
 docs/ROADMAP.md          the public roadmap
+harness/                 acceptance rig (Python judges + committed fixtures)
 .githooks/               pre-commit gate
 .github/workflows/       CI gate
 .gitignore .moonignore .gitattributes
@@ -34,7 +37,7 @@ first commits should land in:
 primitives/   # L1: varint / zigzag / bit packing and unpacking / bit width / cursors
 encoders/     # L2: one file per encoding family, each with its property / battery tests
 facade.mbt    # L3: dispatch — Encoding / EncodingStats / column-vector conversion
-harness/      # acceptance rig: Python reference generation and diffing, minimal writer
+harness/writer_min/  # acceptance rig: minimal Parquet writer (Thrift compact + pages)
 ```
 
 - MoonBit packages are organized per directory, one `moon.pkg` each; `moon.mod`
@@ -46,6 +49,10 @@ harness/      # acceptance rig: Python reference generation and diffing, minimal
 ## Tooling
 
 - `moon check` / `moon test` / `moon fmt` / `moon info` / `moon run`
+- Acceptance rig (see `harness/README.md`):
+  `python3 harness/make_refs.py [--check]` regenerates or verifies the fixtures,
+  `python3 harness/extract_pages.py <parquet> --out <dir>` carves pages,
+  `python3 harness/diff_bytes.py ours.bin ref.bin` reports the first divergence
 - **Before committing**, run the quartet:
   `moon info && moon fmt && moon check --deny-warn && moon test`
 - `.githooks/pre-commit` enforces the non-mutating half of that gate
@@ -103,7 +110,24 @@ tracked documents ship in the release archive.
 
 ## Known Pitfalls
 
-(To be filled as work lands; format: symptom → root cause → the fix to reuse)
+- **Fixture payload carries definition levels** → pyarrow fields default to
+  nullable, so `max_definition_level = 1` and a V1 body starts with a 4-byte
+  length plus an RLE level section → declare fixtures as `nullable=False`;
+  required flat columns have no level bytes, so the payload is the value stream
+- **pyarrow silently falls back to PLAIN** when an encoding cannot be applied →
+  a fixture that never exercised its encoding would weaken every byte diff →
+  read back `metadata.row_group().column().encodings` and fail the generator
+- **`ColumnChunkMetaData.file_offset` is 0** (the field is deprecated) → start
+  the page walk at `min(data_page_offset, dictionary_page_offset)` and trust
+  `total_compressed_size`; header and body must tile the chunk exactly or the
+  Thrift parse desynchronized
+- **Reference bytes drift with pyarrow** → run-selection heuristics, dictionary
+  thresholds and `created_by` are writer-version dependent → pin pyarrow in
+  `harness/requirements.txt` and bump it only together with regenerated
+  fixtures
+- **V1 level prefix is a length of the section, not the page** → each section
+  is `u32le length` + that many bytes, repetition first, and a section is
+  absent entirely when its max level is 0
 
 ## Command reference
 
@@ -118,5 +142,5 @@ moon info && moon fmt     # refresh interfaces, format
 moon info && moon fmt && moon check --deny-warn && moon test
 ```
 
-The acceptance rig (`harness/`) does not exist yet; its commands will be added
-here as P0 lands.
+The acceptance rig's Python side lives in `harness/`; its setup, commands and
+the fixture contract are documented in `harness/README.md`.

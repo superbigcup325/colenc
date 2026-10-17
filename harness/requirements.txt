@@ -1,0 +1,8 @@
+# Python side of the acceptance rig (T0.1 / T0.3).
+#
+# Pinned on purpose: the reference samples are compared byte-for-byte, and a
+# different pyarrow release may pick different encodings (run-selection
+# heuristic, dictionary threshold) or ship a different `created_by` string.
+# Bump these two only together with regenerated fixtures.
+pyarrow==26.0.0
+duckdb==1.5.6

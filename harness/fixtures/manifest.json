@@ -1,0 +1,127 @@
+{
+  "compression": "none",
+  "data_page_version": "1.0",
+  "expected_values_encoding": "PLAIN with no level bytes; BOOLEAN bit-packed LSB first",
+  "generator": "harness/make_refs.py",
+  "parquet_format_version": "2.6",
+  "pyarrow_version": "26.0.0",
+  "row_group_columns": "required (nullable=False), flat",
+  "samples": [
+    {
+      "column": "f32",
+      "count": 1000,
+      "encoding": "BYTE_STREAM_SPLIT",
+      "has_dictionary_page": false,
+      "name": "bss_float32",
+      "observed_encodings": [
+        "RLE",
+        "BYTE_STREAM_SPLIT"
+      ],
+      "parquet": "bss_float32.parquet",
+      "parquet_bytes": 4159,
+      "parquet_sha256": "6dfa0f2202433591c1ca4b052e5c35efa987242d1059606fedcb2fe07695bd28",
+      "physical_type": "FLOAT",
+      "row_groups": 1,
+      "values": "bss_float32.values.bin",
+      "values_bytes": 4000,
+      "values_sha256": "32355fd1353ef6e074bdc23865c28c22df03f56bd5229be743dcb4115f990338"
+    },
+    {
+      "column": "i64",
+      "count": 1000,
+      "encoding": "DELTA_BINARY_PACKED",
+      "has_dictionary_page": false,
+      "name": "delta_int64",
+      "observed_encodings": [
+        "RLE",
+        "DELTA_BINARY_PACKED"
+      ],
+      "parquet": "delta_int64.parquet",
+      "parquet_bytes": 179,
+      "parquet_sha256": "5f010e1f4be7c2a1c72c0add8e3a1c8ad27b75b685f35a897dd5ca3f97dc3dac",
+      "physical_type": "INT64",
+      "row_groups": 1,
+      "values": "delta_int64.values.bin",
+      "values_bytes": 8000,
+      "values_sha256": "a0554f9446ce4f8eede3e1ffd13968e2514e2288fffa1027c34c265ce05c7f7a"
+    },
+    {
+      "column": "labels",
+      "count": 1000,
+      "encoding": "RLE_DICTIONARY",
+      "has_dictionary_page": true,
+      "name": "dict_string",
+      "observed_encodings": [
+        "PLAIN",
+        "RLE",
+        "RLE_DICTIONARY"
+      ],
+      "parquet": "dict_string.parquet",
+      "parquet_bytes": 491,
+      "parquet_sha256": "1754c8a9ea4f73704caad97969b76e5e4938c6f5e28cd7b75d354141780a17dd",
+      "physical_type": "BYTE_ARRAY",
+      "row_groups": 1,
+      "values": "dict_string.values.bin",
+      "values_bytes": 8500,
+      "values_sha256": "0e54b76eb3c42242e624d0e8517ef6ca898c4c63882bd61f2d326cf765145142"
+    },
+    {
+      "column": "i32",
+      "count": 1000,
+      "encoding": "PLAIN",
+      "has_dictionary_page": false,
+      "name": "plain_int32",
+      "observed_encodings": [
+        "RLE",
+        "PLAIN"
+      ],
+      "parquet": "plain_int32.parquet",
+      "parquet_bytes": 4159,
+      "parquet_sha256": "b7190c84baa5cbde75e5d12bf2278c7eaaa851d470f25e9431d4f3108fa8f5dc",
+      "physical_type": "INT32",
+      "row_groups": 1,
+      "values": "plain_int32.values.bin",
+      "values_bytes": 4000,
+      "values_sha256": "917a9525360e87e77532c47dcce57e801ba9fc826d7d519ace20c8113995906b"
+    },
+    {
+      "column": "words",
+      "count": 200,
+      "encoding": "PLAIN",
+      "has_dictionary_page": false,
+      "name": "plain_string",
+      "observed_encodings": [
+        "RLE",
+        "PLAIN"
+      ],
+      "parquet": "plain_string.parquet",
+      "parquet_bytes": 2778,
+      "parquet_sha256": "1e2020cb917adf0bc0cc7a9380e48db757646039a37ba19153e78591d8618d87",
+      "physical_type": "BYTE_ARRAY",
+      "row_groups": 1,
+      "values": "plain_string.values.bin",
+      "values_bytes": 2600,
+      "values_sha256": "7d2db2b17b03a2c75276e7ead47e37fe128f064cb0c371a3440ee0a25643af11"
+    },
+    {
+      "column": "flags",
+      "count": 1000,
+      "encoding": "RLE",
+      "has_dictionary_page": false,
+      "name": "rle_bool",
+      "observed_encodings": [
+        "RLE"
+      ],
+      "parquet": "rle_bool.parquet",
+      "parquet_bytes": 293,
+      "parquet_sha256": "d8a505262e8364de907da92183169432e56031a0f27f4da880ea5001da5449ef",
+      "physical_type": "BOOLEAN",
+      "row_groups": 1,
+      "values": "rle_bool.values.bin",
+      "values_bytes": 125,
+      "values_sha256": "54ad20a34a427633d4074cb2bfd02ad1a015ccae7695d3553ab86192b94cb486"
+    }
+  ],
+  "store_arrow_schema": false,
+  "write_statistics": false
+}
