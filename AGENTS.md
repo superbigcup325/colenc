@@ -11,10 +11,11 @@ milestone plan and the acceptance criteria this repo is built around.
 
 ## Status
 
-Design settled; **P0 is complete**, and **P1 is in progress**: `primitives`, the
-neutral `types` model, PLAIN, the RLE/bit-packed hybrid and the facade dispatch
-have landed, with the hybrid byte-identical to the reference. Next is T1.4, the
-CI side of the harness, then the P1 exit.
+Design settled; **P0 and P1 are complete**. The library has `primitives`, the
+neutral `types` model, PLAIN and the RLE/bit-packed hybrid behind the facade
+dispatch, with E1 byte-identical to the reference implementation; CI runs the
+three-backend test matrix plus the harness jobs (fixture reproducibility, RLE
+byte diff, container interop). **P2, the dictionary encoding, is next.**
 
 ## Layout
 
@@ -53,7 +54,9 @@ its branch in `facade.mbt`.
   `python3 harness/make_refs.py [--check]` regenerates or verifies the fixtures,
   `python3 harness/extract_pages.py <parquet> --out <dir>` carves pages,
   `python3 harness/diff_bytes.py ours.bin ref.bin` reports the first divergence,
-  `harness/duck_read.sh <parquet> [--values ref.bin]` runs both judges
+  `harness/duck_read.sh <parquet> [--values ref.bin]` runs both judges,
+  `python3 harness/check_rle.py` byte-diffs the hybrid encoder,
+  `harness/check_container.sh` proves the container path end to end
 - `moon run harness/writer_min -- <out.parquet>` writes the minimal container
 - **Before committing**, run the quartet:
   `moon info && moon fmt && moon check --deny-warn && moon test`
@@ -151,6 +154,9 @@ tracked documents ship in the release archive.
 - **The hybrid's literal runs stop at 63 groups** (504 values) because the
   indicator is one byte; the next group forces the run out, and a trailing
   run shorter than eight still becomes a repeated run at the end flush
+- **Harness executables run on native in CI** → `moon test --target js` covers
+  the library packages, but `writer_min` and `rle_probe` use `moonbitlang/x/fs`
+  and are invoked with `--target native` by the harness scripts
 - **Prefer prelude and non-deprecated core APIs** → `Buffer()` replaces
   `@buffer.new()`, and `String::to_bytes` is deprecated in favour of
   `@utf8.encode`; `--deny-warn` turns both into build failures

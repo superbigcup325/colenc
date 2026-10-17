@@ -16,6 +16,7 @@ read_back.py       judge a Parquet file with DuckDB and pyarrow
 duck_read.sh       thin wrapper around read_back.py
 make_rle_cases.py  build RLE byte-diff cases from the fixtures
 check_rle.py       run the RLE probe over every case and diff the bytes
+check_container.sh end-to-end container check: wrap, judge, diff pages
 rle_probe/         minimal MoonBit CLI around the library's RLE encoder
 requirements.txt   pinned judge versions (pyarrow, duckdb)
 fixtures/          committed reference samples + manifest
@@ -144,6 +145,11 @@ python3 harness/check_rle.py             # run the probe and diff every case
 
 `rle_probe` reads the value sequence as little-endian u64 and writes the raw
 stream; `check_rle.py` reports the first differing byte, not just pass/fail.
+
+CI runs both checks in the `harness` job, together with
+`harness/check_container.sh`, which wraps library-produced bodies, judges the
+files with DuckDB and pyarrow, and diffs the page payloads against the
+fixtures.
 
 The writer emits the same 1000-row sequence as the `plain_int32` fixture, so the
 page payload can be diffed against the fixture as a third check on top of the

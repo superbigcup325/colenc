@@ -51,11 +51,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The library promises identical behaviour on native and wasm-gc, so
-        # both backends are exercised from the start.
+        # The library promises identical behaviour on native, wasm-gc and js,
+        # so all three backends are exercised.
         target:
           - wasm-gc
           - native
+          - js
     steps:
       - uses: actions/checkout@v5
       - name: Install MoonBit
@@ -68,3 +69,26 @@ jobs:
           moon install
       - name: Test (${{ matrix.target }})
         run: moon test --target ${{ matrix.target }}
+
+  harness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install MoonBit
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+      - name: Fetch dependencies
+        run: |
+          moon update
+          moon install
+      - name: Install Python judges
+        run: python3 -m pip install -r harness/requirements.txt
+      - name: Fixtures are reproducible
+        run: python3 harness/make_refs.py --check
+      - name: RLE cases are reproducible
+        run: python3 harness/make_rle_cases.py --check
+      - name: RLE byte diff
+        run: python3 harness/check_rle.py
+      - name: Container interop
+        run: harness/check_container.sh

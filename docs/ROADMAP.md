@@ -5,8 +5,8 @@
 > Peer references: Parquet's `parquet-encoding` crate, DuckDB's built-in encoders
 > License: Apache-2.0
 
-**Status (2026-10)**: project scoped, design settled; **P0 (acceptance harness) complete** and **P1 in progress** — the rig is proven by DuckDB and pyarrow read-back, and `primitives/`, the neutral `types` model, PLAIN, the RLE/bit-packed hybrid and the facade dispatch have landed, with the hybrid byte-identical to the reference
-**Next step**: P1 exit — wire the acceptance rig into CI (three backends plus the byte-diff and container jobs)
+**Status (2026-10)**: project scoped, design settled; **P0 and P1 complete** — the acceptance rig is proven by DuckDB and pyarrow read-back, PLAIN and the RLE/bit-packed hybrid sit behind the facade dispatch, E1 is byte-identical to the reference, and CI runs the three-backend matrix plus the byte-diff and container jobs
+**Next step**: P2 — the dictionary encoding: dictionary pages, packed indices, threshold fallback, byte diff and a low-cardinality compression ratio
 
 ---
 

@@ -34,6 +34,8 @@ def main() -> int:
                 [
                     "moon",
                     "run",
+                    "--target",
+                    "native",
                     "harness/rle_probe",
                     "--",
                     "--in",

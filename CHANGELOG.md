@@ -51,5 +51,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   library's stream against the reference, and `writer_min --rle` proves the
   container path with both judges
 
-The CI side of the harness (T1.4) is next. — the project is at P0, with the MoonBit minimal writer
+- CI: the test matrix now covers native, wasm-gc and js; a harness job checks
+  fixture reproducibility, the RLE byte diff and container interop end to end
+
+P1 is complete; the dictionary encoding (P2) is next. — the project is at P0, with the MoonBit minimal writer
 still to land.
