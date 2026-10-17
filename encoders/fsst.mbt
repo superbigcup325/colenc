@@ -9,12 +9,19 @@
 ///
 /// Framing:
 ///
-///   [symbol count u8]
-///   per symbol: [length u8][bytes]
-///   [value count u32le]
-///   per value: [compressed length u32le][codes and literals]
+///   [mode u8]  0 = compressed, 1 = stored raw
+///   compressed: [symbol count u8]
+///               per symbol: [length u8][bytes]
+///               [value count u32le]
+///               per value: [compressed length u32le][codes and literals]
+///   stored:     [value count u32le]
+///               per value: [length u32le][bytes]
 ///
 /// Codes 0..count-1 select a symbol; 255 escapes one raw literal byte.
+/// The encoder compares both bodies and stores the smaller one, so FSST never
+/// expands a column by more than the mode byte. The symbol table is built from
+/// a bounded sample (64 KiB, at most 4 KiB per value), which keeps the substring
+/// counter linear on large inputs.
 
 ///|
 const FSST_MAX_SYMBOLS : Int32 = 255
@@ -24,6 +31,18 @@ const FSST_MAX_SYMBOL_LENGTH : Int32 = 8
 
 ///|
 const FSST_ESCAPE : Int32 = 255
+
+///|
+const FSST_MODE_COMPRESSED : Int32 = 0
+
+///|
+const FSST_MODE_STORED : Int32 = 1
+
+///|
+const FSST_SAMPLE_BYTES : Int32 = 65536
+
+///|
+const FSST_SAMPLE_VALUE_PREFIX : Int32 = 4096
 
 ///|
 fn symbol_savings(entry : (Bytes, Int32)) -> Int32 {
@@ -49,8 +68,17 @@ fn compare_symbols(a : (Bytes, Int32), b : (Bytes, Int32)) -> Int32 {
 /// 255. Ties break on length then bytes so the table is deterministic.
 fn build_symbols(values : Array[Bytes]) -> Array[Bytes] {
   let counts : Map[Bytes, Int32] = Map([])
+  let mut budget = 0
   for value in values {
-    let length = value.length()
+    if budget >= FSST_SAMPLE_BYTES {
+      break
+    }
+    let length = if value.length() < FSST_SAMPLE_VALUE_PREFIX {
+      value.length()
+    } else {
+      FSST_SAMPLE_VALUE_PREFIX
+    }
+    budget += length
     for start in 0..<length {
       let room = if length - start < FSST_MAX_SYMBOL_LENGTH {
         length - start
@@ -124,25 +152,46 @@ fn encode_value(
 }
 
 ///|
-/// Compress a column of byte strings. The table is built from the column, so
-/// the cost of the table is paid once per column.
+/// Compress a column of byte strings. The table is built from a bounded sample
+/// and the framing falls back to stored raw values whenever compression does
+/// not pay for the table, so the output never exceeds the raw size by more
+/// than the mode byte.
 pub fn encode_fsst(values : Array[Bytes], out : @buffer.Buffer) -> Unit {
   let symbols = build_symbols(values)
-  out.write_byte(symbols.length().to_byte())
+
+  let compressed = Buffer()
+  compressed.write_byte(symbols.length().to_byte())
   let codes : Map[Bytes, Int32] = Map([])
   for index in 0..<symbols.length() {
     let symbol = symbols[index]
-    out.write_byte(symbol.length().to_byte())
-    out.write_bytes(symbol)
+    compressed.write_byte(symbol.length().to_byte())
+    compressed.write_bytes(symbol)
     codes.set(symbol, index)
   }
-  out.write_int_le(values.length())
+  compressed.write_int_le(values.length())
   for value in values {
-    let compressed = Buffer()
-    encode_value(value, codes, compressed)
-    let bytes = compressed.to_bytes()
-    out.write_int_le(bytes.length())
-    out.write_bytes(bytes)
+    let body = Buffer()
+    encode_value(value, codes, body)
+    let bytes = body.to_bytes()
+    compressed.write_int_le(bytes.length())
+    compressed.write_bytes(bytes)
+  }
+
+  let stored = Buffer()
+  stored.write_int_le(values.length())
+  for value in values {
+    stored.write_int_le(value.length())
+    stored.write_bytes(value)
+  }
+
+  let compressed_bytes = compressed.to_bytes()
+  let stored_bytes = stored.to_bytes()
+  if compressed_bytes.length() < stored_bytes.length() {
+    out.write_byte(FSST_MODE_COMPRESSED.to_byte())
+    out.write_bytes(compressed_bytes)
+  } else {
+    out.write_byte(FSST_MODE_STORED.to_byte())
+    out.write_bytes(stored_bytes)
   }
 }
 
@@ -162,72 +211,125 @@ pub fn decode_fsst(
   if position >= data.length() {
     raise @types.EncodingError::Truncated(position, 1, 0)
   }
-  let symbol_count = data[position].to_int()
+  let mode = data[position].to_int()
   position += 1
-  let symbols : Array[Bytes] = []
-  for _ in 0..<symbol_count {
-    if position >= data.length() {
-      raise @types.EncodingError::Truncated(position, 1, 0)
+  match mode {
+    FSST_MODE_STORED => {
+      if position + 4 > data.length() {
+        raise @types.EncodingError::Truncated(
+          position,
+          4,
+          data.length() - position,
+        )
+      }
+      let stored_count = read_u32_le(data, position)
+      position += 4
+      if stored_count != count {
+        raise @types.EncodingError::Incomplete(stored_count, count)
+      }
+      let values : Array[Bytes] = []
+      for _ in 0..<count {
+        if position + 4 > data.length() {
+          raise @types.EncodingError::Truncated(
+            position,
+            4,
+            data.length() - position,
+          )
+        }
+        let length = read_u32_le(data, position)
+        position += 4
+        if length < 0 {
+          raise @types.EncodingError::InvalidCount(length)
+        }
+        if position + length > data.length() {
+          raise @types.EncodingError::Truncated(
+            position,
+            length,
+            data.length() - position,
+          )
+        }
+        values.push(data[position:position + length].to_owned())
+        position += length
+      }
+      (values, position - offset)
     }
-    let length = data[position].to_int()
-    position += 1
-    if position + length > data.length() {
-      raise @types.EncodingError::Truncated(
-        position,
-        length,
-        data.length() - position,
-      )
-    }
-    symbols.push(data[position:position + length].to_owned())
-    position += length
-  }
-  if position + 4 > data.length() {
-    raise @types.EncodingError::Truncated(position, 4, data.length() - position)
-  }
-  let stored_count = read_u32_le(data, position)
-  position += 4
-  if stored_count != count {
-    raise @types.EncodingError::Incomplete(stored_count, count)
-  }
-  let values : Array[Bytes] = []
-  for _ in 0..<count {
-    if position + 4 > data.length() {
-      raise @types.EncodingError::Truncated(
-        position,
-        4,
-        data.length() - position,
-      )
-    }
-    let compressed_length = read_u32_le(data, position)
-    position += 4
-    if compressed_length < 0 {
-      raise @types.EncodingError::InvalidCount(compressed_length)
-    }
-    if position + compressed_length > data.length() {
-      raise @types.EncodingError::Truncated(
-        position,
-        compressed_length,
-        data.length() - position,
-      )
-    }
-    let end = position + compressed_length
-    let value = Buffer()
-    while position < end {
-      let code = data[position].to_int()
+    FSST_MODE_COMPRESSED => {
+      if position >= data.length() {
+        raise @types.EncodingError::Truncated(position, 1, 0)
+      }
+      let symbol_count = data[position].to_int()
       position += 1
-      if code == FSST_ESCAPE {
-        if position >= end {
+      let symbols : Array[Bytes] = []
+      for _ in 0..<symbol_count {
+        if position >= data.length() {
           raise @types.EncodingError::Truncated(position, 1, 0)
         }
-        value.write_byte(data[position])
+        let length = data[position].to_int()
         position += 1
-      } else if code < symbols.length() {
-        value.write_bytes(symbols[code])
-      } else {
-        raise @types.EncodingError::InvalidIndex(code, symbols.length())
+        if position + length > data.length() {
+          raise @types.EncodingError::Truncated(
+            position,
+            length,
+            data.length() - position,
+          )
+        }
+        symbols.push(data[position:position + length].to_owned())
+        position += length
       }
+      if position + 4 > data.length() {
+        raise @types.EncodingError::Truncated(
+          position,
+          4,
+          data.length() - position,
+        )
+      }
+      let stored_count = read_u32_le(data, position)
+      position += 4
+      if stored_count != count {
+        raise @types.EncodingError::Incomplete(stored_count, count)
+      }
+      let values : Array[Bytes] = []
+      for _ in 0..<count {
+        if position + 4 > data.length() {
+          raise @types.EncodingError::Truncated(
+            position,
+            4,
+            data.length() - position,
+          )
+        }
+        let compressed_length = read_u32_le(data, position)
+        position += 4
+        if compressed_length < 0 {
+          raise @types.EncodingError::InvalidCount(compressed_length)
+        }
+        if position + compressed_length > data.length() {
+          raise @types.EncodingError::Truncated(
+            position,
+            compressed_length,
+            data.length() - position,
+          )
+        }
+        let end = position + compressed_length
+        let value = Buffer()
+        while position < end {
+          let code = data[position].to_int()
+          position += 1
+          if code == FSST_ESCAPE {
+            if position >= end {
+              raise @types.EncodingError::Truncated(position, 1, 0)
+            }
+            value.write_byte(data[position])
+            position += 1
+          } else if code < symbols.length() {
+            value.write_bytes(symbols[code])
+          } else {
+            raise @types.EncodingError::InvalidIndex(code, symbols.length())
+          }
+        }
+        values.push(value.to_bytes())
+      }
+      (values, position - offset)
     }
-    values.push(value.to_bytes())
+    _ => raise @types.EncodingError::InvalidTag(mode)
   }
-  (values, position - offset)
 }

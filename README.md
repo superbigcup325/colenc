@@ -92,9 +92,11 @@ live):
 | float/double columns | BYTE_STREAM_SPLIT | 100% (size neutral by design) |
 | repetitive strings | FSST | 60.4% – 74.5% |
 
-FSST builds a symbol table per column and can **expand** high-entropy input;
-compare its output against PLAIN before choosing it. Throughput numbers
-(native and wasm-gc, MB/s) are the next scoreboard item.
+FSST builds its symbol table from a bounded sample (64 KiB) and **stores raw
+values when compression does not pay**, so the encoded column never exceeds the
+raw size by more than one byte; on repetitive strings it lands at 60–75% of
+PLAIN. Throughput numbers (native and wasm-gc, MB/s) are the next scoreboard
+item.
 
 ## Boundaries (v1)
 
@@ -106,7 +108,8 @@ compare its output against PLAIN before choosing it. Throughput numbers
 - **Dictionary fallback is per column** (returns `None`), not parquet-cpp's
   mid-column fallback
 - **FSST framing is colpack's own**; Parquet has no native FSST, so no byte
-  diff or container check applies
+  diff or container check applies, and the framing falls back to stored raw
+  values when the table does not pay for itself
 - **No SIMD kernels**: scalar + lookup tables first
 
 ## Neighbours and the seams

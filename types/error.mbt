@@ -17,6 +17,8 @@ pub(all) suberror EncodingError {
   Incomplete(Int32, Int32)
   /// A dictionary index outside the dictionary: index, dictionary size.
   InvalidIndex(Int32, Int32)
+  /// An unexpected tag or mode byte in a colpack framing.
+  InvalidTag(Int32)
 }
 
 ///|
@@ -34,6 +36,7 @@ pub fn EncodingError::message(self : EncodingError) -> String {
       "stream ended after \{decoded} values, \{expected} requested"
     InvalidIndex(index, size) =>
       "dictionary index \{index} outside 0..\{size - 1}"
+    InvalidTag(tag) => "unexpected tag \{tag}"
   }
 }
 
