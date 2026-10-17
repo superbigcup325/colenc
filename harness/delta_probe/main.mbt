@@ -108,7 +108,7 @@ fn main {
   }
 
   let out = Buffer()
-  let stats = @colpack.encode_column(column, encoding, out) catch {
+  let stats = @colenc.encode_column(column, encoding, out) catch {
     error => {
       eprintln("delta_probe: \{@types.EncodingError::message(error)}")
       return
@@ -123,7 +123,7 @@ fn main {
   }
 
   let plain = Buffer()
-  let plain_stats = @colpack.encode_column(column, @types.Plain, plain) catch {
+  let plain_stats = @colenc.encode_column(column, @types.Plain, plain) catch {
     error => {
       eprintln(
         "delta_probe: plain failed: \{@types.EncodingError::message(error)}",

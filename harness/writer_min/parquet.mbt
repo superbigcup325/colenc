@@ -224,7 +224,7 @@ fn file_meta_data(
   for group in row_groups {
     buf.write_bytes(group)
   }
-  last = field_binary(buf, last, 6, "colpack writer_min")
+  last = field_binary(buf, last, 6, "colenc writer_min")
   put_stop(buf)
   buf.to_bytes()
 }

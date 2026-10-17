@@ -28,12 +28,12 @@ test "facade plain round trips every physical type" {
   ]
   for column in cases {
     let out = @buffer.Buffer()
-    let stats = @colpack.encode_column(column, @types.Plain, out) catch {
+    let stats = @colenc.encode_column(column, @types.Plain, out) catch {
       _ => abort("encode failed")
     }
     assert_eq(stats.value_count, column.value_count())
     assert_eq(stats.encoded_bytes, out.length())
-    let back = @colpack.decode_column(
+    let back = @colenc.decode_column(
       out.to_bytes(),
       column.physical_type(),
       @types.Plain,
@@ -57,7 +57,7 @@ test "facade plain round trips every physical type" {
 test "facade reports bytes appended, not total length" {
   let out = @buffer.Buffer()
   out.write_bytes(b"prefix")
-  let stats = @colpack.encode_column(
+  let stats = @colenc.encode_column(
     @types.ColBuf::Int32s([1]),
     @types.Plain,
     out,
@@ -73,7 +73,7 @@ test "facade rejects unimplemented families" {
   let out = @buffer.Buffer()
   let error = capture_error(() => {
     ignore(
-      @colpack.encode_column(@types.ColBuf::Int32s([1]), @types.Dictionary, out),
+      @colenc.encode_column(@types.ColBuf::Int32s([1]), @types.Dictionary, out),
     )
   })
   match error {
@@ -82,7 +82,7 @@ test "facade rejects unimplemented families" {
   }
 
   let error = capture_error(() => {
-    ignore(@colpack.decode_column(b"", @types.Int32, @types.Rle, 0))
+    ignore(@colenc.decode_column(b"", @types.Int32, @types.Rle, 0))
   })
   match error {
     @types.EncodingError::TypeMismatch(@types.Int32, @types.Rle) => ()
@@ -91,7 +91,7 @@ test "facade rejects unimplemented families" {
 
   // Dictionary needs its own entry point because it has two streams
   let error = capture_error(() => {
-    ignore(@colpack.decode_column(b"", @types.Int32, @types.Dictionary, 0))
+    ignore(@colenc.decode_column(b"", @types.Int32, @types.Dictionary, 0))
   })
   match error {
     @types.EncodingError::Unsupported(@types.Dictionary) => ()
@@ -102,7 +102,7 @@ test "facade rejects unimplemented families" {
 ///|
 test "facade decode surfaces truncation with the offset" {
   let error = capture_error(() => {
-    ignore(@colpack.decode_column(b"\x01\x02", @types.Int32, @types.Plain, 2))
+    ignore(@colenc.decode_column(b"\x01\x02", @types.Int32, @types.Plain, 2))
   })
   match error {
     @types.EncodingError::Truncated(0, 8, 2) => ()

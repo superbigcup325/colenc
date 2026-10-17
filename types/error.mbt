@@ -17,7 +17,7 @@ pub(all) suberror EncodingError {
   Incomplete(Int32, Int32)
   /// A dictionary index outside the dictionary: index, dictionary size.
   InvalidIndex(Int32, Int32)
-  /// An unexpected tag or mode byte in a colpack framing.
+  /// An unexpected tag or mode byte in a colenc framing.
   InvalidTag(Int32)
 }
 

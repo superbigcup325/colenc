@@ -1,6 +1,6 @@
 import {
-  "superbigcup325/colpack/types",
-  "superbigcup325/colpack/primitives",
+  "superbigcup325/colenc/types",
+  "superbigcup325/colenc/primitives",
   "moonbitlang/core/buffer",
 }
 

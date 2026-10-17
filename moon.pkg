@@ -1,5 +1,5 @@
 import {
-  "superbigcup325/colpack/types",
-  "superbigcup325/colpack/encoders",
+  "superbigcup325/colenc/types",
+  "superbigcup325/colenc/encoders",
   "moonbitlang/core/buffer",
 }

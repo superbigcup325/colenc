@@ -86,7 +86,7 @@ fn main {
   }
 
   let out = Buffer()
-  let stats = @colpack.encode_column(column, @types.ByteStreamSplit, out) catch {
+  let stats = @colenc.encode_column(column, @types.ByteStreamSplit, out) catch {
     error => {
       eprintln("bss_probe: \{@types.EncodingError::message(error)}")
       return
@@ -100,7 +100,7 @@ fn main {
     }
   }
   let plain = Buffer()
-  let plain_stats = @colpack.encode_column(column, @types.Plain, plain) catch {
+  let plain_stats = @colenc.encode_column(column, @types.Plain, plain) catch {
     error => {
       eprintln(
         "bss_probe: plain failed: \{@types.EncodingError::message(error)}",

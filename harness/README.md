@@ -72,7 +72,7 @@ page version `1.0`, no statistics, no Arrow schema in the footer.
 
 `<sample>.values.bin` holds the column's values in PLAIN form with no level
 bytes (BOOLEAN bit-packed LSB first): that is both the "expected values" list for the container judge and,
-for PLAIN samples, exactly the payload colpack must reproduce.
+for PLAIN samples, exactly the payload colenc must reproduce.
 
 `manifest.json` records the writer settings, pyarrow version, observed
 encodings, dictionary-page presence and SHA-256 for each file. The generator
@@ -134,7 +134,7 @@ harness/duck_read.sh /tmp/writer_min.parquet \
   --values harness/fixtures/plain_int32.values.bin --type INT32
 ```
 
-`--library` takes the page body from `colpack.encode_column` instead of the
+`--library` takes the page body from `colenc.encode_column` instead of the
 writer's own loop, so the container check exercises the library's PLAIN output;
 both modes must produce byte-identical files. `--rle` writes a boolean column
 encoded as the RLE hybrid through the library, which is the E1 container check.

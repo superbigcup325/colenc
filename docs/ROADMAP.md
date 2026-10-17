@@ -1,4 +1,4 @@
-# colpack · Roadmap
+# colenc · Roadmap
 
 > A pure-MoonBit, zero-FFI **columnar encoding kernel**: the column encodings an
 > analytical engine needs, packaged as a reusable, verifiable, pluggable library
@@ -7,14 +7,14 @@
 > License: Apache-2.0
 
 **Status (2026-10)**: project scoped, design settled; **P0 through P4 complete in this package** — every v1 encoding family sits behind the facade dispatch, E1 to E6 are byte-identical to the reference, E7 round-trips with its scoreboard measured, and CI runs the three-backend matrix plus the byte-diff and container jobs
-**Integration (P5)**: validated against moonlake on a local branch — the Parquet reader routed through colpack, a write path added, and the spill format re-encoded (8.08 → 4.86 MiB on the bake-off workload). It is not merged, and this package is not published yet
+**Integration (P5)**: validated against moonlake on a local branch — the Parquet reader routed through colenc, a write path added, and the spill format re-encoded (8.08 → 4.86 MiB on the bake-off workload). It is not merged, and this package is not published yet
 **Next step**: publish the package, land the consumer integration, then phase two — bitmap indexes and approximate aggregations
 
 ---
 
 ## 0. What this is
 
-An analytical engine hands colpack a column of values; colpack produces or restores bytes through pluggable encoding families
+An analytical engine hands colenc a column of values; colenc produces or restores bytes through pluggable encoding families
 
 The library itself only touches memory buffers (`BytesView` / `Buffer`) — no IO, no file format, no query logic
 
@@ -39,10 +39,10 @@ Terminology: "columnar encoding" in this document always means **intra-column co
 
 | Neighbour | What it does | Where the seam is |
 |---|---|---|
-| Parquet container library (e.g. `mizchi/parquet`) | file structure, footer, page organization | it owns the container, colpack owns **page-level encoding** — complementary |
+| Parquet container library (e.g. `mizchi/parquet`) | file structure, footer, page organization | it owns the container, colenc owns **page-level encoding** — complementary |
 | Arrow IPC library (e.g. `MoonArrow`) | inter-process format read/write | IPC is an inter-process format; column encoding is intra-page compression — different layers |
 | Byte-stream compressors (DEFLATE / Brotli / ZSTD / gzip family) | compress **bytes** | different layers, composable (column-encode first, then byte-stream compress) |
-| Columnar execution engines (e.g. `moonlake`) | planning / execution / optimization | colpack is their storage substrate; the dependency is one-way |
+| Columnar execution engines (e.g. `moonlake`) | planning / execution / optimization | colenc is their storage substrate; the dependency is one-way |
 
 ## 2. Encoding family roadmap
 

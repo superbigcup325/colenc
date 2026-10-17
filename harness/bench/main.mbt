@@ -10,16 +10,16 @@
 
 ///|
 fn encode(
-  column : @colpack_types.ColBuf,
-  encoding : @colpack_types.Encoding,
+  column : @colenc_types.ColBuf,
+  encoding : @colenc_types.Encoding,
 ) -> Bytes raise {
   let out = Buffer()
-  let _ = @colpack.encode_column(column, encoding, out)
+  let _ = @colenc.encode_column(column, encoding, out)
   out.to_bytes()
 }
 
 ///|
-fn same(a : @colpack_types.ColBuf, b : @colpack_types.ColBuf) -> Bool {
+fn same(a : @colenc_types.ColBuf, b : @colenc_types.ColBuf) -> Bool {
   match (a, b) {
     (Int32s(x), Int32s(y)) => x == y
     (Int64s(x), Int64s(y)) => x == y
@@ -32,14 +32,14 @@ fn same(a : @colpack_types.ColBuf, b : @colpack_types.ColBuf) -> Bool {
 }
 
 ///|
-fn type_of(column : @colpack_types.ColBuf) -> @colpack_types.PhysicalType {
+fn type_of(column : @colenc_types.ColBuf) -> @colenc_types.PhysicalType {
   match column {
-    Int32s(_) => @colpack_types.Int32
-    Int64s(_) => @colpack_types.Int64
-    Floats(_) => @colpack_types.Float
-    Doubles(_) => @colpack_types.Double
-    ByteArrays(_) => @colpack_types.ByteArray
-    Bools(_) => @colpack_types.Bool
+    Int32s(_) => @colenc_types.Int32
+    Int64s(_) => @colenc_types.Int64
+    Floats(_) => @colenc_types.Float
+    Doubles(_) => @colenc_types.Double
+    ByteArrays(_) => @colenc_types.ByteArray
+    Bools(_) => @colenc_types.Bool
   }
 }
 
@@ -62,13 +62,13 @@ fn iterations(estimate_ms : UInt64) -> Int32 {
 ///|
 fn run(
   name : String,
-  column : @colpack_types.ColBuf,
-  encoding : @colpack_types.Encoding,
+  column : @colenc_types.ColBuf,
+  encoding : @colenc_types.Encoding,
   plain_bytes : Int32,
 ) -> Unit raise {
   let values = column.value_count()
   let bytes = encode(column, encoding)
-  let back = @colpack.decode_column(bytes, type_of(column), encoding, values)
+  let back = @colenc.decode_column(bytes, type_of(column), encoding, values)
   if !same(column, back) {
     abort("round trip failed for \{name}")
   }
@@ -85,29 +85,29 @@ fn run(
 
   let t0 = @env.now()
   for _ in 0..<reps {
-    let _ = @colpack.decode_column(bytes, type_of(column), encoding, values)
+    let _ = @colenc.decode_column(bytes, type_of(column), encoding, values)
   }
   let decode_ms = (@env.now() - t0).to_double() / reps.to_double()
 
   println(
-    "\{name}\t\{@colpack_types.encoding_name(encoding)}\t\{values}\t\{plain_bytes}\t\{bytes.length()}\t\{encode_ms}\t\{decode_ms}",
+    "\{name}\t\{@colenc_types.encoding_name(encoding)}\t\{values}\t\{plain_bytes}\t\{bytes.length()}\t\{encode_ms}\t\{decode_ms}",
   )
 }
 
 ///|
 fn run_dictionary(
   name : String,
-  column : @colpack_types.ColBuf,
+  column : @colenc_types.ColBuf,
   plain_bytes : Int32,
 ) -> Unit raise {
   let values = column.value_count()
-  let encoded = @colpack.encode_dictionary(column)
+  let encoded = @colenc.encode_dictionary(column)
   let encoded = match encoded {
     Some(encoded) => encoded
     None => abort("dictionary unexpectedly fell back for \{name}")
   }
   let bytes = encoded.dictionary.length() + encoded.indices.length()
-  let back = @colpack.decode_dictionary(
+  let back = @colenc.decode_dictionary(
     encoded.dictionary,
     encoded.indices,
     type_of(column),
@@ -119,18 +119,18 @@ fn run_dictionary(
   }
 
   let t0 = @env.now()
-  let _ = @colpack.encode_dictionary(column)
+  let _ = @colenc.encode_dictionary(column)
   let estimate = @env.now() - t0
   let reps = iterations(estimate)
   let t0 = @env.now()
   for _ in 0..<reps {
-    let _ = @colpack.encode_dictionary(column)
+    let _ = @colenc.encode_dictionary(column)
   }
   let encode_ms = (@env.now() - t0).to_double() / reps.to_double()
 
   let t0 = @env.now()
   for _ in 0..<reps {
-    let _ = @colpack.decode_dictionary(
+    let _ = @colenc.decode_dictionary(
       encoded.dictionary,
       encoded.indices,
       type_of(column),
@@ -150,49 +150,49 @@ fn main raise {
   let n_int = 1000000
   let n_str = 200000
 
-  let monotonic = @colpack_types.ColBuf::Int64s(
+  let monotonic = @colenc_types.ColBuf::Int64s(
     Array::makei(n_int, fn(i) { i.to_int64() * 3L }),
   )
-  run("int64-monotonic", monotonic, @colpack_types.Plain, n_int * 8)
-  run("int64-monotonic", monotonic, @colpack_types.DeltaBinaryPacked, n_int * 8)
+  run("int64-monotonic", monotonic, @colenc_types.Plain, n_int * 8)
+  run("int64-monotonic", monotonic, @colenc_types.DeltaBinaryPacked, n_int * 8)
 
-  let low_card = @colpack_types.ColBuf::Int32s(
+  let low_card = @colenc_types.ColBuf::Int32s(
     Array::makei(n_int, fn(i) { i % 16 }),
   )
-  run("int32-low-card", low_card, @colpack_types.Plain, n_int * 4)
-  run("int32-low-card", low_card, @colpack_types.DeltaBinaryPacked, n_int * 4)
+  run("int32-low-card", low_card, @colenc_types.Plain, n_int * 4)
+  run("int32-low-card", low_card, @colenc_types.DeltaBinaryPacked, n_int * 4)
   run_dictionary("int32-low-card", low_card, n_int * 4)
 
-  let doubles = @colpack_types.ColBuf::Doubles(
+  let doubles = @colenc_types.ColBuf::Doubles(
     Array::makei(n_int, fn(i) { i.to_double() / 7.0 }),
   )
-  run("double", doubles, @colpack_types.Plain, n_int * 8)
-  run("double", doubles, @colpack_types.ByteStreamSplit, n_int * 8)
+  run("double", doubles, @colenc_types.Plain, n_int * 8)
+  run("double", doubles, @colenc_types.ByteStreamSplit, n_int * 8)
 
-  let labels = @colpack_types.ColBuf::ByteArrays(
+  let labels = @colenc_types.ColBuf::ByteArrays(
     Array::makei(n_str, fn(i) { @utf8.encode("label-\{(i % 16).to_string()}") }),
   )
   let label_bytes = Array::makei(n_str, fn(i) {
     "label-\{(i % 16).to_string()}".length() + 4
   }).fold(init=0, fn(acc, x) { acc + x })
-  run("string-low-card", labels, @colpack_types.Plain, label_bytes)
+  run("string-low-card", labels, @colenc_types.Plain, label_bytes)
   run_dictionary("string-low-card", labels, label_bytes)
-  run("string-low-card", labels, @colpack_types.DeltaLength, label_bytes)
-  run("string-low-card", labels, @colpack_types.Fsst, label_bytes)
+  run("string-low-card", labels, @colenc_types.DeltaLength, label_bytes)
+  run("string-low-card", labels, @colenc_types.Fsst, label_bytes)
 
-  let prefixes = @colpack_types.ColBuf::ByteArrays(
+  let prefixes = @colenc_types.ColBuf::ByteArrays(
     Array::makei(n_str, fn(i) { @utf8.encode("shared-prefix-\{i.to_string()}") }),
   )
   let prefix_bytes = Array::makei(n_str, fn(i) {
     "shared-prefix-\{i.to_string()}".length() + 4
   }).fold(init=0, fn(acc, x) { acc + x })
-  run("string-prefix", prefixes, @colpack_types.Plain, prefix_bytes)
-  run("string-prefix", prefixes, @colpack_types.DeltaByteArray, prefix_bytes)
-  run("string-prefix", prefixes, @colpack_types.Fsst, prefix_bytes)
+  run("string-prefix", prefixes, @colenc_types.Plain, prefix_bytes)
+  run("string-prefix", prefixes, @colenc_types.DeltaByteArray, prefix_bytes)
+  run("string-prefix", prefixes, @colenc_types.Fsst, prefix_bytes)
 
-  let flags = @colpack_types.ColBuf::Bools(
+  let flags = @colenc_types.ColBuf::Bools(
     Array::makei(n_int, fn(i) { i % 3 == 0 }),
   )
-  run("bool", flags, @colpack_types.Plain, (n_int + 7) / 8)
-  run("bool", flags, @colpack_types.Rle, (n_int + 7) / 8)
+  run("bool", flags, @colenc_types.Plain, (n_int + 7) / 8)
+  run("bool", flags, @colenc_types.Rle, (n_int + 7) / 8)
 }

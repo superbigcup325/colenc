@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Byte-diff two blobs and point at the first divergence (T0.3).
 
-The acceptance rig compares colpack output with a reference implementation
+The acceptance rig compares colenc output with a reference implementation
 byte-for-byte. A plain `cmp` tells you they differ; this tool tells you where
 the encoder went wrong: the exact offset, both sides in hex, and the following
 difference runs.

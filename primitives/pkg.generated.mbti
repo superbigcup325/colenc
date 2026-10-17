@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "superbigcup325/colpack/primitives"
+package "superbigcup325/colenc/primitives"
 
 import {
   "moonbitlang/core/buffer",

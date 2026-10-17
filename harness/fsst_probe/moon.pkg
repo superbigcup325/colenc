@@ -1,6 +1,6 @@
 import {
-  "superbigcup325/colpack",
-  "superbigcup325/colpack/types",
+  "superbigcup325/colenc",
+  "superbigcup325/colenc/types",
   "moonbitlang/core/env",
   "moonbitlang/x/fs",
   "moonbitlang/x/sys",

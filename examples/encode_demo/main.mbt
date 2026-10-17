@@ -9,16 +9,16 @@
 
 ///|
 fn encode(
-  column : @colpack_types.ColBuf,
-  encoding : @colpack_types.Encoding,
+  column : @colenc_types.ColBuf,
+  encoding : @colenc_types.Encoding,
 ) -> Bytes raise {
   let out = Buffer()
-  let _ = @colpack.encode_column(column, encoding, out)
+  let _ = @colenc.encode_column(column, encoding, out)
   out.to_bytes()
 }
 
 ///|
-fn same(a : @colpack_types.ColBuf, b : @colpack_types.ColBuf) -> Bool {
+fn same(a : @colenc_types.ColBuf, b : @colenc_types.ColBuf) -> Bool {
   match (a, b) {
     (Int32s(x), Int32s(y)) => x == y
     (Int64s(x), Int64s(y)) => x == y
@@ -31,14 +31,14 @@ fn same(a : @colpack_types.ColBuf, b : @colpack_types.ColBuf) -> Bool {
 }
 
 ///|
-fn type_of(column : @colpack_types.ColBuf) -> @colpack_types.PhysicalType {
+fn type_of(column : @colenc_types.ColBuf) -> @colenc_types.PhysicalType {
   match column {
-    Int32s(_) => @colpack_types.Int32
-    Int64s(_) => @colpack_types.Int64
-    Floats(_) => @colpack_types.Float
-    Doubles(_) => @colpack_types.Double
-    ByteArrays(_) => @colpack_types.ByteArray
-    Bools(_) => @colpack_types.Bool
+    Int32s(_) => @colenc_types.Int32
+    Int64s(_) => @colenc_types.Int64
+    Floats(_) => @colenc_types.Float
+    Doubles(_) => @colenc_types.Double
+    ByteArrays(_) => @colenc_types.ByteArray
+    Bools(_) => @colenc_types.Bool
   }
 }
 
@@ -53,18 +53,18 @@ fn ratio(bytes : Int32, plain : Int32) -> String {
 
 ///|
 fn roundtrip(
-  column : @colpack_types.ColBuf,
-  encoding : @colpack_types.Encoding,
+  column : @colenc_types.ColBuf,
+  encoding : @colenc_types.Encoding,
 ) -> Bytes raise {
   let bytes = encode(column, encoding)
-  let back = @colpack.decode_column(
+  let back = @colenc.decode_column(
     bytes,
     type_of(column),
     encoding,
     column.value_count(),
   )
   if !same(column, back) {
-    abort("round trip failed for \{@colpack_types.encoding_name(encoding)}")
+    abort("round trip failed for \{@colenc_types.encoding_name(encoding)}")
   }
   bytes
 }
@@ -79,35 +79,35 @@ fn main raise {
   let n = 1000
 
   // Monotonic integers: PLAIN, DELTA, and the dictionary path are all fair.
-  let ints = @colpack_types.ColBuf::Int64s(
+  let ints = @colenc_types.ColBuf::Int64s(
     Array::makei(n, fn(i) { i.to_int64() * 7L }),
   )
-  let plain_ints = roundtrip(ints, @colpack_types.Plain)
+  let plain_ints = roundtrip(ints, @colenc_types.Plain)
   row("plain/int64", n, plain_ints.length(), plain_ints.length())
-  let delta = roundtrip(ints, @colpack_types.DeltaBinaryPacked)
+  let delta = roundtrip(ints, @colenc_types.DeltaBinaryPacked)
   row("delta/int64", n, delta.length(), plain_ints.length())
 
   // Low-cardinality strings: dictionary and both delta string forms.
-  let strings = @colpack_types.ColBuf::ByteArrays(
+  let strings = @colenc_types.ColBuf::ByteArrays(
     Array::makei(n, fn(i) {
       let label = ["bead", "board", "iron", "tray"][i % 4]
       @utf8.encode(label)
     }),
   )
-  let plain_strings = roundtrip(strings, @colpack_types.Plain)
+  let plain_strings = roundtrip(strings, @colenc_types.Plain)
   row("plain/string", n, plain_strings.length(), plain_strings.length())
-  let dict = @colpack.encode_dictionary(strings) catch {
-    e => abort("dictionary failed: \{@colpack_types.EncodingError::message(e)}")
+  let dict = @colenc.encode_dictionary(strings) catch {
+    e => abort("dictionary failed: \{@colenc_types.EncodingError::message(e)}")
   }
   let dict = match dict {
     Some(dict) => dict
     None => abort("dictionary unexpectedly fell back")
   }
   let dict_bytes = dict.dictionary.length() + dict.indices.length()
-  let dict_back = @colpack.decode_dictionary(
+  let dict_back = @colenc.decode_dictionary(
     dict.dictionary,
     dict.indices,
-    @colpack_types.ByteArray,
+    @colenc_types.ByteArray,
     n,
     dict.dictionary_size,
   )
@@ -115,33 +115,31 @@ fn main raise {
     abort("dictionary round trip failed")
   }
   row("dictionary/string", n, dict_bytes, plain_strings.length())
-  let delta_length = roundtrip(strings, @colpack_types.DeltaLength)
+  let delta_length = roundtrip(strings, @colenc_types.DeltaLength)
   row("delta-length/string", n, delta_length.length(), plain_strings.length())
-  let delta_byte_array = roundtrip(strings, @colpack_types.DeltaByteArray)
+  let delta_byte_array = roundtrip(strings, @colenc_types.DeltaByteArray)
   row(
     "delta-byte-array/string",
     n,
     delta_byte_array.length(),
     plain_strings.length(),
   )
-  let fsst = roundtrip(strings, @colpack_types.Fsst)
+  let fsst = roundtrip(strings, @colenc_types.Fsst)
   row("fsst/string", n, fsst.length(), plain_strings.length())
 
   // Floats: BYTE_STREAM_SPLIT is size neutral by design.
-  let floats = @colpack_types.ColBuf::Floats(
+  let floats = @colenc_types.ColBuf::Floats(
     Array::makei(n, fn(i) { Float::from_double(i.to_double() / 7.0) }),
   )
-  let plain_floats = roundtrip(floats, @colpack_types.Plain)
+  let plain_floats = roundtrip(floats, @colenc_types.Plain)
   row("plain/float", n, plain_floats.length(), plain_floats.length())
-  let bss = roundtrip(floats, @colpack_types.ByteStreamSplit)
+  let bss = roundtrip(floats, @colenc_types.ByteStreamSplit)
   row("byte-stream-split/float", n, bss.length(), plain_floats.length())
 
   // Booleans: the RLE hybrid carries the four-byte length prefix.
-  let flags = @colpack_types.ColBuf::Bools(
-    Array::makei(n, fn(i) { i % 3 == 0 }),
-  )
-  let plain_bools = roundtrip(flags, @colpack_types.Plain)
+  let flags = @colenc_types.ColBuf::Bools(Array::makei(n, fn(i) { i % 3 == 0 }))
+  let plain_bools = roundtrip(flags, @colenc_types.Plain)
   row("plain/bool", n, plain_bools.length(), plain_bools.length())
-  let rle = roundtrip(flags, @colpack_types.Rle)
+  let rle = roundtrip(flags, @colenc_types.Rle)
   row("rle/bool", n, rle.length(), plain_bools.length())
 }

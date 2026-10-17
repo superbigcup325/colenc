@@ -14,7 +14,7 @@
 ///
 /// Threshold fallback: parquet-cpp falls back to PLAIN mid-column once the
 /// dictionary's encoded size passes its page limit, which needs a page-splitting
-/// writer. colpack decides per column instead: if the PLAIN dictionary payload
+/// writer. colenc decides per column instead: if the PLAIN dictionary payload
 /// exceeds the limit, the whole column falls back (returns None). The limits
 /// differ in scope, so byte diffs only cover columns that stay under it.
 

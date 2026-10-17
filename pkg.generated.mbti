@@ -1,9 +1,9 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "superbigcup325/colpack"
+package "superbigcup325/colenc"
 
 import {
   "moonbitlang/core/buffer",
-  "superbigcup325/colpack/types",
+  "superbigcup325/colenc/types",
 }
 
 // Values

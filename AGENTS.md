@@ -1,8 +1,8 @@
-# colpack — AGENTS.md
+# colenc — AGENTS.md
 
 This is a [MoonBit](https://docs.moonbitlang.com) project.
 
-colpack is a pure-MoonBit, zero-FFI **columnar encoding kernel** — the Parquet
+colenc is a pure-MoonBit, zero-FFI **columnar encoding kernel** — the Parquet
 page-level encoding family as a reusable, verifiable, pluggable library.
 moonlake is its first consumer.
 
@@ -167,7 +167,7 @@ tracked documents ship in the release archive.
 - **BYTE_STREAM_SPLIT is size-neutral** (planes are a permutation of the same
   bytes); it only pays off when a byte-stream compressor follows, so its
   scoreboard ratio is 100% by design
-- **FSST has no Parquet-native format to diff against** → colpack defines its
+- **FSST has no Parquet-native format to diff against** → colenc defines its
   own framing (symbol table, per-value length, escape 255) and the criteria are
   round trip plus the scoreboard, never byte identity
 - **parquet-cpp's delta block is 256 values for INT64 and 128 for INT32** while
@@ -178,7 +178,7 @@ tracked documents ship in the release archive.
 - **The delta header holds the first value**; block deltas start at the second
   value, so a single-value column is header-only
 - **Dictionary fallback differs in scope from the reference** → parquet-cpp
-  falls back mid-column when the dictionary outgrows its page limit, colpack
+  falls back mid-column when the dictionary outgrows its page limit, colenc
   decides per column (returns `None`), so byte diffs only cover columns under
   the limit
 - **A dictionary with one entry uses bit width 1, not 0**, and five entries use

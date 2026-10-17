@@ -2,7 +2,7 @@
 /// strings (at most eight bytes each), greedy longest-match encoding, and an
 /// escape byte for literals.
 ///
-/// This is deliberately colpack's own framing, not DuckDB's FSST wire format:
+/// This is deliberately colenc's own framing, not DuckDB's FSST wire format:
 /// Parquet has no native FSST encoding, so there is nothing to byte-diff
 /// against. The criteria are round trip plus a compression scoreboard, as the
 /// roadmap states.

@@ -88,7 +88,7 @@ fn main {
     return
   }
 
-  let encoding = @colpack.encode_dictionary(column) catch {
+  let encoding = @colenc.encode_dictionary(column) catch {
     error => {
       eprintln(
         "dict_probe: encode failed: \{@types.EncodingError::message(error)}",
@@ -118,7 +118,7 @@ fn main {
   }
 
   let plain = Buffer()
-  let plain_stats = @colpack.encode_column(column, @types.Plain, plain) catch {
+  let plain_stats = @colenc.encode_column(column, @types.Plain, plain) catch {
     error => {
       eprintln(
         "dict_probe: plain encode failed: \{@types.EncodingError::message(error)}",

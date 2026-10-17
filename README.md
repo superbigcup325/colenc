@@ -1,10 +1,10 @@
-# colpack
+# colenc
 
 A columnar encoding kernel for MoonBit — the Parquet page-level encoding family
 as a reusable, verifiable, pluggable library. Pure MoonBit, zero FFI, zero
 runtime dependencies (quickcheck at test time only).
 
-colpack takes a column of values and produces or restores bytes. It owns
+colenc takes a column of values and produces or restores bytes. It owns
 **intra-column** encodings (range narrowing, dictionaries, deltas, bit packing);
 it never touches files, containers or query plans, and it is not a byte-stream
 compressor.
@@ -25,7 +25,7 @@ fixture reproducibility, byte diffs for every family, and container interop with
 DuckDB and pyarrow as judges.
 
 Integration with [moonlake](https://github.com/superbigcup325/moonlake) was
-validated on a local branch: Parquet decoding routed through colpack, a new
+validated on a local branch: Parquet decoding routed through colenc, a new
 write path, and the spill format re-encoded (40% smaller). The package is not
 published to mooncakes yet, so the dependency is a workspace member for now.
 
@@ -47,15 +47,15 @@ packing, bit width), `encoders/` (one file per family) and the facade
 `ColBuf`, `PhysicalType`, `Encoding`, `EncodingStats` and `EncodingError`.
 
 ```moonbit
-let column = @colpack_types.ColBuf::Int64s([1L, 4L, 9L])
+let column = @colenc_types.ColBuf::Int64s([1L, 4L, 9L])
 let out = Buffer()
-let stats = @colpack.encode_column(
-  column, @colpack_types.DeltaBinaryPacked, out,
+let stats = @colenc.encode_column(
+  column, @colenc_types.DeltaBinaryPacked, out,
 ) catch {
-  e => abort(@colpack_types.EncodingError::message(e))
+  e => abort(@colenc_types.EncodingError::message(e))
 }
-let back = @colpack.decode_column(
-  out.to_bytes(), @colpack_types.Int64, @colpack_types.DeltaBinaryPacked, 3,
+let back = @colenc.decode_column(
+  out.to_bytes(), @colenc_types.Int64, @colenc_types.DeltaBinaryPacked, 3,
 )
 ```
 
@@ -75,7 +75,7 @@ to the caller, which is what keeps the encoders page-shaped.
 | E4 | DELTA_LENGTH_BYTE_ARRAY | BYTE_ARRAY | round trip + byte diff | lengths as E3, then concatenated bytes |
 | E5 | DELTA_BYTE_ARRAY | BYTE_ARRAY | round trip + byte diff | prefix lengths as E3, suffixes as E4 |
 | E6 | BYTE_STREAM_SPLIT | FLOAT/DOUBLE | round trip + byte diff + container | one plane per byte position, little-endian |
-| E7 | FSST | BYTE_ARRAY | round trip + scoreboard | colpack framing: symbol table, escape 255 |
+| E7 | FSST | BYTE_ARRAY | round trip + scoreboard | colenc framing: symbol table, escape 255 |
 
 ## Scoreboard
 
@@ -112,7 +112,7 @@ monotonic INT64 deltas on native, and about 1.1 GB/s / 1.0 GB/s on wasm-gc.
   but it is a judge target, not a promise
 - **Dictionary fallback is per column** (returns `None`), not parquet-cpp's
   mid-column fallback
-- **FSST framing is colpack's own**; Parquet has no native FSST, so no byte
+- **FSST framing is colenc's own**; Parquet has no native FSST, so no byte
   diff or container check applies, and the framing falls back to stored raw
   values when the table does not pay for itself
 - **No SIMD kernels**: scalar + lookup tables first
@@ -121,10 +121,10 @@ monotonic INT64 deltas on native, and about 1.1 GB/s / 1.0 GB/s on wasm-gc.
 
 | Neighbour | What it does | The seam |
 |---|---|---|
-| Parquet container libraries (e.g. `mizchi/parquet`) | file structure, footer, page organization | they own the container, colpack owns page-level encoding |
+| Parquet container libraries (e.g. `mizchi/parquet`) | file structure, footer, page organization | they own the container, colenc owns page-level encoding |
 | Arrow IPC libraries (e.g. `MoonArrow`) | inter-process format | IPC is a format, column encoding is intra-page compression |
 | Byte-stream compressors (fzstd, flate, zlib, …) | compress bytes | different layer, usable after column encoding |
-| Columnar engines (e.g. `moonlake`) | planning, execution | colpack is their storage substrate; the dependency is one-way |
+| Columnar engines (e.g. `moonlake`) | planning, execution | colenc is their storage substrate; the dependency is one-way |
 
 ## Acceptance
 

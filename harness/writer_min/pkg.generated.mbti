@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "superbigcup325/colpack/harness/writer_min"
+package "superbigcup325/colenc/harness/writer_min"
 
 // Values
 pub fn build_bool_rle_page(String, Bytes, Int) -> Bytes

@@ -3,7 +3,7 @@
 
 For every page this writes the value-section bytes (and the level-section bytes
 when a column has levels) next to a JSON description of where they came from.
-The blobs are the inputs to `diff_bytes.py`: colpack encodes a column, the rig
+The blobs are the inputs to `diff_bytes.py`: colenc encodes a column, the rig
 diffs the result against the reference blob.
 
 Usage:

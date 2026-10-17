@@ -63,7 +63,7 @@ fn main {
   }
 
   let out = Buffer()
-  let _ = @colpack.encode_column(
+  let _ = @colenc.encode_column(
     @types.ColBuf::ByteArrays(values),
     @types.Fsst,
     out,
@@ -75,7 +75,7 @@ fn main {
     }
   }
   let encoded = out.to_bytes()
-  let decoded = @colpack.decode_column(
+  let decoded = @colenc.decode_column(
     encoded,
     @types.ByteArray,
     @types.Fsst,

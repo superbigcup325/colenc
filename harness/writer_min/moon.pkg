@@ -2,8 +2,8 @@ import {
   "moonbitlang/core/buffer",
   "moonbitlang/core/encoding/utf8",
   "moonbitlang/core/env",
-  "superbigcup325/colpack",
-  "superbigcup325/colpack/types",
+  "superbigcup325/colenc",
+  "superbigcup325/colenc/types",
   "moonbitlang/x/fs",
 }
 

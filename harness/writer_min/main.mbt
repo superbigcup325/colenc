@@ -8,7 +8,7 @@
 ///   moon run harness/writer_min -- /tmp/writer_min.parquet --bss
 ///
 /// The values are the same 1000 row sequence as the PLAIN reference fixture.
-/// `--library` takes the page body from `colpack.encode_column` instead of the
+/// `--library` takes the page body from `colenc.encode_column` instead of the
 /// hand-written encoder here, so the container interop check exercises the
 /// library's PLAIN output. Both modes must produce identical files.
 /// `--rle` writes a boolean column encoded as the RLE hybrid, again through the
@@ -31,7 +31,7 @@ fn main {
       Float::from_double(index.to_double() / 7.0)
     })
     let body = Buffer()
-    let stats = @colpack.encode_column(
+    let stats = @colenc.encode_column(
       @types.ColBuf::Floats(values),
       @types.ByteStreamSplit,
       body,
@@ -47,7 +47,7 @@ fn main {
   } else if args.contains("--delta") {
     let values = Array::makei(1000, fn(index) { 7L + 3L * index.to_int64() })
     let body = Buffer()
-    let stats = @colpack.encode_column(
+    let stats = @colenc.encode_column(
       @types.ColBuf::Int64s(values),
       @types.DeltaBinaryPacked,
       body,
@@ -62,7 +62,7 @@ fn main {
     build_delta_int64_page("i64", body.to_bytes(), stats.value_count)
   } else if args.contains("--dict") {
     let values = Array::makei(1000, fn(index) { (index * 3 + index / 7) % 8 })
-    let encoding = @colpack.encode_dictionary(@types.ColBuf::Int32s(values)) catch {
+    let encoding = @colenc.encode_dictionary(@types.ColBuf::Int32s(values)) catch {
       error => {
         eprintln(
           "writer_min: dictionary failed: \{@types.EncodingError::message(error)}",
@@ -88,7 +88,7 @@ fn main {
     let flags = Array::makei(1000, fn(index) { index % 3 == 0 })
     let column = @types.ColBuf::Bools(flags)
     let body = Buffer()
-    let stats = @colpack.encode_column(column, @types.Rle, body) catch {
+    let stats = @colenc.encode_column(column, @types.Rle, body) catch {
       error => {
         eprintln(
           "writer_min: encode failed: \{@types.EncodingError::message(error)}",
@@ -100,7 +100,7 @@ fn main {
   } else if args.contains("--library") {
     let column = @types.ColBuf::Int32s(values)
     let body = Buffer()
-    let stats = @colpack.encode_column(column, @types.Plain, body) catch {
+    let stats = @colenc.encode_column(column, @types.Plain, body) catch {
       error => {
         eprintln(
           "writer_min: encode failed: \{@types.EncodingError::message(error)}",
