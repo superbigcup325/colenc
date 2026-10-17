@@ -11,6 +11,7 @@ compressor.
 
 - Design, milestones and acceptance criteria: [`docs/ROADMAP.md`](docs/ROADMAP.md)
 - Acceptance rig (fixtures, byte diffing, container judges): [`harness/README.md`](harness/README.md)
+- Throughput scoreboard: [`docs/scoreboard.md`](docs/scoreboard.md)
 - License: [Apache-2.0](LICENSE)
 
 ## Status
@@ -95,8 +96,11 @@ live):
 FSST builds its symbol table from a bounded sample (64 KiB) and **stores raw
 values when compression does not pay**, so the encoded column never exceeds the
 raw size by more than one byte; on repetitive strings it lands at 60–75% of
-PLAIN. Throughput numbers (native and wasm-gc, MB/s) are the next scoreboard
-item.
+PLAIN.
+
+Throughput lives in [`docs/scoreboard.md`](docs/scoreboard.md): on this machine
+a release build reaches about 2.3 GB/s encoding and 3.2 GB/s decoding for
+monotonic INT64 deltas on native, and about 1.1 GB/s / 1.0 GB/s on wasm-gc.
 
 ## Boundaries (v1)
 
