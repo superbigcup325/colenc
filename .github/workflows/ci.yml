@@ -94,5 +94,9 @@ jobs:
         run: python3 harness/make_dict_cases.py --check
       - name: Dictionary byte diff
         run: python3 harness/check_dict.py
+      - name: Delta cases are reproducible
+        run: python3 harness/make_delta_cases.py --check
+      - name: Delta byte diff
+        run: python3 harness/check_delta.py
       - name: Container interop
         run: harness/check_container.sh

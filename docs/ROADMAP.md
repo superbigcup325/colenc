@@ -5,8 +5,8 @@
 > Peer references: Parquet's `parquet-encoding` crate, DuckDB's built-in encoders
 > License: Apache-2.0
 
-**Status (2026-10)**: project scoped, design settled; **P0, P1 and P2 complete** — the acceptance rig is proven by DuckDB and pyarrow read-back, PLAIN, the RLE/bit-packed hybrid and dictionary encoding sit behind the facade dispatch, E1 and E2 are byte-identical to the reference, and CI runs the three-backend matrix plus the byte-diff and container jobs
-**Next step**: P3 — the delta family (DELTA_BINARY_PACKED, DELTA_LENGTH_BYTE_ARRAY, DELTA_BYTE_ARRAY)
+**Status (2026-10)**: project scoped, design settled; **P0 through P3 complete** — the acceptance rig is proven by DuckDB and pyarrow read-back, PLAIN, the RLE/bit-packed hybrid, dictionary encoding and the delta family sit behind the facade dispatch, E1 to E5 are byte-identical to the reference, and CI runs the three-backend matrix plus the byte-diff and container jobs
+**Next step**: P4 — BYTE_STREAM_SPLIT (E6) with the full criteria, then FSST (E7) with round trip plus the scoreboard
 
 ---
 

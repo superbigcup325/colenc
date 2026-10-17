@@ -63,5 +63,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - First scoreboard numbers: the int32 fixture encodes to 10.25% of PLAIN and
   the string fixture to 3.38%
 
-P2 is complete; the delta family (P3) is next. — the project is at P0, with the MoonBit minimal writer
+- Delta family (`encoders/delta.mbt`): DELTA_BINARY_PACKED with the reference
+  block sizes (INT32 128, INT64 256, four miniblocks each), frame-of-reference
+  deltas and per-miniblock widths; DELTA_LENGTH_BYTE_ARRAY and
+  DELTA_BYTE_ARRAY built on it
+- Harness: `make_delta_cases.py` + `check_delta.py` + `delta_probe/` cover both
+  integer widths and both string encodings; `writer_min --delta` proves the
+  container path with both judges
+- Scoreboard: delta-packed int64 0.33% of PLAIN, int32 26.98%, delta length
+  67.25%, delta byte array 9.03% on the fixtures
+
+P3 is complete; BYTE_STREAM_SPLIT and FSST (P4) are next. — the project is at P0, with the MoonBit minimal writer
 still to land.

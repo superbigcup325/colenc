@@ -18,9 +18,12 @@ make_rle_cases.py  build RLE byte-diff cases from the fixtures
 check_rle.py       run the RLE probe over every case and diff the bytes
 make_dict_cases.py build dictionary byte-diff cases from the fixtures
 check_dict.py      run the dictionary probe and diff both payloads
+make_delta_cases.py build delta byte-diff cases from the fixtures
+check_delta.py     run the delta probe and diff the stream
 check_container.sh end-to-end container check: wrap, judge, diff pages
 rle_probe/         minimal MoonBit CLI around the library's RLE encoder
 dict_probe/        minimal MoonBit CLI around the dictionary encoder
+delta_probe/       minimal MoonBit CLI around the delta encoders
 requirements.txt   pinned judge versions (pyarrow, duckdb)
 fixtures/          committed reference samples + manifest
 writer_min/        minimal MoonBit Parquet writer (T0.2)
@@ -203,6 +206,17 @@ python3 harness/check_dict.py        # probe, diff both payloads, show ratio
 Each case compares two payloads: the PLAIN dictionary page and the data page
 (width byte plus index stream). The case types cover fixed-width integers and
 length-prefixed strings.
+
+## Delta byte diff
+
+```bash
+python3 harness/make_delta_cases.py   # fixtures/delta/*.input|ref.bin
+python3 harness/check_delta.py        # probe, diff, show the PLAIN ratio
+```
+
+Cases cover DELTA_BINARY_PACKED at both integer widths and both byte-array
+encodings. A delta stream is self-delimiting, so the case file is the whole
+data page payload.
 
 ## P1 evidence
 

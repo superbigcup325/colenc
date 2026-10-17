@@ -31,6 +31,35 @@ pub fn encode_column(
         _ =>
           raise @types.EncodingError::TypeMismatch(column.physical_type(), Rle)
       }
+    DeltaBinaryPacked =>
+      match column {
+        Int32s(values) => @encoders.encode_delta_int32(values[:], out)
+        Int64s(values) => @encoders.encode_delta_int64(values[:], out)
+        _ =>
+          raise @types.EncodingError::TypeMismatch(
+            column.physical_type(),
+            DeltaBinaryPacked,
+          )
+      }
+    DeltaLength =>
+      match column {
+        ByteArrays(values) =>
+          @encoders.encode_delta_length_byte_array(values, out)
+        _ =>
+          raise @types.EncodingError::TypeMismatch(
+            column.physical_type(),
+            DeltaLength,
+          )
+      }
+    DeltaByteArray =>
+      match column {
+        ByteArrays(values) => @encoders.encode_delta_byte_array(values, out)
+        _ =>
+          raise @types.EncodingError::TypeMismatch(
+            column.physical_type(),
+            DeltaByteArray,
+          )
+      }
     other => raise @types.EncodingError::Unsupported(other)
   }
   { value_count: column.value_count(), encoded_bytes: out.length() - start, }
@@ -60,6 +89,30 @@ pub fn decode_column(
       match ty {
         Bool => @types.ColBuf::Bools(@encoders.decode_bool_rle(data, count))
         _ => raise @types.EncodingError::TypeMismatch(ty, Rle)
+      }
+    DeltaBinaryPacked =>
+      match ty {
+        Int32 =>
+          @types.ColBuf::Int32s(@encoders.decode_delta_int32(data, count).0)
+        Int64 =>
+          @types.ColBuf::Int64s(@encoders.decode_delta_int64(data, count).0)
+        _ => raise @types.EncodingError::TypeMismatch(ty, DeltaBinaryPacked)
+      }
+    DeltaLength =>
+      match ty {
+        ByteArray =>
+          @types.ColBuf::ByteArrays(
+            @encoders.decode_delta_length_byte_array(data, count).0,
+          )
+        _ => raise @types.EncodingError::TypeMismatch(ty, DeltaLength)
+      }
+    DeltaByteArray =>
+      match ty {
+        ByteArray =>
+          @types.ColBuf::ByteArrays(
+            @encoders.decode_delta_byte_array(data, count).0,
+          )
+        _ => raise @types.EncodingError::TypeMismatch(ty, DeltaByteArray)
       }
     other => raise @types.EncodingError::Unsupported(other)
   }

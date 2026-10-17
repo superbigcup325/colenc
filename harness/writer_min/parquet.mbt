@@ -25,6 +25,9 @@ const ENCODING_RLE : Int32 = 3
 const ENCODING_RLE_DICTIONARY : Int32 = 8
 
 ///|
+const ENCODING_DELTA_BINARY_PACKED : Int32 = 5
+
+///|
 const PAGE_TYPE_DICTIONARY_PAGE : Int32 = 2
 
 ///|
@@ -32,6 +35,9 @@ const TYPE_BOOLEAN : Int32 = 0
 
 ///|
 const TYPE_INT32 : Int32 = 1
+
+///|
+const TYPE_INT64 : Int32 = 2
 
 ///|
 const REPETITION_REQUIRED : Int32 = 0
@@ -345,4 +351,21 @@ pub fn build_dictionary_int32_page(
   file.write_int_le(footer.length())
   write_magic(file)
   file.to_bytes()
+}
+
+///|
+/// Wrap an already-encoded DELTA_BINARY_PACKED int64 body.
+pub fn build_delta_int64_page(
+  column : String,
+  body_bytes : Bytes,
+  count : Int32,
+) -> Bytes {
+  build_page(
+    column,
+    TYPE_INT64,
+    ENCODING_DELTA_BINARY_PACKED,
+    [ENCODING_DELTA_BINARY_PACKED],
+    body_bytes,
+    count,
+  )
 }

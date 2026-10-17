@@ -11,12 +11,12 @@ milestone plan and the acceptance criteria this repo is built around.
 
 ## Status
 
-Design settled; **P0, P1 and P2 are complete**. The library has `primitives`,
-the neutral `types` model, PLAIN, the RLE/bit-packed hybrid and dictionary
-encoding behind the facade dispatch, with E1 and E2 byte-identical to the
-reference; CI runs the three-backend test matrix plus the harness jobs
-(fixture reproducibility, RLE and dictionary byte diffs, container interop).
-**P3, the delta family (E3/E4/E5), is next.**
+Design settled; **P0 through P3 are complete**. The library has `primitives`,
+the neutral `types` model, PLAIN, the RLE/bit-packed hybrid, dictionary encoding
+and the delta family behind the facade dispatch, with E1, E2, E3, E4 and E5
+byte-identical to the reference; CI runs the three-backend test matrix plus the
+harness jobs (fixture reproducibility, RLE, dictionary and delta byte diffs,
+container interop). **P4, BYTE_STREAM_SPLIT and FSST, is next.**
 
 ## Layout
 
@@ -28,7 +28,7 @@ moon.mod                 module manifest
 docs/ROADMAP.md          the public roadmap
 types/                   neutral model: PhysicalType / Encoding / ColBuf / errors
 primitives/              L1: varint / zigzag / bit packing / bit width
-encoders/                L2: PLAIN, RLE hybrid and dictionary, with tests
+encoders/                L2: PLAIN, RLE hybrid, dictionary, delta family
 facade.mbt               L3: encode_column / decode_column dispatch
 harness/                 acceptance rig: Python judges, fixtures, minimal writer
 .githooks/               pre-commit gate
@@ -58,6 +58,7 @@ its branch in `facade.mbt`.
   `harness/duck_read.sh <parquet> [--values ref.bin]` runs both judges,
   `python3 harness/check_rle.py` byte-diffs the hybrid encoder,
   `python3 harness/check_dict.py` byte-diffs dictionary encoding,
+  `python3 harness/check_delta.py` byte-diffs the delta family,
   `harness/check_container.sh` proves the container path end to end
 - `moon run harness/writer_min -- <out.parquet>` writes the minimal container
 - **Before committing**, run the quartet:
@@ -159,6 +160,13 @@ tracked documents ship in the release archive.
 - **Harness executables run on native in CI** → `moon test --target js` covers
   the library packages, but `writer_min` and `rle_probe` use `moonbitlang/x/fs`
   and are invoked with `--target native` by the harness scripts
+- **parquet-cpp's delta block is 256 values for INT64 and 128 for INT32** while
+  the spec says 128; byte identity requires following the writer, not the spec
+- **A delta block always carries four width bytes** even when the last block
+  uses fewer miniblocks (the unused widths are zero and carry no data), and a
+  partial miniblock is zero-padded to its full size
+- **The delta header holds the first value**; block deltas start at the second
+  value, so a single-value column is header-only
 - **Dictionary fallback differs in scope from the reference** → parquet-cpp
   falls back mid-column when the dictionary outgrows its page limit, colpack
   decides per column (returns `None`), so byte diffs only cover columns under

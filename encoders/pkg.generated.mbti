@@ -15,6 +15,14 @@ pub fn decode_bool_rle(BytesView, Int) -> Array[Bool] raise @types.EncodingError
 
 pub fn decode_byte_arrays(BytesView, Int) -> Array[Bytes] raise @types.EncodingError
 
+pub fn decode_delta_byte_array(BytesView, Int, offset? : Int) -> (Array[Bytes], Int) raise @types.EncodingError
+
+pub fn decode_delta_int32(BytesView, Int, offset? : Int) -> (Array[Int], Int) raise @types.EncodingError
+
+pub fn decode_delta_int64(BytesView, Int, offset? : Int) -> (Array[Int64], Int) raise @types.EncodingError
+
+pub fn decode_delta_length_byte_array(BytesView, Int, offset? : Int) -> (Array[Bytes], Int) raise @types.EncodingError
+
 pub fn decode_dictionary(BytesView, BytesView, @types.PhysicalType, Int, Int) -> @types.ColBuf raise @types.EncodingError
 
 pub fn decode_double(BytesView, Int) -> Array[Double] raise @types.EncodingError
@@ -32,6 +40,14 @@ pub fn encode_bool(Array[Bool], @buffer.Buffer) -> Unit
 pub fn encode_bool_rle(Array[Bool], @buffer.Buffer) -> Unit raise @types.EncodingError
 
 pub fn encode_byte_arrays(Array[Bytes], @buffer.Buffer) -> Unit
+
+pub fn encode_delta_byte_array(Array[Bytes], @buffer.Buffer) -> Unit raise @types.EncodingError
+
+pub fn encode_delta_int32(ArrayView[Int], @buffer.Buffer) -> Unit raise @types.EncodingError
+
+pub fn encode_delta_int64(ArrayView[Int64], @buffer.Buffer) -> Unit raise @types.EncodingError
+
+pub fn encode_delta_length_byte_array(Array[Bytes], @buffer.Buffer) -> Unit raise @types.EncodingError
 
 pub fn encode_dictionary(@types.ColBuf, max_dictionary_bytes? : Int) -> @types.DictionaryEncoding? raise @types.EncodingError
 

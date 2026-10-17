@@ -4,6 +4,7 @@
 ///   moon run harness/writer_min -- /tmp/writer_min.parquet --library
 ///   moon run harness/writer_min -- /tmp/writer_min.parquet --rle
 ///   moon run harness/writer_min -- /tmp/writer_min.parquet --dict
+///   moon run harness/writer_min -- /tmp/writer_min.parquet --delta
 ///
 /// The values are the same 1000 row sequence as the PLAIN reference fixture.
 /// `--library` takes the page body from `colpack.encode_column` instead of the
@@ -12,6 +13,7 @@
 /// `--rle` writes a boolean column encoded as the RLE hybrid, again through the
 /// library, so the E1 container path is judged the same way. `--dict` writes a
 /// dictionary-encoded int32 column and places the dictionary page first.
+/// `--delta` writes a delta-packed int64 column.
 
 ///|
 fn main {
@@ -22,7 +24,23 @@ fn main {
   }
   let path = args[1]
   let values = Array::makei(1000, fn(index) { index * 7 - 300 })
-  let bytes = if args.contains("--dict") {
+  let bytes = if args.contains("--delta") {
+    let values = Array::makei(1000, fn(index) { 7L + 3L * index.to_int64() })
+    let body = Buffer()
+    let stats = @colpack.encode_column(
+      @types.ColBuf::Int64s(values),
+      @types.DeltaBinaryPacked,
+      body,
+    ) catch {
+      error => {
+        eprintln(
+          "writer_min: delta failed: \{@types.EncodingError::message(error)}",
+        )
+        return
+      }
+    }
+    build_delta_int64_page("i64", body.to_bytes(), stats.value_count)
+  } else if args.contains("--dict") {
     let values = Array::makei(1000, fn(index) { (index * 3 + index / 7) % 8 })
     let encoding = @colpack.encode_dictionary(@types.ColBuf::Int32s(values)) catch {
       error => {

@@ -46,6 +46,12 @@ DELTA_INT64 = [7 + 3 * i for i in range(1000)]
 # Eight distinct integers, with runs and jumps so the index stream exercises
 # both repeated and literal runs at a width above one bit.
 DICT_INT32 = [(i * 3 + i // 7) % 8 for i in range(1000)]
+# Varied deltas, including negative jumps, so the frame of reference and the
+# per-miniblock widths both move.
+DELTA_INT32 = [((i * 37) % 151) - 75 for i in range(1000)]
+DELTA_LENGTH_STRINGS = [f"item-{i % 40:03d}" for i in range(300)]
+# Long shared prefixes, so DELTA_BYTE_ARRAY actually saves bytes.
+DELTA_BYTE_ARRAY_STRINGS = [f"shared-prefix-{i:05d}" for i in range(300)]
 BSS_FLOAT32 = [i / 7.0 for i in range(1000)]
 RLE_BOOL = [i % 3 == 0 for i in range(1000)]
 # Runs on both sides of the eight-value threshold, a stretch long enough to
@@ -152,6 +158,42 @@ SAMPLES = [
         values=DICT_INT32,
         encoding="RLE_DICTIONARY",
         write_options={"use_dictionary": True},
+    ),
+    Sample(
+        name="delta_int32",
+        column="i32",
+        arrow_type=pa.int32(),
+        physical_type="INT32",
+        values=DELTA_INT32,
+        encoding="DELTA_BINARY_PACKED",
+        write_options={
+            "use_dictionary": False,
+            "column_encoding": {"i32": "DELTA_BINARY_PACKED"},
+        },
+    ),
+    Sample(
+        name="delta_length_string",
+        column="s",
+        arrow_type=pa.string(),
+        physical_type="BYTE_ARRAY",
+        values=DELTA_LENGTH_STRINGS,
+        encoding="DELTA_LENGTH_BYTE_ARRAY",
+        write_options={
+            "use_dictionary": False,
+            "column_encoding": {"s": "DELTA_LENGTH_BYTE_ARRAY"},
+        },
+    ),
+    Sample(
+        name="delta_byte_array_string",
+        column="s",
+        arrow_type=pa.string(),
+        physical_type="BYTE_ARRAY",
+        values=DELTA_BYTE_ARRAY_STRINGS,
+        encoding="DELTA_BYTE_ARRAY",
+        write_options={
+            "use_dictionary": False,
+            "column_encoding": {"s": "DELTA_BYTE_ARRAY"},
+        },
     ),
     Sample(
         name="delta_int64",

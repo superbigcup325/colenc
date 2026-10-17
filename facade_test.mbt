@@ -90,13 +90,11 @@ test "facade rejects unimplemented families" {
   }
 
   let error = capture_error(() => {
-    ignore(
-      @colpack.decode_column(b"", @types.Int32, @types.DeltaBinaryPacked, 0),
-    )
+    ignore(@colpack.decode_column(b"", @types.Int32, @types.Fsst, 0))
   })
   match error {
-    @types.EncodingError::Unsupported(@types.DeltaBinaryPacked) => ()
-    _ => abort("expected Unsupported(DeltaBinaryPacked)")
+    @types.EncodingError::Unsupported(@types.Fsst) => ()
+    _ => abort("expected Unsupported(Fsst)")
   }
 }
 

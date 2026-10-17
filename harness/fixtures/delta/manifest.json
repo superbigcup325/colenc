@@ -1,0 +1,52 @@
+{
+  "cases": [
+    {
+      "count": 1000,
+      "encoding": "delta",
+      "input_file": "delta_int32.input.bin",
+      "input_sha256": "af372c2344cde97ccb8457e5bcbdbdf432101cae11414025c208a7765ec6e781",
+      "name": "delta_int32",
+      "plain_bytes": 4000,
+      "reference_file": "delta_int32.ref.bin",
+      "reference_sha256": "3b8848907d7024a3be62f3325b83422ce237242fd542c05627d3ac6b37189c59",
+      "source": "delta_int32.parquet",
+      "type": "int32"
+    },
+    {
+      "count": 1000,
+      "encoding": "delta",
+      "input_file": "delta_int64.input.bin",
+      "input_sha256": "a0554f9446ce4f8eede3e1ffd13968e2514e2288fffa1027c34c265ce05c7f7a",
+      "name": "delta_int64",
+      "plain_bytes": 8000,
+      "reference_file": "delta_int64.ref.bin",
+      "reference_sha256": "6b51c492fabe047c3be8708107db4b0e5243a2adedbc3b9efb1849de7ba30381",
+      "source": "delta_int64.parquet",
+      "type": "int64"
+    },
+    {
+      "count": 300,
+      "encoding": "delta-length",
+      "input_file": "delta_length_string.input.bin",
+      "input_sha256": "c3925c79cb4d927505d2e3f86002c711b85490fe9614707ec48e73d3ccf83e55",
+      "name": "delta_length_string",
+      "plain_bytes": 3600,
+      "reference_file": "delta_length_string.ref.bin",
+      "reference_sha256": "42c6fc9bea21f6295fef1e2c0b38058832bc99911fedab65ab15a27507f3dc7b",
+      "source": "delta_length_string.parquet",
+      "type": "string"
+    },
+    {
+      "count": 300,
+      "encoding": "delta-byte-array",
+      "input_file": "delta_byte_array_string.input.bin",
+      "input_sha256": "68c91b212d1ca01fe965012ecb779bf27e0ab99584b1e28cab8956a2f3fb4f42",
+      "name": "delta_byte_array_string",
+      "plain_bytes": 6900,
+      "reference_file": "delta_byte_array_string.ref.bin",
+      "reference_sha256": "2d53df91f90ec2cebf9867b8e72c7ca0957099a92849990ee1790aefef2ff5c4",
+      "source": "delta_byte_array_string.parquet",
+      "type": "string"
+    }
+  ]
+}
