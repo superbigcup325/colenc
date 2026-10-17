@@ -73,5 +73,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Scoreboard: delta-packed int64 0.33% of PLAIN, int32 26.98%, delta length
   67.25%, delta byte array 9.03% on the fixtures
 
-P3 is complete; BYTE_STREAM_SPLIT and FSST (P4) are next. — the project is at P0, with the MoonBit minimal writer
+- BYTE_STREAM_SPLIT (`encoders/byte_stream_split.mbt`) for float and double:
+  one plane per byte position, byte-identical to the reference and read back by
+  both judges through the container
+- FSST-style string compression (`encoders/fsst.mbt`): deterministic symbol
+  table built from the column, greedy longest match, escape literals. Parquet
+  has no native FSST, so the criteria are round trip and the scoreboard
+- Harness: `make_bss_cases.py` + `check_bss.py` + `bss_probe/` for the byte
+  diff, `check_fsst.py` + `fsst_probe/` for round trip and ratio
+- Scoreboard: BYTE_STREAM_SPLIT is size-neutral by design; FSST reaches 60.38%
+  and 74.51% of PLAIN on the two string fixtures
+
+P4 is complete; moonlake integration (P5) is next. — the project is at P0, with the MoonBit minimal writer
 still to land.

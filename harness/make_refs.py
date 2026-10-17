@@ -220,6 +220,18 @@ SAMPLES = [
         },
     ),
     Sample(
+        name="bss_double",
+        column="f64",
+        arrow_type=pa.float64(),
+        physical_type="DOUBLE",
+        values=[i * 0.1 - 3.25 for i in range(1000)],
+        encoding="BYTE_STREAM_SPLIT",
+        write_options={
+            "use_dictionary": False,
+            "column_encoding": {"f64": "BYTE_STREAM_SPLIT"},
+        },
+    ),
+    Sample(
         name="rle_bool",
         column="flags",
         arrow_type=pa.bool_(),

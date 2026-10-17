@@ -60,6 +60,23 @@ pub fn encode_column(
             DeltaByteArray,
           )
       }
+    ByteStreamSplit =>
+      match column {
+        Floats(values) => @encoders.encode_byte_stream_split_float(values, out)
+        Doubles(values) =>
+          @encoders.encode_byte_stream_split_double(values, out)
+        _ =>
+          raise @types.EncodingError::TypeMismatch(
+            column.physical_type(),
+            ByteStreamSplit,
+          )
+      }
+    Fsst =>
+      match column {
+        ByteArrays(values) => @encoders.encode_fsst(values, out)
+        _ =>
+          raise @types.EncodingError::TypeMismatch(column.physical_type(), Fsst)
+      }
     other => raise @types.EncodingError::Unsupported(other)
   }
   { value_count: column.value_count(), encoded_bytes: out.length() - start, }
@@ -113,6 +130,24 @@ pub fn decode_column(
             @encoders.decode_delta_byte_array(data, count).0,
           )
         _ => raise @types.EncodingError::TypeMismatch(ty, DeltaByteArray)
+      }
+    ByteStreamSplit =>
+      match ty {
+        Float =>
+          @types.ColBuf::Floats(
+            @encoders.decode_byte_stream_split_float(data, count),
+          )
+        Double =>
+          @types.ColBuf::Doubles(
+            @encoders.decode_byte_stream_split_double(data, count),
+          )
+        _ => raise @types.EncodingError::TypeMismatch(ty, ByteStreamSplit)
+      }
+    Fsst =>
+      match ty {
+        ByteArray =>
+          @types.ColBuf::ByteArrays(@encoders.decode_fsst(data, count).0)
+        _ => raise @types.EncodingError::TypeMismatch(ty, Fsst)
       }
     other => raise @types.EncodingError::Unsupported(other)
   }

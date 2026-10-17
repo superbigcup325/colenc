@@ -28,6 +28,9 @@ const ENCODING_RLE_DICTIONARY : Int32 = 8
 const ENCODING_DELTA_BINARY_PACKED : Int32 = 5
 
 ///|
+const ENCODING_BYTE_STREAM_SPLIT : Int32 = 9
+
+///|
 const PAGE_TYPE_DICTIONARY_PAGE : Int32 = 2
 
 ///|
@@ -38,6 +41,9 @@ const TYPE_INT32 : Int32 = 1
 
 ///|
 const TYPE_INT64 : Int32 = 2
+
+///|
+const TYPE_FLOAT : Int32 = 4
 
 ///|
 const REPETITION_REQUIRED : Int32 = 0
@@ -365,6 +371,23 @@ pub fn build_delta_int64_page(
     TYPE_INT64,
     ENCODING_DELTA_BINARY_PACKED,
     [ENCODING_DELTA_BINARY_PACKED],
+    body_bytes,
+    count,
+  )
+}
+
+///|
+/// Wrap an already-encoded BYTE_STREAM_SPLIT float body.
+pub fn build_bss_float_page(
+  column : String,
+  body_bytes : Bytes,
+  count : Int32,
+) -> Bytes {
+  build_page(
+    column,
+    TYPE_FLOAT,
+    ENCODING_BYTE_STREAM_SPLIT,
+    [ENCODING_BYTE_STREAM_SPLIT],
     body_bytes,
     count,
   )

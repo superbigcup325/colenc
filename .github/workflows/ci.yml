@@ -98,5 +98,11 @@ jobs:
         run: python3 harness/make_delta_cases.py --check
       - name: Delta byte diff
         run: python3 harness/check_delta.py
+      - name: Byte stream split cases are reproducible
+        run: python3 harness/make_bss_cases.py --check
+      - name: Byte stream split byte diff
+        run: python3 harness/check_bss.py
+      - name: FSST round trip and scoreboard
+        run: python3 harness/check_fsst.py
       - name: Container interop
         run: harness/check_container.sh

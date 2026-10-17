@@ -89,12 +89,13 @@ test "facade rejects unimplemented families" {
     _ => abort("expected TypeMismatch(Int32, Rle)")
   }
 
+  // Dictionary needs its own entry point because it has two streams
   let error = capture_error(() => {
-    ignore(@colpack.decode_column(b"", @types.Int32, @types.Fsst, 0))
+    ignore(@colpack.decode_column(b"", @types.Int32, @types.Dictionary, 0))
   })
   match error {
-    @types.EncodingError::Unsupported(@types.Fsst) => ()
-    _ => abort("expected Unsupported(Fsst)")
+    @types.EncodingError::Unsupported(@types.Dictionary) => ()
+    _ => abort("expected Unsupported(Dictionary)")
   }
 }
 

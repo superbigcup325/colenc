@@ -5,6 +5,7 @@
 ///   moon run harness/writer_min -- /tmp/writer_min.parquet --rle
 ///   moon run harness/writer_min -- /tmp/writer_min.parquet --dict
 ///   moon run harness/writer_min -- /tmp/writer_min.parquet --delta
+///   moon run harness/writer_min -- /tmp/writer_min.parquet --bss
 ///
 /// The values are the same 1000 row sequence as the PLAIN reference fixture.
 /// `--library` takes the page body from `colpack.encode_column` instead of the
@@ -13,7 +14,8 @@
 /// `--rle` writes a boolean column encoded as the RLE hybrid, again through the
 /// library, so the E1 container path is judged the same way. `--dict` writes a
 /// dictionary-encoded int32 column and places the dictionary page first.
-/// `--delta` writes a delta-packed int64 column.
+/// `--delta` writes a delta-packed int64 column. `--bss` writes a float column
+/// split into byte planes.
 
 ///|
 fn main {
@@ -24,7 +26,25 @@ fn main {
   }
   let path = args[1]
   let values = Array::makei(1000, fn(index) { index * 7 - 300 })
-  let bytes = if args.contains("--delta") {
+  let bytes = if args.contains("--bss") {
+    let values = Array::makei(1000, fn(index) {
+      Float::from_double(index.to_double() / 7.0)
+    })
+    let body = Buffer()
+    let stats = @colpack.encode_column(
+      @types.ColBuf::Floats(values),
+      @types.ByteStreamSplit,
+      body,
+    ) catch {
+      error => {
+        eprintln(
+          "writer_min: bss failed: \{@types.EncodingError::message(error)}",
+        )
+        return
+      }
+    }
+    build_bss_float_page("f32", body.to_bytes(), stats.value_count)
+  } else if args.contains("--delta") {
     let values = Array::makei(1000, fn(index) { 7L + 3L * index.to_int64() })
     let body = Buffer()
     let stats = @colpack.encode_column(

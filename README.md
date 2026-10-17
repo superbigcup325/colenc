@@ -9,8 +9,8 @@ reusable, verifiable, pluggable library. Pure MoonBit, zero FFI.
 
 **Status**: design settled, **P0 complete** — reference samples, page
 extraction, byte diffing and a minimal MoonBit writer, all verified by DuckDB
-and pyarrow. **P0 through P3 complete**: `primitives`, the neutral `types` model, PLAIN,
-the RLE/bit-packed hybrid, dictionary encoding and the delta family behind the
-facade dispatch, with E1, E2, E3, E4 and E5 byte-identical to the reference. CI
-covers native, wasm-gc and js plus the harness byte-diff and container jobs.
-BYTE_STREAM_SPLIT and FSST (P4) are next.
+and pyarrow. **P0 through P4 complete**: every v1 encoding family is in place — PLAIN, the
+RLE/bit-packed hybrid, dictionary, the delta family, BYTE_STREAM_SPLIT and
+FSST — with E1 to E6 byte-identical to the reference and E7 measured by round
+trip plus the scoreboard. CI covers native, wasm-gc and js plus the harness
+byte-diff and container jobs. Integration with moonlake (P5) is next.

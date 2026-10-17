@@ -15,6 +15,10 @@ pub fn decode_bool_rle(BytesView, Int) -> Array[Bool] raise @types.EncodingError
 
 pub fn decode_byte_arrays(BytesView, Int) -> Array[Bytes] raise @types.EncodingError
 
+pub fn decode_byte_stream_split_double(BytesView, Int) -> Array[Double] raise @types.EncodingError
+
+pub fn decode_byte_stream_split_float(BytesView, Int) -> Array[Float] raise @types.EncodingError
+
 pub fn decode_delta_byte_array(BytesView, Int, offset? : Int) -> (Array[Bytes], Int) raise @types.EncodingError
 
 pub fn decode_delta_int32(BytesView, Int, offset? : Int) -> (Array[Int], Int) raise @types.EncodingError
@@ -29,6 +33,8 @@ pub fn decode_double(BytesView, Int) -> Array[Double] raise @types.EncodingError
 
 pub fn decode_float(BytesView, Int) -> Array[Float] raise @types.EncodingError
 
+pub fn decode_fsst(BytesView, Int, offset? : Int) -> (Array[Bytes], Int) raise @types.EncodingError
+
 pub fn decode_int32(BytesView, Int) -> Array[Int] raise @types.EncodingError
 
 pub fn decode_int64(BytesView, Int) -> Array[Int64] raise @types.EncodingError
@@ -40,6 +46,10 @@ pub fn encode_bool(Array[Bool], @buffer.Buffer) -> Unit
 pub fn encode_bool_rle(Array[Bool], @buffer.Buffer) -> Unit raise @types.EncodingError
 
 pub fn encode_byte_arrays(Array[Bytes], @buffer.Buffer) -> Unit
+
+pub fn encode_byte_stream_split_double(Array[Double], @buffer.Buffer) -> Unit
+
+pub fn encode_byte_stream_split_float(Array[Float], @buffer.Buffer) -> Unit
 
 pub fn encode_delta_byte_array(Array[Bytes], @buffer.Buffer) -> Unit raise @types.EncodingError
 
@@ -54,6 +64,8 @@ pub fn encode_dictionary(@types.ColBuf, max_dictionary_bytes? : Int) -> @types.D
 pub fn encode_double(Array[Double], @buffer.Buffer) -> Unit
 
 pub fn encode_float(Array[Float], @buffer.Buffer) -> Unit
+
+pub fn encode_fsst(Array[Bytes], @buffer.Buffer) -> Unit
 
 pub fn encode_int32(Array[Int], @buffer.Buffer) -> Unit
 

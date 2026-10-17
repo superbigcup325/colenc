@@ -1,0 +1,9 @@
+import {
+  "superbigcup325/colpack",
+  "superbigcup325/colpack/types",
+  "moonbitlang/core/env",
+  "moonbitlang/x/fs",
+  "moonbitlang/x/sys",
+}
+
+pkgtype(kind: "executable")

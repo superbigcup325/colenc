@@ -1,0 +1,26 @@
+{
+  "cases": [
+    {
+      "count": 1000,
+      "input_file": "bss_float32.input.bin",
+      "input_sha256": "32355fd1353ef6e074bdc23865c28c22df03f56bd5229be743dcb4115f990338",
+      "name": "bss_float32",
+      "plain_bytes": 4000,
+      "reference_file": "bss_float32.ref.bin",
+      "reference_sha256": "e5bdc1b5a95805f907602dd215048cfc5eed5e54f2ac9d37c3e515bbc3eaef8c",
+      "source": "bss_float32.parquet",
+      "type": "float"
+    },
+    {
+      "count": 1000,
+      "input_file": "bss_double.input.bin",
+      "input_sha256": "b12759a90c03167ba575ebba45f2289b3af02d9548cee22451ec209697be3e2e",
+      "name": "bss_double",
+      "plain_bytes": 8000,
+      "reference_file": "bss_double.ref.bin",
+      "reference_sha256": "c7a872471c986015c62c1185351449147136a1cc1f9232e776a33ddc93a9fda9",
+      "source": "bss_double.parquet",
+      "type": "double"
+    }
+  ]
+}

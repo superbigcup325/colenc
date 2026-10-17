@@ -20,10 +20,15 @@ make_dict_cases.py build dictionary byte-diff cases from the fixtures
 check_dict.py      run the dictionary probe and diff both payloads
 make_delta_cases.py build delta byte-diff cases from the fixtures
 check_delta.py     run the delta probe and diff the stream
+make_bss_cases.py  build BYTE_STREAM_SPLIT cases from the fixtures
+check_bss.py       run the BSS probe and diff the planes
+check_fsst.py      round-trip FSST and print its PLAIN ratio
 check_container.sh end-to-end container check: wrap, judge, diff pages
 rle_probe/         minimal MoonBit CLI around the library's RLE encoder
 dict_probe/        minimal MoonBit CLI around the dictionary encoder
 delta_probe/       minimal MoonBit CLI around the delta encoders
+bss_probe/         minimal MoonBit CLI around BYTE_STREAM_SPLIT
+fsst_probe/        minimal MoonBit CLI around FSST (round trip + ratio)
 requirements.txt   pinned judge versions (pyarrow, duckdb)
 fixtures/          committed reference samples + manifest
 writer_min/        minimal MoonBit Parquet writer (T0.2)
@@ -217,6 +222,17 @@ python3 harness/check_delta.py        # probe, diff, show the PLAIN ratio
 Cases cover DELTA_BINARY_PACKED at both integer widths and both byte-array
 encodings. A delta stream is self-delimiting, so the case file is the whole
 data page payload.
+
+## BYTE_STREAM_SPLIT and FSST
+
+```bash
+python3 harness/make_bss_cases.py && python3 harness/check_bss.py
+python3 harness/check_fsst.py
+```
+
+BSS is byte-diffed like the other Parquet encodings. FSST has no reference
+format, so `fsst_probe` compresses, decompresses, verifies the round trip and
+prints both sizes; `check_fsst.py` collects the ratios.
 
 ## P1 evidence
 

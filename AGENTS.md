@@ -11,12 +11,12 @@ milestone plan and the acceptance criteria this repo is built around.
 
 ## Status
 
-Design settled; **P0 through P3 are complete**. The library has `primitives`,
-the neutral `types` model, PLAIN, the RLE/bit-packed hybrid, dictionary encoding
-and the delta family behind the facade dispatch, with E1, E2, E3, E4 and E5
-byte-identical to the reference; CI runs the three-backend test matrix plus the
-harness jobs (fixture reproducibility, RLE, dictionary and delta byte diffs,
-container interop). **P4, BYTE_STREAM_SPLIT and FSST, is next.**
+Design settled; **P0 through P4 are complete**. Every v1 encoding family is in
+place: PLAIN, the RLE/bit-packed hybrid, dictionary, the delta family,
+BYTE_STREAM_SPLIT and FSST, with E1 to E6 byte-identical to the reference and
+E7 measured by round trip plus the scoreboard (no Parquet-native FSST exists).
+CI runs the three-backend test matrix plus the harness jobs. **P5, integration
+with moonlake, is next.**
 
 ## Layout
 
@@ -28,7 +28,8 @@ moon.mod                 module manifest
 docs/ROADMAP.md          the public roadmap
 types/                   neutral model: PhysicalType / Encoding / ColBuf / errors
 primitives/              L1: varint / zigzag / bit packing / bit width
-encoders/                L2: PLAIN, RLE hybrid, dictionary, delta family
+encoders/                L2: PLAIN, RLE hybrid, dictionary, delta family,
+                         BYTE_STREAM_SPLIT and FSST
 facade.mbt               L3: encode_column / decode_column dispatch
 harness/                 acceptance rig: Python judges, fixtures, minimal writer
 .githooks/               pre-commit gate
@@ -59,6 +60,8 @@ its branch in `facade.mbt`.
   `python3 harness/check_rle.py` byte-diffs the hybrid encoder,
   `python3 harness/check_dict.py` byte-diffs dictionary encoding,
   `python3 harness/check_delta.py` byte-diffs the delta family,
+  `python3 harness/check_bss.py` byte-diffs BYTE_STREAM_SPLIT,
+  `python3 harness/check_fsst.py` round-trips FSST and prints its ratio,
   `harness/check_container.sh` proves the container path end to end
 - `moon run harness/writer_min -- <out.parquet>` writes the minimal container
 - **Before committing**, run the quartet:
@@ -160,6 +163,12 @@ tracked documents ship in the release archive.
 - **Harness executables run on native in CI** → `moon test --target js` covers
   the library packages, but `writer_min` and `rle_probe` use `moonbitlang/x/fs`
   and are invoked with `--target native` by the harness scripts
+- **BYTE_STREAM_SPLIT is size-neutral** (planes are a permutation of the same
+  bytes); it only pays off when a byte-stream compressor follows, so its
+  scoreboard ratio is 100% by design
+- **FSST has no Parquet-native format to diff against** → colpack defines its
+  own framing (symbol table, per-value length, escape 255) and the criteria are
+  round trip plus the scoreboard, never byte identity
 - **parquet-cpp's delta block is 256 values for INT64 and 128 for INT32** while
   the spec says 128; byte identity requires following the writer, not the spec
 - **A delta block always carries four width bytes** even when the last block

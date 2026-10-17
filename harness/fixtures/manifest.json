@@ -8,6 +8,25 @@
   "row_group_columns": "required (nullable=False), flat",
   "samples": [
     {
+      "column": "f64",
+      "count": 1000,
+      "encoding": "BYTE_STREAM_SPLIT",
+      "has_dictionary_page": false,
+      "name": "bss_double",
+      "observed_encodings": [
+        "RLE",
+        "BYTE_STREAM_SPLIT"
+      ],
+      "parquet": "bss_double.parquet",
+      "parquet_bytes": 8159,
+      "parquet_sha256": "e3182d49314e1018db2520b923448f2e55453c13b540eeef7681d2a6eacb4bd4",
+      "physical_type": "DOUBLE",
+      "row_groups": 1,
+      "values": "bss_double.values.bin",
+      "values_bytes": 8000,
+      "values_sha256": "b12759a90c03167ba575ebba45f2289b3af02d9548cee22451ec209697be3e2e"
+    },
+    {
       "column": "f32",
       "count": 1000,
       "encoding": "BYTE_STREAM_SPLIT",

@@ -28,6 +28,7 @@ fi
 moon run --target native harness/writer_min -- "$work/rle.parquet" --rle >/dev/null
 moon run --target native harness/writer_min -- "$work/dict.parquet" --dict >/dev/null
 moon run --target native harness/writer_min -- "$work/delta.parquet" --delta >/dev/null
+moon run --target native harness/writer_min -- "$work/bss.parquet" --bss >/dev/null
 
 "$here/duck_read.sh" "$work/plain_lib.parquet" \
   --values "$here/fixtures/plain_int32.values.bin" --type INT32
@@ -37,12 +38,14 @@ moon run --target native harness/writer_min -- "$work/delta.parquet" --delta >/d
   --values "$here/fixtures/dict_int32.values.bin" --type INT32 --count 1000
 "$here/duck_read.sh" "$work/delta.parquet" \
   --values "$here/fixtures/delta_int64.values.bin" --type INT64 --count 1000
+"$here/duck_read.sh" "$work/bss.parquet" \
+  --values "$here/fixtures/bss_float32.values.bin" --type FLOAT --count 1000
 
 "$py" "$here/extract_pages.py" \
   "$work/plain_lib.parquet" "$work/rle.parquet" "$work/dict.parquet" \
-  "$work/delta.parquet" "$here/fixtures/rle_bool.parquet" \
+  "$work/delta.parquet" "$work/bss.parquet" "$here/fixtures/rle_bool.parquet" \
   "$here/fixtures/dict_int32.parquet" "$here/fixtures/delta_int64.parquet" \
-  --out "$work" --quiet
+  "$here/fixtures/bss_float32.parquet" --out "$work" --quiet
 "$py" "$here/diff_bytes.py" \
   "$work/plain_lib.rg0.c0.p0.data.values.bin" \
   "$here/fixtures/plain_int32.values.bin"
@@ -58,3 +61,6 @@ moon run --target native harness/writer_min -- "$work/delta.parquet" --delta >/d
 "$py" "$here/diff_bytes.py" \
   "$work/delta.rg0.c0.p0.data.values.bin" \
   "$work/delta_int64.rg0.c0.p0.data.values.bin"
+"$py" "$here/diff_bytes.py" \
+  "$work/bss.rg0.c0.p0.data.values.bin" \
+  "$work/bss_float32.rg0.c0.p0.data.values.bin"
