@@ -11,10 +11,11 @@ milestone plan and the acceptance criteria this repo is built around.
 
 ## Status
 
-Design settled; at **P0 (acceptance harness)**. The Python half of the rig is in
-place (`harness/`: reference generation, page extraction, byte diffing); the
-MoonBit minimal writer is next. No library packages exist yet — do not assume
-any package described below exists.
+Design settled; **P0 is complete**. The acceptance rig exists end to end:
+reference generation, page extraction, byte diffing, and a minimal MoonBit
+writer whose file both judges read back. **P1 (primitives + PLAIN + RLE) is
+next.** No library packages exist yet — do not assume any package described
+below exists.
 
 ## Layout
 
@@ -24,7 +25,7 @@ Published (tracked) today:
 AGENTS.md  README.md  CHANGELOG.md  LICENSE
 moon.mod                 module manifest
 docs/ROADMAP.md          the public roadmap
-harness/                 acceptance rig (Python judges + committed fixtures)
+harness/                 acceptance rig: Python judges, fixtures, minimal writer
 .githooks/               pre-commit gate
 .github/workflows/       CI gate
 .gitignore .moonignore .gitattributes
@@ -37,7 +38,6 @@ first commits should land in:
 primitives/   # L1: varint / zigzag / bit packing and unpacking / bit width / cursors
 encoders/     # L2: one file per encoding family, each with its property / battery tests
 facade.mbt    # L3: dispatch — Encoding / EncodingStats / column-vector conversion
-harness/writer_min/  # acceptance rig: minimal Parquet writer (Thrift compact + pages)
 ```
 
 - MoonBit packages are organized per directory, one `moon.pkg` each; `moon.mod`
@@ -52,7 +52,9 @@ harness/writer_min/  # acceptance rig: minimal Parquet writer (Thrift compact + 
 - Acceptance rig (see `harness/README.md`):
   `python3 harness/make_refs.py [--check]` regenerates or verifies the fixtures,
   `python3 harness/extract_pages.py <parquet> --out <dir>` carves pages,
-  `python3 harness/diff_bytes.py ours.bin ref.bin` reports the first divergence
+  `python3 harness/diff_bytes.py ours.bin ref.bin` reports the first divergence,
+  `harness/duck_read.sh <parquet> [--values ref.bin]` runs both judges
+- `moon run harness/writer_min -- <out.parquet>` writes the minimal container
 - **Before committing**, run the quartet:
   `moon info && moon fmt && moon check --deny-warn && moon test`
 - `.githooks/pre-commit` enforces the non-mutating half of that gate
@@ -77,7 +79,9 @@ harness/writer_min/  # acceptance rig: minimal Parquet writer (Thrift compact + 
 1. **Zero FFI**: no C/C++/Rust bindings; DuckDB is a **test-time judge** only,
    never in the runtime
 2. **Zero runtime dependencies**: the library itself depends on no third-party
-   package (test-time `moonbitlang/quickcheck` is fine)
+   package (test-time `moonbitlang/quickcheck` is fine). `moonbitlang/x` is
+   declared for `harness/writer_min` only: no library package may import it,
+   and `harness/` is excluded from the release archive
 3. **Not in scope**: byte-stream compression (DEFLATE / ZSTD / Snappy / Brotli /
    LZ4), full nested-type levels, and a public Parquet-container API — all v1
    boundaries, see `docs/ROADMAP.md` §6
@@ -128,6 +132,20 @@ tracked documents ship in the release archive.
 - **V1 level prefix is a length of the section, not the page** → each section
   is `u32le length` + that many bytes, repetition first, and a section is
   absent entirely when its max level is 0
+- **A nested Thrift struct must be self-contained** → compact-protocol field
+  ids are deltas relative to the enclosing struct, so build each nested struct
+  into its own buffer and append its bytes as the struct field payload; a
+  struct writer that shares the parent's last-id state corrupts the parent
+- **Footer sizes are asymmetric** → `total_compressed_size` and
+  `total_byte_size` count the page header plus the body, while
+  `PageHeader.uncompressed_page_size` counts the body alone; the footer length
+  before the trailing `PAR1` is a plain `u32le`, not a varint
+- **`moon fmt --check` arms itself with the first package** → the pre-commit
+  hook and CI skip the format half only while no `moon.pkg` exists; run
+  `moon fmt` before committing once packages land
+- **Prefer prelude and non-deprecated core APIs** → `Buffer()` replaces
+  `@buffer.new()`, and `String::to_bytes` is deprecated in favour of
+  `@utf8.encode`; `--deny-warn` turns both into build failures
 
 ## Command reference
 

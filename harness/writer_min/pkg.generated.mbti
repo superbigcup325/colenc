@@ -1,0 +1,13 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "superbigcup325/colpack/harness/writer_min"
+
+// Values
+pub fn build_int32_plain(String, Array[Int]) -> Bytes
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits

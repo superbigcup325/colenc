@@ -12,8 +12,11 @@ make_refs.py       generate the reference samples and their expected values
 extract_pages.py   carve pages out of Parquet files into standalone blobs
 parquet_pages.py   Thrift compact page-header reader used by extract_pages
 diff_bytes.py      byte diff with first-divergence offset and hex context
+read_back.py       judge a Parquet file with DuckDB and pyarrow
+duck_read.sh       thin wrapper around read_back.py
 requirements.txt   pinned judge versions (pyarrow, duckdb)
 fixtures/          committed reference samples + manifest
+writer_min/        minimal MoonBit Parquet writer (T0.2)
 ```
 
 ## Setup
@@ -102,6 +105,44 @@ and the following difference runs. Exit status: `0` identical, `1` different,
   pyarrow to regenerate them; `--check` proves the fixtures still follow from
   the generator.
 
+## Minimal writer
+
+`harness/writer_min/` is the smallest MoonBit writer the container judge
+accepts: one required int32 column in PLAIN, uncompressed, a single V1 data
+page, Thrift-compact footer, `PAR1` magic on both ends. It is a judge target,
+not a general writer.
+
+```bash
+moon run harness/writer_min -- /tmp/writer_min.parquet
+harness/duck_read.sh /tmp/writer_min.parquet \
+  --values harness/fixtures/plain_int32.values.bin --type INT32
+```
+
+The writer emits the same 1000-row sequence as the `plain_int32` fixture, so the
+page payload can be diffed against the fixture as a third check on top of the
+two judges:
+
+```bash
+python3 harness/extract_pages.py /tmp/writer_min.parquet --out /tmp/writer_pages
+python3 harness/diff_bytes.py \
+  /tmp/writer_pages/writer_min.rg0.c0.p0.data.values.bin \
+  harness/fixtures/plain_int32.values.bin
+```
+
+The writer imports `moonbitlang/x/fs` to write its output. That dependency is
+harness-only: no library package imports it, and `harness/` never ships in the
+release archive.
+
+## Judge a file
+
+```bash
+harness/duck_read.sh FILE.parquet [--values ref.values.bin] [--type INT32] [--count N]
+```
+
+Fails unless DuckDB and pyarrow agree row by row, and, when `--values` is given,
+unless those values equal the expected PLAIN bytes. Exit status: `0` pass, `1`
+mismatch, `2` unreadable file.
+
 ## P0 evidence
 
 - `make_refs.py` + `--check`: six samples, all PASS, reproducible
@@ -110,3 +151,8 @@ and the following difference runs. Exit status: `0` identical, `1` different,
   exactly to the byte
 - `diff_bytes.py`: a single flipped byte is reported at its exact offset; a
   truncated file reports the length difference; identical files exit 0
+- `writer_min`: a 4121-byte file of 1000 int32 rows is read back with equal
+  values by DuckDB and pyarrow, its page payload is byte-identical to the
+  `plain_int32` fixture, and repeated runs produce the same MD5
+- `extract_pages.py` parses the writer's own page headers and tiling, so the
+  extractor and the writer agree on the container independent of pyarrow

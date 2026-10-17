@@ -14,3 +14,7 @@ license = "Apache-2.0"
 keywords = [ "parquet", "columnar", "encoding", "compression", "bit-packing" ]
 
 description = "Columnar encoding kernel for MoonBit: the Parquet page-level encoding family as a reusable, verifiable, pluggable library."
+
+import {
+  "moonbitlang/x@0.5.5",
+}

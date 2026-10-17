@@ -5,8 +5,8 @@
 > Peer references: Parquet's `parquet-encoding` crate, DuckDB's built-in encoders
 > License: Apache-2.0
 
-**Status (2026-10)**: project scoped, design settled; at P0 (acceptance harness) — the rig's Python judges and reference samples have landed, the minimal Parquet writer is in progress
-**Next step**: build `harness/` and prove the chain — our bytes match a reference implementation byte-for-byte, and DuckDB reads them back
+**Status (2026-10)**: project scoped, design settled; **P0 (acceptance harness) complete** — reference samples, page extraction, byte diffing and a minimal MoonBit writer, proven by DuckDB and pyarrow read-back
+**Next step**: P1 — `primitives/` (varint / zigzag / bit packing / bit width), PLAIN and the RLE/bit-packed hybrid, with byte-identical output on that layer
 
 ---
 
