@@ -39,6 +39,15 @@ moon run examples/encode_demo | sort -t$'\t' -k4,4n
 The demo encodes one column with every applicable family, decodes it back, and
 prints `encoding/type`, value count, encoded bytes and the ratio to PLAIN.
 
+## Build and test
+
+```bash
+moon check --deny-warn        # type-check, warnings are errors
+moon test                     # wasm-gc, the default target
+moon test --target native     # and js: backend-differing paths need both
+moon package --list           # what a release archive would contain
+```
+
 ## API
 
 Three layers, each usable on its own: `primitives/` (varints, zigzag, bit

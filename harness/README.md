@@ -4,8 +4,9 @@ The rig that decides whether an encoder is correct. Three layers, per
 `docs/ROADMAP.md` §4: property tests in MoonBit, byte-level diffing against a
 reference implementation, and container interop with DuckDB as judge.
 
-Today this directory holds the P0 Python side: reference sample generation, page
-extraction, and byte diffing. The MoonBit minimal writer lands with T0.2.
+Both halves are here: the Python side (reference sample generation, page
+extraction, byte diffing, dual judges) and the MoonBit probes and minimal
+writer. Each section below states what it checks and how to run it.
 
 ```
 make_refs.py       generate the reference samples and their expected values
