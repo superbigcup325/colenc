@@ -16,7 +16,7 @@ encoding family is in place: PLAIN, the RLE/bit-packed hybrid, dictionary, the
 delta family, BYTE_STREAM_SPLIT and FSST, with E1 to E6 byte-identical to the
 reference and E7 measured by round trip plus the scoreboard (no Parquet-native
 FSST exists). CI runs the three-backend test matrix plus the harness jobs.
-**P5 (moonlake) is validated on a local branch**, not merged; the package is
+**P5 (moonlake) is validated in an unmerged branch**, not merged; the package is
 not published yet.
 
 ## Layout
@@ -70,7 +70,7 @@ its branch in `facade.mbt`.
 - `.githooks/pre-commit` enforces the non-mutating half of that gate
   (`moon check --deny-warn`, `moon fmt --check`); enable it once per clone with
   `git config core.hooksPath .githooks`. CI (`.github/workflows/ci.yml`) runs the
-  same gate on both wasm-gc and native.
+  same gate plus the test matrix on all three backends (wasm-gc, native, js).
 - Backend differences must be tested explicitly: the default local target does
   not cover native, so anything touching bytes or buffers needs
   `moon test --target native`

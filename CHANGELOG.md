@@ -94,7 +94,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `docs/scoreboard.md`: on the reference machine native reaches 2.3 GB/s
   encoding and 3.2 GB/s decoding for monotonic INT64 deltas; wasm-gc 1.1 and
   1.0 GB/s
-- P5 was validated against moonlake on a local branch (read side, write path,
+- P5 was validated against moonlake in an unmerged branch (read side, write path,
   spill re-encoding); it is not part of this package and is not merged
 
 P0 through P4 are complete; the package is ready to publish once the repository

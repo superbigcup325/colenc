@@ -24,8 +24,8 @@ three-backend test matrix (native, wasm-gc, js) plus the acceptance jobs:
 fixture reproducibility, byte diffs for every family, and container interop with
 DuckDB and pyarrow as judges.
 
-Integration with [moonlake](https://github.com/superbigcup325/moonlake) was
-validated on a local branch: Parquet decoding routed through colenc, a new
+Integration with [moonlake](https://github.com/superbigcup325/moonlake) is
+validated in an unmerged branch: Parquet decoding routed through colenc, a new
 write path, and the spill format re-encoded (40% smaller). The package is not
 published to mooncakes yet, so the dependency is a workspace member for now.
 
@@ -99,6 +99,10 @@ values when compression does not pay**, so the encoded column never exceeds the
 raw size by more than one byte; on repetitive strings it lands at 60–75% of
 PLAIN.
 
+The demo encodes a different, smaller set of columns than the acceptance
+fixtures, so its ratios differ from the table above while showing the same
+shape.
+
 Throughput lives in [`docs/scoreboard.md`](docs/scoreboard.md): on this machine
 a release build reaches about 2.3 GB/s encoding and 3.2 GB/s decoding for
 monotonic INT64 deltas on native, and about 1.1 GB/s / 1.0 GB/s on wasm-gc.
@@ -149,7 +153,7 @@ encoders/     L2: PLAIN, RLE hybrid, dictionary, delta family, BSS, FSST
 facade.mbt    L3: encode_column / decode_column + dictionary entry points
 examples/     runnable demo
 harness/      acceptance rig: fixtures, byte diffs, containers, judges
-docs/         public roadmap
+docs/         public roadmap, and the throughput scoreboard
 ```
 
 ## License
