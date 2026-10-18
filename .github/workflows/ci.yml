@@ -26,10 +26,10 @@ jobs:
         run: moon version --all
       - name: Fetch dependencies
         run: |
+          # `moon install` without arguments is deprecated: the toolchain
+          # resolves and downloads every dependency on the first build-ish
+          # command, which is what the next step does anyway.
           moon update
-          # the toolchain enforces moon.mod's manifest format: a dependency that
-          # still ships the legacy moon.mod.json fails here, loudly
-          moon install
       - name: Lint (check --deny-warn)
         run: moon check --deny-warn
       - name: Format check
@@ -45,6 +45,16 @@ jobs:
         run: |
           moon info
           git diff --exit-code -- '*.mbti'
+      - name: Package archive stays clean
+        run: |
+          # "Before pushing or publishing, read the archive contents with
+          # `moon package --list`" is a hard rule; this makes it a gate.
+          moon package --list 2>pkg-list.txt >/dev/null
+          if grep -E '^(harness/|_build/|target/|\.|__pycache__/)' pkg-list.txt; then
+            echo "::error::local-only paths leaked into the package archive"
+            exit 1
+          fi
+          echo "package archive clean"
 
   test:
     runs-on: ubuntu-latest
@@ -64,9 +74,7 @@ jobs:
           curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
           echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
       - name: Fetch dependencies
-        run: |
-          moon update
-          moon install
+        run: moon update
       - name: Test (${{ matrix.target }})
         run: moon test --target ${{ matrix.target }}
 
@@ -79,9 +87,7 @@ jobs:
           curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
           echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
       - name: Fetch dependencies
-        run: |
-          moon update
-          moon install
+        run: moon update
       - name: Install Python judges
         run: python3 -m pip install -r harness/requirements.txt
       - name: Fixtures are reproducible
