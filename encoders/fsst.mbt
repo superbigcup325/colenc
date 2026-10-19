@@ -63,11 +63,125 @@ fn compare_symbols(a : (Bytes, Int32), b : (Bytes, Int32)) -> Int32 {
 }
 
 ///|
+/// Little-endian byte pattern of `length` bytes at `start`, zero-extended to a
+/// word. `length` is between two and eight.
+fn pack_prefix(value : Bytes, start : Int32, length : Int32) -> UInt64 {
+  let mut prefix = 0UL
+  for index in 0..<length {
+    prefix = prefix | (value[start + index].to_uint64() << (index * 8))
+  }
+  prefix
+}
+
+///|
+/// Rebuild the substring a packed key stands for. Only called for candidates
+/// that survived the count filter, so the allocation is paid a few hundred
+/// times per column rather than once per substring.
+fn symbol_bytes(prefix : UInt64, length : Int32) -> Bytes {
+  let out = Buffer()
+  for index in 0..<length {
+    let byte = ((prefix >> (index * 8)) & 0xFFUL).to_int()
+    out.write_byte(byte.to_byte())
+  }
+  out.to_bytes()
+}
+
+///|
+/// Substring counters keyed by packed bytes. Two tables because a length-eight
+/// key uses every bit of the word, while a shorter key keeps its length in the
+/// spare top byte.
+priv struct SymbolCounts {
+  short : Map[UInt64, Int32]
+  long : Map[UInt64, Int32]
+}
+
+///|
+fn SymbolCounts::new() -> SymbolCounts {
+  { short: Map([]), long: Map([]), }
+}
+
+///|
+fn SymbolCounts::bump(
+  self : SymbolCounts,
+  prefix : UInt64,
+  length : Int32,
+) -> Unit {
+  if length == 8 {
+    match self.long.get(prefix) {
+      Some(count) => self.long.set(prefix, count + 1)
+      None => self.long.set(prefix, 1)
+    }
+  } else {
+    let key = (length.to_uint64() << 56) | prefix
+    match self.short.get(key) {
+      Some(count) => self.short.set(key, count + 1)
+      None => self.short.set(key, 1)
+    }
+  }
+}
+
+///|
+fn SymbolCounts::each(
+  self : SymbolCounts,
+  visit : (UInt64, Int32, Int32) -> Unit,
+) -> Unit {
+  self.short.each(fn(key, count) {
+    visit(key & 0xFFFFFFFFFFFFFFUL, (key >> 56).to_int(), count)
+  })
+  self.long.each(fn(key, count) { visit(key, 8, count) })
+}
+
+///|
+/// Symbol lookup for the encoder, keyed the same way as the counters: the
+/// greedy match probes a word instead of hashing a fresh slice for every
+/// candidate length.
+priv struct SymbolCodes {
+  short : Map[UInt64, Int32]
+  long : Map[UInt64, Int32]
+}
+
+///|
+fn SymbolCodes::new() -> SymbolCodes {
+  { short: Map([]), long: Map([]), }
+}
+
+///|
+fn SymbolCodes::set(
+  self : SymbolCodes,
+  prefix : UInt64,
+  length : Int32,
+  code : Int32,
+) -> Unit {
+  if length == 8 {
+    self.long.set(prefix, code)
+  } else {
+    self.short.set((length.to_uint64() << 56) | prefix, code)
+  }
+}
+
+///|
+fn SymbolCodes::get(
+  self : SymbolCodes,
+  prefix : UInt64,
+  length : Int32,
+) -> Int32? {
+  if length == 8 {
+    self.long.get(prefix)
+  } else {
+    self.short.get((length.to_uint64() << 56) | prefix)
+  }
+}
+
+///|
 /// Pick the symbol table: count every substring of two to eight bytes, keep
 /// the ones that occur at least twice, rank by bytes saved, and take the best
 /// 255. Ties break on length then bytes so the table is deterministic.
+///
+/// Counting keys on the packed bytes rather than on freshly allocated `Bytes`
+/// changes neither the counts nor the ranking, so the table — and therefore the
+/// output — stays byte-identical to the slice-keyed version.
 fn build_symbols(values : Array[Bytes]) -> Array[Bytes] {
-  let counts : Map[Bytes, Int32] = Map([])
+  let counts = SymbolCounts::new()
   let mut budget = 0
   for value in values {
     if budget >= FSST_SAMPLE_BYTES {
@@ -85,20 +199,27 @@ fn build_symbols(values : Array[Bytes]) -> Array[Bytes] {
       } else {
         FSST_MAX_SYMBOL_LENGTH
       }
+      // the first byte of the window is fixed across lengths; each step then
+      // appends the next byte, so a position costs one load per length
+      let mut prefix = value[start].to_uint64()
       for piece_length in 2..<=room {
-        let piece = value[start:start + piece_length].to_owned()
-        match counts.get(piece) {
-          Some(count) => counts.set(piece, count + 1)
-          None => counts.set(piece, 1)
-        }
+        prefix = prefix |
+          (
+            value[start + piece_length - 1].to_uint64() <<
+            ((piece_length - 1) * 8)
+          )
+        counts.bump(prefix, piece_length)
       }
     }
   }
   let entries : Array[(Bytes, Int32)] = []
-  counts.each(fn(piece, count) {
+  counts.each(fn(prefix, piece_length, count) {
     // a symbol must pay for its own table entry
-    if count >= 2 && symbol_savings((piece, count)) > piece.length() + 1 {
-      entries.push((piece, count))
+    if count >= 2 {
+      let piece = symbol_bytes(prefix, piece_length)
+      if symbol_savings((piece, count)) > piece.length() + 1 {
+        entries.push((piece, count))
+      }
     }
   })
   entries.sort_by(compare_symbols)
@@ -115,9 +236,17 @@ fn build_symbols(values : Array[Bytes]) -> Array[Bytes] {
 }
 
 ///|
+
+///|
+/// Write one value as symbol codes, escaping the bytes no symbol covers.
+///
+/// The window is packed once per position and masked down per candidate length,
+/// so the greedy longest-match scan costs one word compare per candidate
+/// instead of hashing a fresh slice for each of them. The selection rule is
+/// unchanged: longest match wins, otherwise the byte is escaped.
 fn encode_value(
   value : Bytes,
-  codes : Map[Bytes, Int32],
+  codes : SymbolCodes,
   out : @buffer.Buffer,
 ) -> Unit {
   let length = value.length()
@@ -129,16 +258,23 @@ fn encode_value(
       FSST_MAX_SYMBOL_LENGTH
     }
     let mut matched = 0
-    let mut candidate = room
-    while candidate >= 2 {
-      let view = value[position:position + candidate]
-      match codes.get_from_bytes(view) {
-        Some(code) => {
-          matched = candidate
-          out.write_byte(code.to_byte())
-          break
+    if room >= 2 {
+      let window = pack_prefix(value, position, room)
+      let mut candidate = room
+      while candidate >= 2 {
+        let prefix = if candidate == 8 {
+          window
+        } else {
+          window & ((1UL << (candidate * 8)) - 1UL)
         }
-        None => candidate -= 1
+        match codes.get(prefix, candidate) {
+          Some(code) => {
+            matched = candidate
+            out.write_byte(code.to_byte())
+            break
+          }
+          None => candidate -= 1
+        }
       }
     }
     if matched == 0 {
@@ -156,42 +292,55 @@ fn encode_value(
 /// and the framing falls back to stored raw values whenever compression does
 /// not pay for the table, so the output never exceeds the raw size by more
 /// than the mode byte.
+///
+/// The per-value payloads go into one buffer and their lengths into an array,
+/// which is what keeps the encoder from allocating a `Buffer` per value: the
+/// only copies are the final assembly into `out`. The stored body is never
+/// materialised — its size is arithmetic — so the comparison that picks the
+/// smaller mode costs nothing.
 pub fn encode_fsst(values : Array[Bytes], out : @buffer.Buffer) -> Unit {
   let symbols = build_symbols(values)
-
-  let compressed = Buffer()
-  compressed.write_byte(symbols.length().to_byte())
-  let codes : Map[Bytes, Int32] = Map([])
+  let head = Buffer()
+  head.write_byte(symbols.length().to_byte())
+  let codes = SymbolCodes::new()
   for index in 0..<symbols.length() {
     let symbol = symbols[index]
-    compressed.write_byte(symbol.length().to_byte())
-    compressed.write_bytes(symbol)
-    codes.set(symbol, index)
+    head.write_byte(symbol.length().to_byte())
+    head.write_bytes(symbol)
+    codes.set(pack_prefix(symbol, 0, symbol.length()), symbol.length(), index)
   }
-  compressed.write_int_le(values.length())
-  for value in values {
-    let body = Buffer()
-    encode_value(value, codes, body)
-    let bytes = body.to_bytes()
-    compressed.write_int_le(bytes.length())
-    compressed.write_bytes(bytes)
-  }
+  head.write_int_le(values.length())
 
-  let stored = Buffer()
-  stored.write_int_le(values.length())
+  let bodies = Buffer()
+  let lengths : Array[Int32] = []
   for value in values {
-    stored.write_int_le(value.length())
-    stored.write_bytes(value)
+    let start = bodies.length()
+    encode_value(value, codes, bodies)
+    lengths.push(bodies.length() - start)
   }
-
-  let compressed_bytes = compressed.to_bytes()
-  let stored_bytes = stored.to_bytes()
-  if compressed_bytes.length() < stored_bytes.length() {
+  let mut stored_size = 4
+  for value in values {
+    stored_size += 4 + value.length()
+  }
+  let compressed_size = head.length() + 4 * values.length() + bodies.length()
+  if compressed_size < stored_size {
     out.write_byte(FSST_MODE_COMPRESSED.to_byte())
-    out.write_bytes(compressed_bytes)
+    out.write_bytes(head.to_bytes())
+    let body_bytes = bodies.to_bytes()
+    let mut position = 0
+    for index in 0..<values.length() {
+      let length = lengths[index]
+      out.write_int_le(length)
+      out.write_bytes(body_bytes[position:position + length])
+      position += length
+    }
   } else {
     out.write_byte(FSST_MODE_STORED.to_byte())
-    out.write_bytes(stored_bytes)
+    out.write_int_le(values.length())
+    for value in values {
+      out.write_int_le(value.length())
+      out.write_bytes(value)
+    }
   }
 }
 
