@@ -135,3 +135,137 @@ test "bit_unpack reports truncation and bad arguments" {
     _ => abort("expected InvalidCount")
   }
 }
+
+///|
+/// The slowest possible reference: write one bit at a time. If the fast lanes
+/// disagree with this anywhere in 0..64 bits, they are wrong.
+fn ref_pack(values : Array[Int64], width : Int32) -> Bytes {
+  let out = Buffer()
+  let mut byte = 0
+  let mut bit = 0
+  for value in values {
+    let mut rest = value.reinterpret_as_uint64()
+    for _ in 0..<width {
+      if (rest & 1UL) == 1UL {
+        byte = byte | (1 << bit)
+      }
+      rest = rest >> 1
+      bit += 1
+      if bit == 8 {
+        out.write_byte(byte.to_byte())
+        byte = 0
+        bit = 0
+      }
+    }
+  }
+  if bit > 0 {
+    out.write_byte(byte.to_byte())
+  }
+  out.to_bytes()
+}
+
+///|
+fn ref_unpack(data : BytesView, width : Int32, count : Int32) -> Array[Int64] {
+  let out = Array::make(count, 0L)
+  let mut bit_pos = 0
+  for index in 0..<count {
+    let mut value = 0UL
+    for piece in 0..<width {
+      let byte_index = bit_pos >> 3
+      let bit_in_byte = bit_pos & 7
+      let one = ((data[byte_index].to_int() >> bit_in_byte) & 1) == 1
+      if one {
+        value = value | (1UL << piece)
+      }
+      bit_pos += 1
+    }
+    out[index] = value.reinterpret_as_int64()
+  }
+  out
+}
+
+///|
+fn lane_sample(index : Int32) -> Int64 {
+  (index.to_int64() * 2654435761L + 12345L) * 1103515245L
+}
+
+///|
+test "bit packing agrees with a bit-at-a-time reference at every width" {
+  let counts = [0, 1, 7, 8, 9, 63, 64, 65, 100]
+  for width in 0..<=64 {
+    for count in counts {
+      let values = Array::makei(count, fn(i) { lane_sample(i) })
+      let out = Buffer()
+      bit_pack(values[:], width, out) catch {
+        _ => ()
+      }
+      let packed = out.to_bytes()
+      let expected = ref_pack(values, width)
+      if packed != expected {
+        abort(
+          "pack diverges from the reference at width \{width}, count \{count}",
+        )
+      }
+      let back = bit_unpack(packed, width, count) catch {
+        _ => abort("unpack raised at width \{width}, count \{count}")
+      }
+      let want = ref_unpack(packed, width, count)
+      if back != want {
+        abort(
+          "unpack diverges from the reference at width \{width}, count \{count}",
+        )
+      }
+      if back !=
+        values.map(fn(v) {
+          if width == 0 {
+            0L
+          } else if width == 64 {
+            v
+          } else {
+            (v.reinterpret_as_uint64() & ((1UL << width) - 1UL)).reinterpret_as_int64()
+          }
+        }) {
+        abort("round trip at width \{width}, count \{count}")
+      }
+    }
+  }
+}
+
+///|
+test "bit lanes cover every flush stride" {
+  // 32 uses four-byte flushes, 40 three, 48 two, 56 one, 57..63 the bit path.
+  for width in [31, 32, 33, 40, 41, 48, 49, 56, 57, 63, 64] {
+    let values = Array::makei(97, fn(i) { lane_sample(i * width) })
+    let out = Buffer()
+    bit_pack(values[:], width, out) catch {
+      _ => ()
+    }
+    assert_eq(out.to_bytes().length(), (width * 97 + 7) / 8)
+    let back = bit_unpack(out.to_bytes(), width, 97) catch { _ => [] }
+    let expected = values.map(fn(v) {
+      if width == 64 {
+        v
+      } else {
+        (v.reinterpret_as_uint64() & ((1UL << width) - 1UL)).reinterpret_as_int64()
+      }
+    })
+    assert_eq(back, expected)
+  }
+}
+
+///|
+test "the word lanes report truncation instead of reading past the end" {
+  for width in [33, 40, 41, 48, 49, 56] {
+    let need = (width * 2 + 7) / 8
+    let short = Bytes::make(need - 1, b'\x00')
+    let error = capture_error(() => ignore(bit_unpack(short, width, 2)))
+    match error {
+      Truncated(offset, wanted, available) => {
+        assert_eq(offset, 0)
+        assert_eq(wanted, need)
+        assert_eq(available, need - 1)
+      }
+      _ => abort("expected Truncated at width \{width}")
+    }
+  }
+}
