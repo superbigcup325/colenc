@@ -151,3 +151,34 @@ test "dictionary decode reports bad width and out-of-range indices" {
     _ => abort("expected InvalidIndex(1, 1)")
   }
 }
+
+///|
+test "dictionary: an empty column owns an empty dictionary" {
+  // The property tests used to assume a dictionary always has an entry; an
+  // empty column is legal and its dictionary is empty, so pin the shape here.
+  let encoding = encode_dictionary(@types.ColBuf::Int32s([])) catch {
+    error => abort(@types.EncodingError::message(error))
+  }
+  match encoding {
+    None => abort("an empty column must not fall back")
+    Some(encoding) => {
+      assert_eq(encoding.dictionary_size, 0)
+      assert_eq(encoding.dictionary.length(), 0)
+      // the index stream still carries its bit-width byte
+      assert_eq(encoding.indices.length(), 1)
+      let back = decode_dictionary(
+        encoding.dictionary,
+        encoding.indices,
+        @types.Int32,
+        0,
+        encoding.dictionary_size,
+      ) catch {
+        error => abort(@types.EncodingError::message(error))
+      }
+      match back {
+        Int32s(values) => assert_eq(values.length(), 0)
+        _ => abort("expected an INT32 column")
+      }
+    }
+  }
+}

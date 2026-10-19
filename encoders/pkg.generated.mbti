@@ -7,41 +7,41 @@ import {
 }
 
 // Values
-pub const DEFAULT_DICTIONARY_BYTE_LIMIT : Int = 1048576
+pub const DEFAULT_DICTIONARY_BYTE_LIMIT : Int32 = 1048576
 
-pub fn decode_bool(BytesView, Int) -> Array[Bool] raise @types.EncodingError
+pub fn decode_bool(BytesView, Int32) -> Array[Bool] raise @types.EncodingError
 
-pub fn decode_bool_rle(BytesView, Int) -> Array[Bool] raise @types.EncodingError
+pub fn decode_bool_rle(BytesView, Int32) -> Array[Bool] raise @types.EncodingError
 
-pub fn decode_byte_arrays(BytesView, Int) -> Array[Bytes] raise @types.EncodingError
+pub fn decode_byte_arrays(BytesView, Int32) -> Array[Bytes] raise @types.EncodingError
 
-pub fn decode_byte_stream_split_double(BytesView, Int) -> Array[Double] raise @types.EncodingError
+pub fn decode_byte_stream_split_double(BytesView, Int32) -> Array[Double] raise @types.EncodingError
 
-pub fn decode_byte_stream_split_float(BytesView, Int) -> Array[Float] raise @types.EncodingError
+pub fn decode_byte_stream_split_float(BytesView, Int32) -> Array[Float] raise @types.EncodingError
 
-pub fn decode_delta_byte_array(BytesView, Int, offset? : Int) -> (Array[Bytes], Int) raise @types.EncodingError
+pub fn decode_delta_byte_array(BytesView, Int32, offset? : Int32) -> (Array[Bytes], Int32) raise @types.EncodingError
 
-pub fn decode_delta_int32(BytesView, Int, offset? : Int) -> (Array[Int], Int) raise @types.EncodingError
+pub fn decode_delta_int32(BytesView, Int32, offset? : Int32) -> (Array[Int32], Int32) raise @types.EncodingError
 
-pub fn decode_delta_int64(BytesView, Int, offset? : Int) -> (Array[Int64], Int) raise @types.EncodingError
+pub fn decode_delta_int64(BytesView, Int32, offset? : Int32) -> (Array[Int64], Int32) raise @types.EncodingError
 
-pub fn decode_delta_length_byte_array(BytesView, Int, offset? : Int) -> (Array[Bytes], Int) raise @types.EncodingError
+pub fn decode_delta_length_byte_array(BytesView, Int32, offset? : Int32) -> (Array[Bytes], Int32) raise @types.EncodingError
 
-pub fn decode_dictionary(BytesView, BytesView, @types.PhysicalType, Int, Int) -> @types.ColBuf raise @types.EncodingError
+pub fn decode_dictionary(BytesView, BytesView, @types.PhysicalType, Int32, Int32) -> @types.ColBuf raise @types.EncodingError
 
-pub fn decode_double(BytesView, Int) -> Array[Double] raise @types.EncodingError
+pub fn decode_double(BytesView, Int32) -> Array[Double] raise @types.EncodingError
 
-pub fn decode_float(BytesView, Int) -> Array[Float] raise @types.EncodingError
+pub fn decode_float(BytesView, Int32) -> Array[Float] raise @types.EncodingError
 
-pub fn decode_fsst(BytesView, Int, offset? : Int) -> (Array[Bytes], Int) raise @types.EncodingError
+pub fn decode_fsst(BytesView, Int32, offset? : Int32) -> (Array[Bytes], Int32) raise @types.EncodingError
 
-pub fn decode_int32(BytesView, Int) -> Array[Int] raise @types.EncodingError
+pub fn decode_int32(BytesView, Int32) -> Array[Int32] raise @types.EncodingError
 
-pub fn decode_int64(BytesView, Int) -> Array[Int64] raise @types.EncodingError
+pub fn decode_int64(BytesView, Int32) -> Array[Int64] raise @types.EncodingError
 
-pub fn decode_rle_hybrid(BytesView, Int, Int, offset? : Int) -> (Array[Int64], Int) raise @types.EncodingError
+pub fn decode_rle_hybrid(BytesView, Int32, Int32, offset? : Int32) -> (Array[Int64], Int32) raise @types.EncodingError
 
-pub fn decode_roaring(BytesView) -> Array[Int] raise @types.EncodingError
+pub fn decode_roaring(BytesView) -> Array[Int32] raise @types.EncodingError
 
 pub fn encode_bool(Array[Bool], @buffer.Buffer) -> Unit
 
@@ -55,13 +55,13 @@ pub fn encode_byte_stream_split_float(Array[Float], @buffer.Buffer) -> Unit
 
 pub fn encode_delta_byte_array(Array[Bytes], @buffer.Buffer) -> Unit raise @types.EncodingError
 
-pub fn encode_delta_int32(ArrayView[Int], @buffer.Buffer) -> Unit raise @types.EncodingError
+pub fn encode_delta_int32(ArrayView[Int32], @buffer.Buffer) -> Unit raise @types.EncodingError
 
 pub fn encode_delta_int64(ArrayView[Int64], @buffer.Buffer) -> Unit raise @types.EncodingError
 
 pub fn encode_delta_length_byte_array(Array[Bytes], @buffer.Buffer) -> Unit raise @types.EncodingError
 
-pub fn encode_dictionary(@types.ColBuf, max_dictionary_bytes? : Int) -> @types.DictionaryEncoding? raise @types.EncodingError
+pub fn encode_dictionary(@types.ColBuf, max_dictionary_bytes? : Int32) -> @types.DictionaryEncoding? raise @types.EncodingError
 
 pub fn encode_double(Array[Double], @buffer.Buffer) -> Unit
 
@@ -69,17 +69,17 @@ pub fn encode_float(Array[Float], @buffer.Buffer) -> Unit
 
 pub fn encode_fsst(Array[Bytes], @buffer.Buffer) -> Unit
 
-pub fn encode_int32(Array[Int], @buffer.Buffer) -> Unit
+pub fn encode_int32(Array[Int32], @buffer.Buffer) -> Unit
 
 pub fn encode_int64(Array[Int64], @buffer.Buffer) -> Unit
 
-pub fn encode_rle_hybrid(ArrayView[Int64], Int, @buffer.Buffer) -> Unit raise @types.EncodingError
+pub fn encode_rle_hybrid(ArrayView[Int64], Int32, @buffer.Buffer) -> Unit raise @types.EncodingError
 
-pub fn encode_roaring(Array[Int], @buffer.Buffer) -> Unit raise @types.EncodingError
+pub fn encode_roaring(Array[Int32], @buffer.Buffer) -> Unit raise @types.EncodingError
 
-pub fn encode_roaring_run_optimized(Array[Int], @buffer.Buffer) -> Unit raise @types.EncodingError
+pub fn encode_roaring_run_optimized(Array[Int32], @buffer.Buffer) -> Unit raise @types.EncodingError
 
-pub fn read_u32_le(BytesView, Int) -> Int
+pub fn read_u32_le(BytesView, Int32) -> Int32
 
 // Errors
 
@@ -87,18 +87,18 @@ pub fn read_u32_le(BytesView, Int) -> Int
 pub(all) struct RoaringBitmap {
   // private fields
 }
-pub fn RoaringBitmap::add(Self, Int) -> Unit raise @types.EncodingError
-pub fn RoaringBitmap::cardinality(Self) -> Int
-pub fn RoaringBitmap::contains(Self, Int) -> Bool
+pub fn RoaringBitmap::add(Self, Int32) -> Unit raise @types.EncodingError
+pub fn RoaringBitmap::cardinality(Self) -> Int32
+pub fn RoaringBitmap::contains(Self, Int32) -> Bool
 pub fn RoaringBitmap::from_bytes(BytesView) -> Self raise @types.EncodingError
-pub fn RoaringBitmap::from_bytes_with_consumed(BytesView) -> (Self, Int) raise @types.EncodingError
-pub fn RoaringBitmap::from_ids(Array[Int]) -> Self raise @types.EncodingError
+pub fn RoaringBitmap::from_bytes_with_consumed(BytesView) -> (Self, Int32) raise @types.EncodingError
+pub fn RoaringBitmap::from_ids(Array[Int32]) -> Self raise @types.EncodingError
 pub fn RoaringBitmap::intersect(Self, Self) -> Self
 pub fn RoaringBitmap::is_empty(Self) -> Bool
 pub fn RoaringBitmap::new() -> Self
 pub fn RoaringBitmap::run_optimize(Self) -> Unit
 pub fn RoaringBitmap::serialize(Self, @buffer.Buffer) -> Unit
-pub fn RoaringBitmap::to_array(Self) -> Array[Int]
+pub fn RoaringBitmap::to_array(Self) -> Array[Int32]
 pub fn RoaringBitmap::to_bytes(Self) -> Bytes
 pub fn RoaringBitmap::union(Self, Self) -> Self
 

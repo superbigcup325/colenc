@@ -8,22 +8,22 @@ pub fn physical_type_name(PhysicalType) -> String
 
 // Errors
 pub(all) suberror EncodingError {
-  Truncated(Int, Int, Int)
+  Truncated(Int32, Int32, Int32)
   Unsupported(Encoding)
-  InvalidCount(Int)
-  InvalidBitWidth(Int)
+  InvalidCount(Int32)
+  InvalidBitWidth(Int32)
   TypeMismatch(PhysicalType, Encoding)
-  Incomplete(Int, Int)
-  InvalidIndex(Int, Int)
-  InvalidTag(Int)
-  OutOfRange(Int64, Int)
-  Corrupt(Int)
+  Incomplete(Int32, Int32)
+  InvalidIndex(Int32, Int32)
+  InvalidTag(Int32)
+  OutOfRange(Int64, Int32)
+  Corrupt(Int32)
 }
 pub fn EncodingError::message(Self) -> String
 
 // Types and methods
 pub(all) enum ColBuf {
-  Int32s(Array[Int])
+  Int32s(Array[Int32])
   Int64s(Array[Int64])
   Floats(Array[Float])
   Doubles(Array[Double])
@@ -31,13 +31,13 @@ pub(all) enum ColBuf {
   Bools(Array[Bool])
 }
 pub fn ColBuf::physical_type(Self) -> PhysicalType
-pub fn ColBuf::value_count(Self) -> Int
+pub fn ColBuf::value_count(Self) -> Int32
 
 pub(all) struct DictionaryEncoding {
   dictionary : Bytes
   indices : Bytes
-  dictionary_size : Int
-  bit_width : Int
+  dictionary_size : Int32
+  bit_width : Int32
 }
 
 pub(all) enum Encoding {
@@ -53,8 +53,8 @@ pub(all) enum Encoding {
 }
 
 pub(all) struct EncodingStats {
-  value_count : Int
-  encoded_bytes : Int
+  value_count : Int32
+  encoded_bytes : Int32
 }
 
 pub(all) enum PhysicalType {

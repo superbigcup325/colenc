@@ -45,8 +45,10 @@ test "property: low-cardinality int columns round trip through a dictionary" {
           ) catch {
             _ => abort("decode failed")
           }
+          // an empty column owns an empty dictionary; anything else needs at
+          // least one entry
           let dict_ok = encoding.dictionary_size <= cardinality &&
-            encoding.dictionary_size >= 1
+            (length == 0 || encoding.dictionary_size >= 1)
           match back {
             Int32s(got) => dict_ok && got == values
             _ => false

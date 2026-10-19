@@ -2,19 +2,19 @@
 package "superbigcup325/colenc/harness/writer_min"
 
 // Values
-pub fn build_bool_rle_page(String, Bytes, Int) -> Bytes
+pub fn build_bool_rle_page(String, Bytes, Int32) -> Bytes
 
-pub fn build_bss_float_page(String, Bytes, Int) -> Bytes
+pub fn build_bss_float_page(String, Bytes, Int32) -> Bytes
 
-pub fn build_delta_int64_page(String, Bytes, Int) -> Bytes
+pub fn build_delta_int64_page(String, Bytes, Int32) -> Bytes
 
-pub fn build_dictionary_int32_page(String, Bytes, Bytes, Int, Int) -> Bytes
+pub fn build_dictionary_int32_page(String, Bytes, Bytes, Int32, Int32) -> Bytes
 
-pub fn build_int32_plain(String, Array[Int]) -> Bytes
+pub fn build_int32_plain(String, Array[Int32]) -> Bytes
 
-pub fn build_page(String, Int, Int, Array[Int], Bytes, Int) -> Bytes
+pub fn build_page(String, Int32, Int32, Array[Int32], Bytes, Int32) -> Bytes
 
-pub fn build_plain_page(String, Bytes, Int) -> Bytes
+pub fn build_plain_page(String, Bytes, Int32) -> Bytes
 
 // Errors
 
