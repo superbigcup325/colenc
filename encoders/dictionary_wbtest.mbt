@@ -182,3 +182,11 @@ test "dictionary: an empty column owns an empty dictionary" {
     }
   }
 }
+
+///|
+test "planner keeps the first appearance of an extreme value" {
+  let values = [-2147483648, 2147483647, 0, -1, -2147483648, 2147483647, 0, -1]
+  let (distinct, indices) = plan_int32(values)
+  assert_eq(distinct, [-2147483648, 2147483647, 0, -1])
+  assert_eq(indices, [0L, 1L, 2L, 3L, 0L, 1L, 2L, 3L])
+}

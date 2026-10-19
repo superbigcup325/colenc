@@ -694,10 +694,96 @@ fn bench_candidates(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
 }
 
 ///|
+/// The dictionary path on its own: the planner plus the index stream, which the
+/// `rle` section prices separately.
+fn bench_dict(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
+  let count = 500000
+  let low_card = @colenc_types.ColBuf::Int32s(
+    Array::makei(count, fn(i) { i % 16 }),
+  )
+  record(b, label("dict", "int32-lowcard-encode", count * 4, count), fn() {
+    let got = dictionary_encode(low_card) catch { _ => None }
+    let size = match got {
+      Some(encoded) => encoded.dictionary.length() + encoded.indices.length()
+      None => 0
+    }
+    sink.val = sink.val + size
+  })
+  let strings = @colenc_types.ColBuf::ByteArrays(
+    Array::makei(200000, fn(i) { @utf8.encode("label-\{(i % 16).to_string()}") }),
+  )
+  record(b, label("dict", "string-lowcard-encode", 200000 * 11, 200000), fn() {
+    let got = dictionary_encode(strings) catch { _ => None }
+    let size = match got {
+      Some(encoded) => encoded.dictionary.length() + encoded.indices.length()
+      None => 0
+    }
+    sink.val = sink.val + size
+  })
+}
+
+///|
+/// Isolate what `encode_bool_rle` adds on top of the hybrid stream itself: the
+/// facade path converts the booleans into an Int64 array first.
+fn bench_rle(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
+  let count = 500000
+  let flags = Array::makei(count, fn(i) { i % 3 == 0 })
+  let as_ints = Array::makei(count, fn(i) { if i % 3 == 0 { 1L } else { 0L } })
+  record(b, label("rle", "bool-facade", (count + 7) / 8, count), fn() {
+    let out = Buffer()
+    @encoders.encode_bool_rle(flags, out) catch {
+      _ => ()
+    }
+    sink.val = sink.val + out.length()
+  })
+  record(b, label("rle", "hybrid-w1", (count + 7) / 8, count), fn() {
+    let out = Buffer()
+    @encoders.encode_rle_hybrid(as_ints[:], 1, out) catch {
+      _ => ()
+    }
+    sink.val = sink.val + out.length()
+  })
+  // The dictionary encoder's second half is this stream: 500k indices at width
+  // four, no runs, so the difference against `encode_dictionary` is the plan.
+  let indices = Array::makei(count, fn(i) { (i % 16).to_int64() })
+  record(b, label("rle", "hybrid-w4-indices", count * 4, count), fn() {
+    let out = Buffer()
+    @encoders.encode_rle_hybrid(indices[:], 4, out) catch {
+      _ => ()
+    }
+    sink.val = sink.val + out.length()
+  })
+  record(b, label("rle", "flags-array", (count + 7) / 8, count), fn() {
+    let built = Array::makei(count, fn(i) { if flags[i] { 1L } else { 0L } })
+    sink.val = sink.val + built.length()
+  })
+  record(b, label("rle", "decode-w1", (count + 7) / 8, count), fn() {
+    let out = Buffer()
+    @encoders.encode_rle_hybrid(as_ints[:], 1, out) catch {
+      _ => ()
+    }
+    let (back, _) = @encoders.decode_rle_hybrid(out.to_bytes(), 1, count) catch {
+      _ => ([], 0)
+    }
+    sink.val = sink.val + back.length()
+  })
+}
+
+///|
 fn main {
   let bencher = @bench.Bench()
   let sink = @ref.Ref(0)
   let argv = @env.args()
+  if argv.length() > 1 && argv[1] == "dict" {
+    bench_dict(bencher, sink)
+    println(bencher.dump_summaries())
+    return
+  }
+  if argv.length() > 1 && argv[1] == "rle" {
+    bench_rle(bencher, sink)
+    println(bencher.dump_summaries())
+    return
+  }
   if argv.length() > 1 && argv[1] == "candidates" {
     bench_candidates(bencher, sink)
     println(bencher.dump_summaries())

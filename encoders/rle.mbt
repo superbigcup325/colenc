@@ -22,7 +22,10 @@
 priv struct RleEncoderState {
   bit_width : Int32
   out : @buffer.Buffer
+  /// Pending literal values, preallocated: a literal run is capped at 63 groups
+  /// (504 values) by the one-byte indicator, so the buffer never needs to grow.
   literal : Array[Int64]
+  mut literal_count : Int32
   buffered : FixedArray[Int64]
   mut buffered_count : Int32
   mut current : Int64
@@ -34,7 +37,8 @@ fn RleEncoderState::new(bit_width : Int32, out : @buffer.Buffer) -> Self {
   {
     bit_width,
     out,
-    literal: [],
+    literal: Array::make(512, 0L),
+    literal_count: 0,
     buffered: FixedArray::make(8, 0L),
     buffered_count: 0,
     current: 0L,
@@ -71,12 +75,16 @@ fn RleEncoderState::put(
 fn RleEncoderState::flush_literal(
   self : RleEncoderState,
 ) -> Unit raise @types.EncodingError {
-  let groups = self.literal.length() / 8
+  let groups = self.literal_count / 8
   self.out.write_byte(((groups << 1) | 1).to_byte())
-  @primitives.bit_pack(self.literal[:], self.bit_width, self.out) catch {
+  @primitives.bit_pack(
+    self.literal[:self.literal_count],
+    self.bit_width,
+    self.out,
+  ) catch {
     _ => raise @types.EncodingError::InvalidBitWidth(self.bit_width)
   }
-  self.literal.clear()
+  self.literal_count = 0
 }
 
 ///|
@@ -98,16 +106,17 @@ fn RleEncoderState::flush_buffered(
   if self.repeat_count >= 8 {
     // the buffered values are the first eight of a repeated run
     self.buffered_count = 0
-    if self.literal.length() > 0 {
+    if self.literal_count > 0 {
       self.flush_literal()
     }
     return
   }
   for index in 0..<self.buffered_count {
-    self.literal.push(self.buffered[index])
+    self.literal[self.literal_count] = self.buffered[index]
+    self.literal_count += 1
   }
   self.buffered_count = 0
-  let groups = self.literal.length() / 8
+  let groups = self.literal_count / 8
   if groups + 1 >= 64 {
     // the one-byte indicator cannot describe another group
     self.flush_literal()
@@ -119,10 +128,8 @@ fn RleEncoderState::flush_buffered(
 fn RleEncoderState::finish(
   self : RleEncoderState,
 ) -> Unit raise @types.EncodingError {
-  if self.literal.length() > 0 ||
-    self.repeat_count > 0 ||
-    self.buffered_count > 0 {
-    let all_repeat = self.literal.length() == 0 &&
+  if self.literal_count > 0 || self.repeat_count > 0 || self.buffered_count > 0 {
+    let all_repeat = self.literal_count == 0 &&
       (self.repeat_count == self.buffered_count || self.buffered_count == 0)
     if self.repeat_count > 0 && all_repeat {
       self.flush_repeated()
@@ -132,7 +139,8 @@ fn RleEncoderState::finish(
         self.buffered_count += 1
       }
       for index in 0..<self.buffered_count {
-        self.literal.push(self.buffered[index])
+        self.literal[self.literal_count] = self.buffered[index]
+        self.literal_count += 1
       }
       self.buffered_count = 0
       self.flush_literal()
@@ -253,15 +261,12 @@ pub fn encode_bool_rle(
   values : Array[Bool],
   out : @buffer.Buffer,
 ) -> Unit raise @types.EncodingError {
-  let flags = Array::makei(values.length(), fn(index) {
-    if values[index] {
-      1L
-    } else {
-      0L
-    }
-  })
   let stream = Buffer()
-  encode_rle_hybrid(flags[:], 1, stream)
+  let state = RleEncoderState::new(1, stream)
+  for value in values {
+    state.put(if value { 1L } else { 0L })
+  }
+  state.finish()
   let bytes = stream.to_bytes()
   out.write_int_le(bytes.length())
   out.write_bytes(bytes)
