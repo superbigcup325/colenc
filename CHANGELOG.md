@@ -4,7 +4,7 @@ All notable changes to this project are documented in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.0] - 2026-10-19
 
 ### Added
 
@@ -94,8 +94,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `docs/scoreboard.md`: on the reference machine native reaches 2.3 GB/s
   encoding and 3.2 GB/s decoding for monotonic INT64 deltas; wasm-gc 1.1 and
   1.0 GB/s
-- P5 was validated against moonlake in an unmerged branch (read side, write path,
-  spill re-encoding); it is not part of this package and is not merged
+- First consumer integration, on moonlake's `main` (read side, write path,
+  spill re-encoding); it stays out of this package, which keeps a stable
+  version-numbered surface
 
-P0 through P4 are complete; the package is ready to publish once the repository
-link and the release are in place.
+P0 through P4 are complete, and this is the first published release.
+
+[Unreleased]: https://github.com/superbigcup325/colenc/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/superbigcup325/colenc/releases/tag/v0.1.0

@@ -25,9 +25,10 @@ fixture reproducibility, byte diffs for every family, and container interop with
 DuckDB and pyarrow as judges.
 
 Integration with [moonlake](https://github.com/superbigcup325/moonlake) is
-validated in an unmerged branch: Parquet decoding routed through colenc, a new
-write path, and the spill format re-encoded (40% smaller). The package is not
-published to mooncakes yet, so the dependency is a workspace member for now.
+merged on its `main`: Parquet decoding routed through colenc, a new write path,
+and the spill format re-encoded (40% smaller). The package is published as
+`superbigcup325/colenc@0.1.0` on mooncakes, so a consumer resolves it from the
+registry by version.
 
 ## Quick start
 

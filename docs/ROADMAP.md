@@ -7,8 +7,9 @@
 > License: Apache-2.0
 
 **Status (2026-10)**: project scoped, design settled; **P0 through P4 complete in this package** — every v1 encoding family sits behind the facade dispatch, E1 to E6 are byte-identical to the reference, E7 round-trips with its scoreboard measured, and CI runs the three-backend matrix plus the byte-diff and container jobs
-**Integration (P5)**: validated against moonlake in an unmerged branch — the Parquet reader routed through colenc, a write path added, and the spill format re-encoded (8.08 → 4.86 MiB on the bake-off workload). It is not merged, and this package is not published yet
-**Next step**: publish the package, land the consumer integration, then phase two — bitmap indexes and approximate aggregations
+**Integration (P5)**: merged into moonlake's `main` — the Parquet reader routed through colenc, a write path added, and the spill format re-encoded (8.08 → 4.86 MiB on the bake-off workload)
+**Release**: published as `superbigcup325/colenc@0.1.0` on mooncakes; the consumer depends on that version from the registry
+**Next step**: land the consumer's pending commits, then phase two — bitmap indexes and approximate aggregations
 
 ---
 
