@@ -1,8 +1,11 @@
-# Python side of the acceptance rig (T0.1 / T0.3).
+# Python side of the acceptance rig (T0.1 / T0.3 / P6).
 #
 # Pinned on purpose: the reference samples are compared byte-for-byte, and a
 # different pyarrow release may pick different encodings (run-selection
 # heuristic, dictionary threshold) or ship a different `created_by` string.
-# Bump these two only together with regenerated fixtures.
+# pyroaring is the same deal for the bitmap index: CRoaring's container choice
+# and run-optimisation rule are what the byte diffs are pinned to.
+# Bump these only together with regenerated fixtures.
 pyarrow==26.0.0
 duckdb==1.5.6
+pyroaring==1.2.0

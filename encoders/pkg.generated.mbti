@@ -41,6 +41,8 @@ pub fn decode_int64(BytesView, Int) -> Array[Int64] raise @types.EncodingError
 
 pub fn decode_rle_hybrid(BytesView, Int, Int, offset? : Int) -> (Array[Int64], Int) raise @types.EncodingError
 
+pub fn decode_roaring(BytesView) -> Array[Int] raise @types.EncodingError
+
 pub fn encode_bool(Array[Bool], @buffer.Buffer) -> Unit
 
 pub fn encode_bool_rle(Array[Bool], @buffer.Buffer) -> Unit raise @types.EncodingError
@@ -73,11 +75,32 @@ pub fn encode_int64(Array[Int64], @buffer.Buffer) -> Unit
 
 pub fn encode_rle_hybrid(ArrayView[Int64], Int, @buffer.Buffer) -> Unit raise @types.EncodingError
 
+pub fn encode_roaring(Array[Int], @buffer.Buffer) -> Unit raise @types.EncodingError
+
+pub fn encode_roaring_run_optimized(Array[Int], @buffer.Buffer) -> Unit raise @types.EncodingError
+
 pub fn read_u32_le(BytesView, Int) -> Int
 
 // Errors
 
 // Types and methods
+pub(all) struct RoaringBitmap {
+  // private fields
+}
+pub fn RoaringBitmap::add(Self, Int) -> Unit raise @types.EncodingError
+pub fn RoaringBitmap::cardinality(Self) -> Int
+pub fn RoaringBitmap::contains(Self, Int) -> Bool
+pub fn RoaringBitmap::from_bytes(BytesView) -> Self raise @types.EncodingError
+pub fn RoaringBitmap::from_bytes_with_consumed(BytesView) -> (Self, Int) raise @types.EncodingError
+pub fn RoaringBitmap::from_ids(Array[Int]) -> Self raise @types.EncodingError
+pub fn RoaringBitmap::intersect(Self, Self) -> Self
+pub fn RoaringBitmap::is_empty(Self) -> Bool
+pub fn RoaringBitmap::new() -> Self
+pub fn RoaringBitmap::run_optimize(Self) -> Unit
+pub fn RoaringBitmap::serialize(Self, @buffer.Buffer) -> Unit
+pub fn RoaringBitmap::to_array(Self) -> Array[Int]
+pub fn RoaringBitmap::to_bytes(Self) -> Bytes
+pub fn RoaringBitmap::union(Self, Self) -> Self
 
 // Type aliases
 

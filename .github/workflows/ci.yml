@@ -110,5 +110,9 @@ jobs:
         run: python3 harness/check_bss.py
       - name: FSST round trip and scoreboard
         run: python3 harness/check_fsst.py
+      - name: Roaring cases are reproducible
+        run: python3 harness/make_roaring_cases.py --check
+      - name: Roaring byte diff
+        run: python3 harness/check_roaring.py
       - name: Container interop
         run: harness/check_container.sh

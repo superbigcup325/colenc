@@ -9,7 +9,8 @@
 **Status (2026-10)**: project scoped, design settled; **P0 through P4 complete in this package** — every v1 encoding family sits behind the facade dispatch, E1 to E6 are byte-identical to the reference, E7 round-trips with its scoreboard measured, and CI runs the three-backend matrix plus the byte-diff and container jobs
 **Integration (P5)**: merged into moonlake's `main` — the Parquet reader routed through colenc, a write path added, and the spill format re-encoded (8.08 → 4.86 MiB on the bake-off workload)
 **Release**: published as `superbigcup325/colenc@0.1.0` on mooncakes; the consumer depends on that version from the registry
-**Next step**: land the consumer's pending commits, then phase two — bitmap indexes and approximate aggregations
+**Phase two (P6)**: the bitmap index landed — E8 Roaring is byte-identical to CRoaring, container shapes and the run-optimisation rule included, judged by pyroaring
+**Next step**: land the consumer's pending commits, then approximate aggregations (HLL / t-digest)
 
 ---
 
@@ -59,10 +60,13 @@ Physical types: `Int32` / `Int64` / `Float` / `Double` / `ByteArray` / `Bool`
 | E5 | DELTA_BYTE_ARRAY | ByteArray (shared prefixes) | round-trip + byte diff | done — byte-identical |
 | E6 | BYTE_STREAM_SPLIT | Float/Double | round-trip + byte diff | done — byte-identical |
 | E7 | FSST | ByteArray (high-cardinality short strings) | round-trip + compression scoreboard | done — round trip + scoreboard, no byte diff (§4 exception) |
+| E8 | Roaring bitmap | Int32 ids (a set, not a sequence) | round-trip + byte diff | done — byte-identical to CRoaring, both container modes |
 
 E0–E6 follow the Parquet spec; **choice bits align with the reference implementation** (RLE's run-selection heuristic, the dictionary threshold and bit-width derivation, DELTA's block 128 / miniblock 4). If the choice bits drift, byte diffing becomes meaningless — so these rules are spelled out one by one in the README
 
 E7 FSST is not a native Parquet encoding, so its criteria are downgraded (§4)
+
+E8 is the first phase-two family: a bitmap index rather than a page encoding. It keeps the byte layer by aligning to CRoaring through pyroaring — container shape (array while a container holds 4096 ids, bitmap above), the run-optimisation rule (a run form only when strictly smaller) and the offset-table rule. It has no container-interop layer, because a bitmap index is not a Parquet page encoding
 
 ## 3. Stage plan
 
@@ -76,6 +80,7 @@ Every stage has deliverables and an exit criterion, and **no stage starts until 
 | **P3** delta family | E3 / E4 / E5 | all three round-trip + byte diff; monotonic-column ratios on the scoreboard |
 | **P4** E6 + E7 | BYTE_STREAM_SPLIT + FSST | E6 full criteria; E7 round-trip + scoreboard |
 | **P5** integration | consumed by a columnar engine: read-side hookup, write-side additions, spill serialization switched to encodings | consumer regression all green + on-disk size and IO gains recorded |
+| **P6** bitmap index (phase two) | E8 Roaring: container shapes, run optimisation, portable serialization, set operations | round-trip properties green; every container shape byte-identical to CRoaring through pyroaring; the fixture generator proves each case still exercises the shape it names |
 
 P0 is the feasibility precondition: if the acceptance rig cannot be made to work, the whole "use a reference implementation as judge" route does not hold, the design needs re-evaluation, and no encodings get piled on top
 
@@ -111,7 +116,10 @@ Not in v1 (the boundary is written down to stop scope creep):
 - **SIMD kernels** — scalar + lookup tables to get the criteria passing first; vectorization is phase two
 - **Page-level index / Bloom filter / encryption / column statistics**
 
-Phase-two directions: bitmap indexes (Roaring format, cross-checked against the C/Java implementations file by file) and approximate aggregations (HLL / t-digest with property-tested error bounds)
+Phase two, in progress:
+
+- **Bitmap indexes** — Roaring format, cross-checked against the C/Java implementations file by file. Landed as E8 / P6: portable serialization byte-identical to CRoaring, container shapes and the run-optimisation rule aligned, set operations in place
+- **Approximate aggregations** — HLL / t-digest with property-tested error bounds (not started)
 
 ## 7. Engineering conventions
 

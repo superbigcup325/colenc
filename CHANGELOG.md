@@ -4,6 +4,27 @@ All notable changes to this project are documented in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Roaring bitmap (E8, phase two): `RoaringBitmap` with `from_ids`, `add`,
+  `contains`, `cardinality`, `union`, `intersect`, `run_optimize` and the
+  portable serialization (`to_bytes` / `from_bytes`, plus the
+  `from_bytes_with_consumed` form for a stream that carries several), and the
+  column-shaped path through `Encoding::Roaring`
+- The portable layout is byte-identical to CRoaring through pyroaring: array
+  containers while a container holds at most 4096 ids and bitmaps above that,
+  run containers only when `run_optimize` finds the run form strictly smaller,
+  and the offset table written whenever no container is a run and only for four
+  or more containers otherwise. Decoding accepts run containers either way
+- Two new `EncodingError` variants carry the offset: `OutOfRange` for an id
+  outside 0..2^31-1 and `Corrupt` for a malformed bitmap structure
+- Harness: `make_roaring_cases.py` (twelve cases, each asserting that its
+  reference output really contains the container shapes it names) plus
+  `check_roaring.py`, `roaring_probe/`, and pyroaring pinned as the reference
+  judge
+
 ## [0.1.0] - 2026-10-19
 
 ### Added

@@ -235,6 +235,36 @@ BSS is byte-diffed like the other Parquet encodings. FSST has no reference
 format, so `fsst_probe` compresses, decompresses, verifies the round trip and
 prints both sizes; `check_fsst.py` collects the ratios.
 
+## Roaring bitmap byte diff
+
+```bash
+python3 harness/make_roaring_cases.py            # regenerate the cases
+python3 harness/make_roaring_cases.py --check    # verify they are reproducible
+python3 harness/check_roaring.py                 # byte-diff every case
+```
+
+Twelve cases cover the shapes that matter: the bare empty header, an array
+container, the container key edge (65535 / 65536), three and four containers
+(the offset table is unconditional without runs), a 5000-id bitmap container,
+array and bitmap containers side by side, the largest representable id,
+duplicates collapsing, and three run-optimised shapes (one run container, four
+run containers with the offset table still written, and a mix).
+
+The reference is CRoaring through **pyroaring**, pinned in `requirements.txt`.
+Two references are generated per case because the reference has two paths: one
+built through `BitMap.add` (no run optimisation, which is what colenc writes by
+default) and one with `run_optimize()` applied (what `--run-optimize` must
+match). `roaring_probe` takes the same two paths:
+
+```bash
+moon run --target native harness/roaring_probe -- \
+  --in harness/fixtures/roaring/roaring_mixed.input.i32le --out out.bin
+```
+
+The generator parses its own reference output and fails when a case no longer
+contains the container shapes its label claims, so a fixture cannot silently
+drift into testing one shape twice.
+
 ## P1 evidence
 
 - `check_rle.py`: three cases, all byte-identical to the reference, covering

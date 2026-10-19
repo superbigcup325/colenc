@@ -17,7 +17,9 @@ delta family, BYTE_STREAM_SPLIT and FSST, with E1 to E6 byte-identical to the
 reference and E7 measured by round trip plus the scoreboard (no Parquet-native
 FSST exists). CI runs the three-backend test matrix plus the harness jobs.
 **P5 (moonlake) is merged on that project's `main`**, and the package is
-published as `superbigcup325/colenc@0.1.0`.
+published as `superbigcup325/colenc@0.1.0`. **Phase two has started**: E8 is a
+Roaring bitmap index, byte-identical to CRoaring (judged by pyroaring, not
+parquet-cpp), with its set operations and portable serialization in place.
 
 ## Layout
 
@@ -30,7 +32,7 @@ docs/ROADMAP.md          the public roadmap
 types/                   neutral model: PhysicalType / Encoding / ColBuf / errors
 primitives/              L1: varint / zigzag / bit packing / bit width
 encoders/                L2: PLAIN, RLE hybrid, dictionary, delta family,
-                         BYTE_STREAM_SPLIT and FSST
+                         BYTE_STREAM_SPLIT, FSST and the Roaring bitmap
 facade.mbt               L3: encode_column / decode_column dispatch
 harness/                 acceptance rig (repository only, excluded from the package)
 .githooks/               pre-commit gate
@@ -63,6 +65,10 @@ its branch in `facade.mbt`.
   `python3 harness/check_delta.py` byte-diffs the delta family,
   `python3 harness/check_bss.py` byte-diffs BYTE_STREAM_SPLIT,
   `python3 harness/check_fsst.py` round-trips FSST and prints its ratio,
+  `python3 harness/make_roaring_cases.py [--check]` regenerates or verifies the
+  bitmap cases and asserts each one still exercises its container shape,
+  `python3 harness/check_roaring.py` byte-diffs the bitmap in both container
+  modes,
   `harness/check_container.sh` proves the container path end to end
 - `moon run harness/writer_min -- <out.parquet>` writes the minimal container
 - **Before committing**, run the quartet:
@@ -183,6 +189,21 @@ tracked documents ship in the release archive.
   the limit
 - **A dictionary with one entry uses bit width 1, not 0**, and five entries use
   three bits; widths follow `max(1, bit_width_for(size - 1))`
+- **pyroaring's constructor run-optimises, `add` does not** → `BitMap(values)`
+  comes back with run containers wherever they are smaller, while
+  `BitMap()` + `add` stays on the array/bitmap path → colenc writes the
+  incremental path by default and only emits runs behind `run_optimize`, so the
+  fixtures carry two references per case (with and without `run_optimize()`)
+- **A run conversion has to be strictly smaller** → the reference keeps the
+  array form when the run form ties it (cardinality `1 + 2 * runs`), and the
+  bitmap container at 4096 ids is also a tie in byte count → compare sizes, not
+  cardinalities, when mirroring the rule
+- **The offset table is not always there** → it is written whenever no container
+  is a run container, and with runs only once there are four or more containers;
+  reading it unconditionally desynchronises the whole stream
+- **The Roaring surface takes INT32 ids** → the portable format's upper u32 half
+  needs a column type `ColBuf` does not have yet, so ids above 2^31-1 are
+  rejected with `OutOfRange` rather than truncated
 - **Prefer prelude and non-deprecated core APIs** → `Buffer()` replaces
   `@buffer.new()`, and `String::to_bytes` is deprecated in favour of
   `@utf8.encode`; `--deny-warn` turns both into build failures

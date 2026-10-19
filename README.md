@@ -24,6 +24,10 @@ three-backend test matrix (native, wasm-gc, js) plus the acceptance jobs:
 fixture reproducibility, byte diffs for every family, and container interop with
 DuckDB and pyarrow as judges.
 
+Phase two has started with the bitmap index: a Roaring bitmap (E8) that is
+byte-identical to CRoaring, including its container choices and the run
+optimisation, judged by pyroaring instead of parquet-cpp.
+
 Integration with [moonlake](https://github.com/superbigcup325/moonlake) is
 merged on its `main`: Parquet decoding routed through colenc, a new write path,
 and the spill format re-encoded (40% smaller). The package is published as
@@ -74,6 +78,20 @@ uses `encode_dictionary` / `decode_dictionary` instead of `encode_column`.
 Column buffers are dense value arrays: NULL handling (definition levels) belongs
 to the caller, which is what keeps the encoders page-shaped.
 
+The bitmap index has its own type, because a bitmap index is queried, not just
+decoded:
+
+```moonbit
+let left = @colenc_encoders.RoaringBitmap::from_ids([1, 2, 3, 100000])
+let right = @colenc_encoders.RoaringBitmap::from_ids([3, 4, 100000])
+let both = left.intersect(right)          // {3, 100000}
+let bytes = left.to_bytes()               // portable Roaring
+let back = @colenc_encoders.RoaringBitmap::from_bytes(bytes)
+```
+
+`encode_column` / `decode_column` reach it through `Encoding::Roaring` for the
+column-shaped path; `run_optimize` turns few-run containers into runs first.
+
 ## Encodings
 
 | # | Family | Applies to | Criteria | Choice bits aligned with the reference |
@@ -86,6 +104,10 @@ to the caller, which is what keeps the encoders page-shaped.
 | E5 | DELTA_BYTE_ARRAY | BYTE_ARRAY | round trip + byte diff | prefix lengths as E3, suffixes as E4 |
 | E6 | BYTE_STREAM_SPLIT | FLOAT/DOUBLE | round trip + byte diff + container | one plane per byte position, little-endian |
 | E7 | FSST | BYTE_ARRAY | round trip + scoreboard | colenc framing: symbol table, escape 255 |
+| E8 | Roaring bitmap | INT32 ids (set semantics) | round trip + byte diff | array ≤ 4096 ids else bitmap; runs only when strictly smaller; offset-table rule |
+
+E8 is the start of phase two: a bitmap index rather than a page encoding, so its
+reference judge is CRoaring (through pyroaring) and not parquet-cpp.
 
 ## Scoreboard
 
@@ -103,6 +125,9 @@ live):
 | shared-prefix strings | DELTA_BYTE_ARRAY | 9.0% |
 | float/double columns | BYTE_STREAM_SPLIT | 100% (size neutral by design) |
 | repetitive strings | FSST | 60.4% – 74.5% |
+| 5000 dense INT32 ids | Roaring bitmap | 41.0% (15 bytes with runs) |
+| 14198 ids across four containers | Roaring bitmap | 28.9% (61 bytes with runs) |
+| a handful of ids | Roaring bitmap | over 100% — the header dominates |
 
 FSST builds its symbol table from a bounded sample (64 KiB) and **stores raw
 values when compression does not pay**, so the encoded column never exceeds the
@@ -129,6 +154,14 @@ monotonic INT64 deltas on native, and about 1.1 GB/s / 1.0 GB/s on wasm-gc.
 - **FSST framing is colenc's own**; Parquet has no native FSST, so no byte
   diff or container check applies, and the framing falls back to stored raw
   values when the table does not pay for itself
+- **The Roaring bitmap is a set encoding**: a column is the set of its ids, so
+  order and duplicates do not survive a round trip and a decode returns them
+  ascending. Ids are non-negative INT32 (0..2^31-1); the format's upper u32 half
+  needs a column type this model does not have yet and is rejected rather than
+  truncated. Run containers are written only when `run_optimize` is asked for,
+  matching the reference's incremental path, and decoding accepts them either
+  way. It is a bitmap index, not a Parquet page encoding, so the container
+  interop layer does not apply
 - **No SIMD kernels**: scalar + lookup tables first
 
 ## Neighbours and the seams
@@ -149,17 +182,17 @@ DuckDB **and** pyarrow with equal values.
 
 The rig lives in the source repository under `harness/` and is not shipped in
 the package: `make_refs.py --check` regenerates the fixtures, `check_rle.py`,
-`check_dict.py`, `check_delta.py` and `check_bss.py` byte-diff each family,
-`check_fsst.py` verifies the FSST round trip and ratio, and
-`check_container.sh` runs the container interop end to end. CI runs all of them
-on every push.
+`check_dict.py`, `check_delta.py`, `check_bss.py` and `check_roaring.py`
+byte-diff each family, `check_fsst.py` verifies the FSST round trip and ratio,
+and `check_container.sh` runs the container interop end to end. CI runs all of
+them on every push.
 
 ## Layout
 
 ```
 types/        neutral model: PhysicalType / Encoding / ColBuf / errors
 primitives/   L1: varint, zigzag, bit packing, bit width
-encoders/     L2: PLAIN, RLE hybrid, dictionary, delta family, BSS, FSST
+encoders/     L2: PLAIN, RLE hybrid, dictionary, delta family, BSS, FSST, Roaring
 facade.mbt    L3: encode_column / decode_column + dictionary entry points
 examples/     runnable demo
 harness/      acceptance rig: fixtures, byte diffs, containers, judges

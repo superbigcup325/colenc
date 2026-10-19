@@ -1,0 +1,251 @@
+{
+  "cases": [
+    {
+      "count": 0,
+      "distinct": 0,
+      "input_file": "roaring_empty.input.i32le",
+      "name": "roaring_empty",
+      "note": "the bare no-run header",
+      "plain_bytes": 0,
+      "reference_bytes": 8,
+      "reference_file": "roaring_empty.ref.bin",
+      "reference_shape": {
+        "cardinality": 0,
+        "cookie": 12346,
+        "offsets": true,
+        "shapes": [],
+        "size": 0
+      }
+    },
+    {
+      "count": 1,
+      "distinct": 1,
+      "input_file": "roaring_single.input.i32le",
+      "name": "roaring_single",
+      "note": "one array container, offset table present",
+      "plain_bytes": 4,
+      "reference_bytes": 18,
+      "reference_file": "roaring_single.ref.bin",
+      "reference_shape": {
+        "cardinality": 1,
+        "cookie": 12346,
+        "offsets": true,
+        "shapes": [
+          "array"
+        ],
+        "size": 1
+      }
+    },
+    {
+      "count": 5,
+      "distinct": 5,
+      "input_file": "roaring_small_array.input.i32le",
+      "name": "roaring_small_array",
+      "note": "two array containers, one at the container edge",
+      "plain_bytes": 20,
+      "reference_bytes": 34,
+      "reference_file": "roaring_small_array.ref.bin",
+      "reference_shape": {
+        "cardinality": 5,
+        "cookie": 12346,
+        "offsets": true,
+        "shapes": [
+          "array",
+          "array"
+        ],
+        "size": 2
+      }
+    },
+    {
+      "count": 5,
+      "distinct": 5,
+      "input_file": "roaring_three_containers.input.i32le",
+      "name": "roaring_three_containers",
+      "note": "three containers, still under the run offset rule",
+      "plain_bytes": 20,
+      "reference_bytes": 42,
+      "reference_file": "roaring_three_containers.ref.bin",
+      "reference_shape": {
+        "cardinality": 5,
+        "cookie": 12346,
+        "offsets": true,
+        "shapes": [
+          "array",
+          "array",
+          "array"
+        ],
+        "size": 3
+      }
+    },
+    {
+      "count": 4,
+      "distinct": 4,
+      "input_file": "roaring_four_containers.input.i32le",
+      "name": "roaring_four_containers",
+      "note": "four containers, the offset table is unconditional",
+      "plain_bytes": 16,
+      "reference_bytes": 48,
+      "reference_file": "roaring_four_containers.ref.bin",
+      "reference_shape": {
+        "cardinality": 4,
+        "cookie": 12346,
+        "offsets": true,
+        "shapes": [
+          "array",
+          "array",
+          "array",
+          "array"
+        ],
+        "size": 4
+      }
+    },
+    {
+      "count": 5000,
+      "distinct": 5000,
+      "input_file": "roaring_bitmap_container.input.i32le",
+      "name": "roaring_bitmap_container",
+      "note": "5000 dense ids cross the 4096 array/bitmap threshold",
+      "plain_bytes": 20000,
+      "reference_bytes": 8208,
+      "reference_file": "roaring_bitmap_container.ref.bin",
+      "reference_run_file": "roaring_bitmap_container.ref.run.bin",
+      "reference_shape": {
+        "cardinality": 5000,
+        "cookie": 12346,
+        "offsets": true,
+        "shapes": [
+          "bitmap"
+        ],
+        "size": 1
+      }
+    },
+    {
+      "count": 14198,
+      "distinct": 14198,
+      "input_file": "roaring_mixed.input.i32le",
+      "name": "roaring_mixed",
+      "note": "array and bitmap containers side by side",
+      "plain_bytes": 56792,
+      "reference_bytes": 16436,
+      "reference_file": "roaring_mixed.ref.bin",
+      "reference_run_file": "roaring_mixed.ref.run.bin",
+      "reference_shape": {
+        "cardinality": 14198,
+        "cookie": 12346,
+        "offsets": true,
+        "shapes": [
+          "array",
+          "bitmap",
+          "array",
+          "bitmap"
+        ],
+        "size": 4
+      }
+    },
+    {
+      "count": 2,
+      "distinct": 2,
+      "input_file": "roaring_top_id.input.i32le",
+      "name": "roaring_top_id",
+      "note": "the largest representable id lands in container 32767",
+      "plain_bytes": 8,
+      "reference_bytes": 28,
+      "reference_file": "roaring_top_id.ref.bin",
+      "reference_shape": {
+        "cardinality": 2,
+        "cookie": 12346,
+        "offsets": true,
+        "shapes": [
+          "array",
+          "array"
+        ],
+        "size": 2
+      }
+    },
+    {
+      "count": 70,
+      "distinct": 3,
+      "input_file": "roaring_duplicates.input.i32le",
+      "name": "roaring_duplicates",
+      "note": "duplicates collapse: a bitmap is a set",
+      "plain_bytes": 280,
+      "reference_bytes": 22,
+      "reference_file": "roaring_duplicates.ref.bin",
+      "reference_shape": {
+        "cardinality": 3,
+        "cookie": 12346,
+        "offsets": true,
+        "shapes": [
+          "array"
+        ],
+        "size": 1
+      }
+    },
+    {
+      "count": 200,
+      "distinct": 200,
+      "input_file": "roaring_run_single.input.i32le",
+      "name": "roaring_run_single",
+      "note": "run optimisation wins in one container",
+      "plain_bytes": 800,
+      "reference_bytes": 416,
+      "reference_file": "roaring_run_single.ref.bin",
+      "reference_run_file": "roaring_run_single.ref.run.bin",
+      "reference_shape": {
+        "cardinality": 200,
+        "cookie": 12346,
+        "offsets": true,
+        "shapes": [
+          "array"
+        ],
+        "size": 1
+      }
+    },
+    {
+      "count": 250,
+      "distinct": 250,
+      "input_file": "roaring_run_four.input.i32le",
+      "name": "roaring_run_four",
+      "note": "runs plus four containers: offsets stay in the stream",
+      "plain_bytes": 1000,
+      "reference_bytes": 540,
+      "reference_file": "roaring_run_four.ref.bin",
+      "reference_run_file": "roaring_run_four.ref.run.bin",
+      "reference_shape": {
+        "cardinality": 250,
+        "cookie": 12346,
+        "offsets": true,
+        "shapes": [
+          "array",
+          "array",
+          "array",
+          "array"
+        ],
+        "size": 4
+      }
+    },
+    {
+      "count": 104,
+      "distinct": 104,
+      "input_file": "roaring_run_mixed.input.i32le",
+      "name": "roaring_run_mixed",
+      "note": "one run container next to an array container",
+      "plain_bytes": 416,
+      "reference_bytes": 232,
+      "reference_file": "roaring_run_mixed.ref.bin",
+      "reference_run_file": "roaring_run_mixed.ref.run.bin",
+      "reference_shape": {
+        "cardinality": 104,
+        "cookie": 12346,
+        "offsets": true,
+        "shapes": [
+          "array",
+          "array"
+        ],
+        "size": 2
+      }
+    }
+  ],
+  "source": "pyroaring",
+  "version": "1.2.0"
+}

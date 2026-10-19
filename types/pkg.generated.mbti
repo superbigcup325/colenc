@@ -16,6 +16,8 @@ pub(all) suberror EncodingError {
   Incomplete(Int, Int)
   InvalidIndex(Int, Int)
   InvalidTag(Int)
+  OutOfRange(Int64, Int)
+  Corrupt(Int)
 }
 pub fn EncodingError::message(Self) -> String
 
@@ -47,6 +49,7 @@ pub(all) enum Encoding {
   DeltaByteArray
   ByteStreamSplit
   Fsst
+  Roaring
 }
 
 pub(all) struct EncodingStats {

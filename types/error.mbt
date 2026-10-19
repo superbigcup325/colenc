@@ -19,6 +19,10 @@ pub(all) suberror EncodingError {
   InvalidIndex(Int32, Int32)
   /// An unexpected tag or mode byte in a colenc framing.
   InvalidTag(Int32)
+  /// A value outside the range the encoding can represent: value, offset.
+  OutOfRange(Int64, Int32)
+  /// A malformed structure inside an encoded stream, at this byte offset.
+  Corrupt(Int32)
 }
 
 ///|
@@ -37,6 +41,9 @@ pub fn EncodingError::message(self : EncodingError) -> String {
     InvalidIndex(index, size) =>
       "dictionary index \{index} outside 0..\{size - 1}"
     InvalidTag(tag) => "unexpected tag \{tag}"
+    OutOfRange(value, offset) =>
+      "byte \{offset}: value \{value} outside the representable range"
+    Corrupt(offset) => "byte \{offset}: corrupt stream structure"
   }
 }
 
@@ -51,6 +58,7 @@ pub fn encoding_name(encoding : Encoding) -> String {
     DeltaByteArray => "DELTA_BYTE_ARRAY"
     ByteStreamSplit => "BYTE_STREAM_SPLIT"
     Fsst => "FSST"
+    Roaring => "ROARING"
   }
 }
 

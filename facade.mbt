@@ -77,6 +77,15 @@ pub fn encode_column(
         _ =>
           raise @types.EncodingError::TypeMismatch(column.physical_type(), Fsst)
       }
+    Roaring =>
+      match column {
+        Int32s(values) => @encoders.encode_roaring(values, out)
+        _ =>
+          raise @types.EncodingError::TypeMismatch(
+            column.physical_type(),
+            Roaring,
+          )
+      }
     other => raise @types.EncodingError::Unsupported(other)
   }
   { value_count: column.value_count(), encoded_bytes: out.length() - start, }
@@ -148,6 +157,19 @@ pub fn decode_column(
         ByteArray =>
           @types.ColBuf::ByteArrays(@encoders.decode_fsst(data, count).0)
         _ => raise @types.EncodingError::TypeMismatch(ty, Fsst)
+      }
+    Roaring =>
+      // A bitmap is a set, so it carries its own cardinality: a `count` that
+      // disagrees with the stream is a caller error, not a short read.
+      match ty {
+        Int32 => {
+          let values = @encoders.decode_roaring(data)
+          if count >= 0 && count != values.length() {
+            raise @types.EncodingError::Incomplete(values.length(), count)
+          }
+          @types.ColBuf::Int32s(values)
+        }
+        _ => raise @types.EncodingError::TypeMismatch(ty, Roaring)
       }
     other => raise @types.EncodingError::Unsupported(other)
   }

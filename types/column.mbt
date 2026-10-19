@@ -28,6 +28,10 @@ pub(all) enum Encoding {
   DeltaByteArray
   ByteStreamSplit
   Fsst
+  /// A Roaring bitmap over the column's non-negative INT32 ids. This one is a
+  /// set encoding: a column is treated as a set of ids, so order and duplicates
+  /// do not survive a round trip.
+  Roaring
 }
 
 ///|
