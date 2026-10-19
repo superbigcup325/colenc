@@ -1,0 +1,12 @@
+import {
+  "superbigcup325/colenc",
+  "superbigcup325/colenc/types" @colenc_types,
+  "superbigcup325/colenc/primitives",
+  "superbigcup325/colenc/encoders",
+  "moonbitlang/core/bench",
+  "moonbitlang/core/env",
+  "moonbitlang/core/ref",
+  "moonbitlang/core/encoding/utf8",
+}
+
+pkgtype(kind: "executable")

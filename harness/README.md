@@ -24,12 +24,18 @@ check_delta.py     run the delta probe and diff the stream
 make_bss_cases.py  build BYTE_STREAM_SPLIT cases from the fixtures
 check_bss.py       run the BSS probe and diff the planes
 check_fsst.py      round-trip FSST and print its PLAIN ratio
+make_roaring_cases.py build the bitmap cases and assert their container shapes
+check_roaring.py   byte-diff the bitmap in both container modes
 check_container.sh end-to-end container check: wrap, judge, diff pages
+scoreboard.py      turn `bench` output into docs/scoreboard.md
+bench/             throughput bench the scoreboard reads
+perf/              hotspot probe: primitives, variants, candidate A/B
 rle_probe/         minimal MoonBit CLI around the library's RLE encoder
 dict_probe/        minimal MoonBit CLI around the dictionary encoder
 delta_probe/       minimal MoonBit CLI around the delta encoders
 bss_probe/         minimal MoonBit CLI around BYTE_STREAM_SPLIT
 fsst_probe/        minimal MoonBit CLI around FSST (round trip + ratio)
+roaring_probe/     minimal MoonBit CLI around the Roaring bitmap
 requirements.txt   pinned judge versions (pyarrow, duckdb)
 fixtures/          committed reference samples + manifest
 writer_min/        minimal MoonBit Parquet writer (T0.2)
