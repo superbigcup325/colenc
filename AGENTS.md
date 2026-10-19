@@ -70,6 +70,11 @@ its branch in `facade.mbt`.
   `python3 harness/check_roaring.py` byte-diffs the bitmap in both container
   modes,
   `harness/check_container.sh` proves the container path end to end
+- Throughput has two rigs: `python3 harness/scoreboard.py` regenerates
+  `docs/scoreboard.md` from `harness/bench` (native and wasm-gc), while
+  `moon run --target native --release harness/perf` reports medians and spreads
+  for the primitives, dataset variants and candidate rewrites; `-- candidates`
+  runs only the A/B section
 - `moon run harness/writer_min -- <out.parquet>` writes the minimal container
 - **Before committing**, run the quartet:
   `moon info && moon fmt && moon check --deny-warn && moon test`
@@ -84,8 +89,10 @@ its branch in `facade.mbt`.
 ## Coding convention
 
 - Block style, blocks separated by `///|`
-- Hot loops use unchecked access (indices are constructed by the encoder);
-  every unchecked path gets a battery guard
+- Hot loops stay bounds-checked: the length precondition is checked once at
+  the top of the function, then the loop indexes normally. Measured on this
+  toolchain, `unsafe_get` in the bit unpacker is **not** faster (within noise,
+  and slower at some widths), so the checked form stays — see Known Pitfalls
 - Everything little-endian; no platform branches; no FFI
 - Decoding errors are typed errors carrying an offset ("byte N, item M"), never
   a panic
@@ -204,6 +211,15 @@ tracked documents ship in the release archive.
 - **The Roaring surface takes INT32 ids** → the portable format's upper u32 half
   needs a column type `ColBuf` does not have yet, so ids above 2^31-1 are
   rejected with `OutOfRange` rather than truncated
+- **Unchecked access is not a speedup here** → rewriting the bit unpacker with
+  `unsafe_get` measured 0.271→0.305 ms at width 5, 0.361→0.445 at 12 and
+  0.422→0.497 at 16 (and a wash elsewhere), so bounds checks are not the
+  bottleneck; the win comes from the algorithm (one 64-bit accumulator, whole
+  bytes per step), not from dropping checks
+- **A benchmark without a round-trip guard rewards the error path** → the first
+  `harness/perf` version timed `encode_column` with `Dictionary`, which the
+  facade rejects on purpose, and the swallowed error read as 23 ns per call;
+  every case now asserts the round trip and aborts instead of measuring a raise
 - **Prefer prelude and non-deprecated core APIs** → `Buffer()` replaces
   `@buffer.new()`, and `String::to_bytes` is deprecated in favour of
   `@utf8.encode`; `--deny-warn` turns both into build failures
