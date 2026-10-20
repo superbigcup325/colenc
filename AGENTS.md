@@ -71,7 +71,9 @@ its branch in `facade.mbt`.
   modes,
   `harness/check_container.sh` proves the container path end to end
 - Throughput has two rigs: `python3 harness/scoreboard.py` regenerates
-  `docs/scoreboard.md` from `harness/bench` (native and wasm-gc), while
+  `docs/scoreboard.md` from `harness/bench` (native and wasm-gc, median of three
+  rounds per phase — one round of the same binary swings by 10-20% on the small
+  cases, so toolchain comparisons go through medians), while
   `moon run --target native --release harness/perf` reports medians and spreads
   for the primitives, dataset variants and candidate rewrites; `-- candidates`
   runs only the A/B section

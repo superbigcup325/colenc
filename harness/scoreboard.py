@@ -4,20 +4,27 @@
 Runs `harness/bench` on native and wasm-gc, converts the tab-separated output
 to MB/s against the PLAIN input size, and writes the markdown tables.
 
+Each phase is measured once per round, and the reported number is the median
+over the rounds: a single round of the same binary swings by 10-20% for the
+small cases on this host, so one round is not enough to compare two runs (a
+toolchain bump, say) without inventing a difference.
+
 Usage:
-    python3 harness/scoreboard.py
+    python3 harness/scoreboard.py [--rounds N]
 """
 
 from __future__ import annotations
 
 import datetime as dt
 import platform
+import statistics
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 TARGETS = ("native", "wasm-gc")
+ROUNDS = 3
 
 
 def run(target: str) -> list[dict]:
@@ -48,6 +55,39 @@ def run(target: str) -> list[dict]:
     if not rows:
         raise SystemExit(f"no bench rows for target {target}")
     return rows
+
+
+def collect(target: str, rounds: int) -> list[dict]:
+    """Median of `rounds` runs, in the order the first round reported."""
+    merged: dict[tuple[str, str], list[dict]] = {}
+    order: list[tuple[str, str]] = []
+    for _ in range(rounds):
+        for row in run(target):
+            key = (row["case"], row["encoding"])
+            if key not in merged:
+                merged[key] = []
+                order.append(key)
+            merged[key].append(row)
+    collected = []
+    for key in order:
+        rows = merged[key]
+        if len(rows) != rounds:
+            raise SystemExit(f"{key}: {len(rows)} of {rounds} rounds reported")
+        sizes = {row["encoded"] for row in rows}
+        if len(sizes) != 1:
+            raise SystemExit(f"{key}: encoded size is not stable across rounds: {sizes}")
+        collected.append(
+            {
+                "case": rows[0]["case"],
+                "encoding": rows[0]["encoding"],
+                "values": rows[0]["values"],
+                "plain": rows[0]["plain"],
+                "encoded": rows[0]["encoded"],
+                "enc_ms": statistics.median(row["enc_ms"] for row in rows),
+                "dec_ms": statistics.median(row["dec_ms"] for row in rows),
+            }
+        )
+    return collected
 
 
 def mb_per_s(plain_bytes: int, milliseconds: float) -> str:
@@ -82,10 +122,15 @@ def cpu_name() -> str:
 
 
 def main() -> int:
+    rounds = ROUNDS
+    if "--rounds" in sys.argv:
+        rounds = int(sys.argv[sys.argv.index("--rounds") + 1])
+    if rounds < 1:
+        raise SystemExit("--rounds must be at least 1")
     version = subprocess.run(
         ["moon", "version"], cwd=ROOT, check=True, capture_output=True, text=True
     ).stdout.splitlines()[0].strip()
-    results = {target: run(target) for target in TARGETS}
+    results = {target: collect(target, rounds) for target in TARGETS}
 
     parts = [
         "# Throughput scoreboard",
@@ -97,8 +142,11 @@ def main() -> int:
         f"- Toolchain: `{version}`",
         "- Method: `harness/bench` (release build) encodes and decodes fixed "
         "datasets, warming up once and then running enough iterations to reach "
-        "roughly 200 ms per phase; MB/s is computed against the PLAIN input "
-        "size. Numbers are single-machine and not comparable across hosts.",
+        f"roughly 200 ms per phase; each figure is the median of {rounds} "
+        "rounds. MB/s is computed against the PLAIN input size. Numbers are "
+        "single-machine and not comparable across hosts, and a single round of "
+        "the same binary still swings by 10-20% on the small cases, so compare "
+        "toolchains or rewrites through medians, never through one run.",
         "- Ratio is encoded bytes against PLAIN for the same column.",
         "",
     ]

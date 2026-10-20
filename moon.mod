@@ -16,6 +16,6 @@ keywords = [ "parquet", "columnar", "encoding", "compression", "bit-packing" ]
 description = "Columnar encoding kernel for MoonBit: the Parquet page-level encoding family as a reusable, verifiable, pluggable library."
 
 import {
-  "moonbitlang/x@0.5.5",
+  "moonbitlang/x@0.5.6",
   "moonbitlang/quickcheck@0.15.0",
 }

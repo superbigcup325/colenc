@@ -25,6 +25,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `check_roaring.py`, `roaring_probe/`, and pyroaring pinned as the reference
   judge
 
+### Changed
+
+- Verified against MoonBit toolchain `0.1.20261016`: the library output is
+  unchanged (all five byte-diff harness checks still match the reference byte
+  for byte, the fixture manifest is still reproducible, and the encoded sizes
+  in the scoreboard are identical), and `docs/scoreboard.md` was regenerated on
+  it
+- `python3 harness/scoreboard.py` now reports the median of three rounds per
+  phase instead of one round, and its header says how noisy a single round is:
+  on the small cases the same binary swings by 10-20% run to run, which is
+  enough to invent a 20% "regression" when comparing two toolchains
+- `moonbitlang/x` 0.5.5 → 0.5.6 (the harness-only dependency)
+
 ## [0.1.0] - 2026-10-19
 
 ### Added
