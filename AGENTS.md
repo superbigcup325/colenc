@@ -306,9 +306,14 @@ tracked documents ship in the release archive.
   collector could follow. Measured on a quiet host, zeroing costs about 7.5 ns
   of a 30-value container's 27.8 ns alloc-and-fill pair (20.4 ns without it)
   and 186 ns per 8 KB bitmap body (456 -> 270 ns); the reader and the sorted
-  build both stop paying it. Do not reach for it where the body is *read*
-  before it is written (a bitmap container built by ORing bits in) — that one
-  still needs the zeroed array
+  build both stop paying it (four interleaved pairs: the 1M-value sparse read
+  1519 -> 1371 us, a sparse array container -9.6%, 32768 one-value containers
+  -7.3%, the sorted build -1.9% to -5.7%). Do not reach for it where the body
+  is *read* before it is written (a bitmap container built by ORing bits in) —
+  that one still needs the zeroed array. One caveat on the rig: `array-make`
+  and other few-microsecond controls moved 18% between two builds whose code
+  for them is identical, so a layout effect can masquerade as a win on the
+  microbenchmarks — trust the dataset cases, and interleave the pairs
 - **The per-value write is at the floor; the per-container control flow was
   not** → the control cases in `harness/perf -- candidates` price the byte-level
   alternatives on 32768 u16 values into a buffer: two `write_byte` calls 38.0 us,

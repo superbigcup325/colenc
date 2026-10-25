@@ -43,6 +43,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   reader and the sorted build create each array with `Array::unsafe_make_uninit`
   and write every slot in the loop that follows. Zeroing a container costs
   about 7.5 ns at 30 values and 186 ns at 8 KB, which is a pass nobody reads.
+  On `harness/perf`, four interleaved pairs on a quiet host put the 1M-value
+  sparse read at 1519 -> 1371 us (-9.8%), a sparse array container at
+  -9.6%, a set of 32768 one-value containers at -7.3% and the sorted build at
+  -1.9% to -5.7%; every path this does not touch stayed within +-1%
 - `RoaringBitmap::from_ids` builds a sorted id column key run by key run instead
   of one `add` per id, and sizes both container arrays from the key span between
   the first and the last id rather than growing them one push at a time. On
