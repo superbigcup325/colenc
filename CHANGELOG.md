@@ -57,7 +57,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   container -67.5%, mixed shapes -65.0%, the sparse column -14.2%, a sparse
   array container -19.9%, a wide-key set -3.4%. On wasm-gc the same A/B is
   -40.2% dense, -40.7% sparse-array, -19.8% wide keys and -2.4% on the 1M
-  column
+  column. In `docs/scoreboard.md` that moves the sparse decode row from 1889 to
+  2377 MB/s and the 300k-id dense row from 38.1 to 114.3 GB/s
 - Serializing a bitmap now plans before it writes: one walk over the containers
   collects each card, each body size and the run flags, adds up the exact byte
   count, and the buffer is created at that size, so nothing is re-derived and
@@ -69,8 +70,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   check per value: the key/card table, the offset table and each container body
   are each validated once and then walked with cursor arithmetic. On
   `harness/perf` `from_bytes` drops 37.9% on the sparse column (324 -> 202 us)
-  and 26.3% on a wide-key set, and the scoreboard's sparse decode row goes from
-  1089 to 1889 MB/s
+  and 26.3% on a wide-key set, and the scoreboard's sparse decode row went from
+  1089 to 1889 MB/s on that change alone
 - The sorted build now counts the distinct values of a key run in the same walk
   that finds the run, instead of a second pass over the ids: on `harness/perf`
   `from_ids` drops 13.4% on the sparse column (314 -> 272 us), 9.4% on the dense
