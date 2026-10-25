@@ -362,16 +362,87 @@ fn container_is_empty(container : RoaringContainer) -> Bool {
 
 ///|
 /// Build a bitmap from ids in any order. Ids must be non-negative INT32.
+///
+/// One validation pass also decides whether the input is ascending, which is
+/// how a sorted column usually arrives (a dictionary index, an id list). A
+/// sorted input is built container by container in a single walk; an unsorted
+/// one falls back to inserting id by id. Both produce the same containers,
+/// because the shape rule looks at the cardinality a container ends with.
 pub fn RoaringBitmap::from_ids(
   ids : Array[Int32],
 ) -> RoaringBitmap raise @types.EncodingError {
-  let bitmap = RoaringBitmap::new()
+  let mut ascending = true
   for index in 0..<ids.length() {
     let id = ids[index]
     if id < 0 || id > ROARING_MAX_ID {
       raise @types.EncodingError::OutOfRange(id.to_int64(), index)
     }
+    if index > 0 && id < ids[index - 1] {
+      ascending = false
+    }
+  }
+  if ascending {
+    return from_ascending_ids(ids)
+  }
+  let bitmap = RoaringBitmap::new()
+  for id in ids {
     bitmap.add(id)
+  }
+  bitmap
+}
+
+///|
+/// Distinct low values in `ids[start..end)`, an already-ascending range.
+fn distinct_in_range(ids : Array[Int32], start : Int32, end : Int32) -> Int32 {
+  let mut count = 0
+  let mut previous = -1
+  for index in start..<end {
+    let low = ids[index] & 0xFFFF
+    if low != previous {
+      count += 1
+      previous = low
+    }
+  }
+  count
+}
+
+///|
+/// Build from ascending ids, one container per key, without a single insert.
+/// The shape comes from the distinct count of the whole key run, which is what
+/// repeated `add` calls would have settled on: an array up to 4096 values and a
+/// bitmap above that. Only `run_optimize` turns a container into runs.
+fn from_ascending_ids(ids : Array[Int32]) -> RoaringBitmap {
+  let bitmap = RoaringBitmap::new()
+  let total = ids.length()
+  let mut start = 0
+  while start < total {
+    let key = ids[start] >> 16
+    let mut end = start
+    while end < total && ids[end] >> 16 == key {
+      end += 1
+    }
+    bitmap.keys.push(key)
+    if distinct_in_range(ids, start, end) <= ROARING_ARRAY_MAX {
+      let values : Array[Int32] = []
+      let mut previous = -1
+      for index in start..<end {
+        let low = ids[index] & 0xFFFF
+        if low != previous {
+          values.push(low)
+          previous = low
+        }
+      }
+      bitmap.containers.push(ArrayContainer(values))
+    } else {
+      let words : Array[Int64] = Array::make(ROARING_WORDS, 0L)
+      for index in start..<end {
+        let low = ids[index] & 0xFFFF
+        let word = low >> 6
+        words[word] = words[word] | (1L << (low & 63))
+      }
+      bitmap.containers.push(BitmapContainer(words))
+    }
+    start = end
   }
   bitmap
 }

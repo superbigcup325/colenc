@@ -425,3 +425,54 @@ test "roaring: mixed operation sequences keep the container invariants" {
     assert_eq(back.to_array(), bitmap.to_array())
   }
 }
+
+///|
+test "roaring: a sorted input builds the same containers as repeated adds" {
+  // The bulk path is an optimisation, not a second definition: whatever the
+  // shape rule settles on for repeated adds, the one-walk build must produce.
+  let cases : Array[Array[Int32]] = [
+    [],
+    [0],
+    [2147483647],
+    [1, 1, 2, 2, 2, 3],
+    consecutive_ids(0, 4096),
+    consecutive_ids(0, 4097),
+    consecutive_ids(0, 65536),
+    consecutive_ids(65530, 20),
+    [0, 65535, 65536, 131072, 2147483647],
+    Array::makei(5000, fn(i) { i * 13 }),
+    Array::makei(4096, fn(i) { 70000 + i * 2 }),
+  ]
+  for ids in cases {
+    let bulk = RoaringBitmap::from_ids(ids)
+    let incremental = RoaringBitmap::new()
+    for id in ids {
+      incremental.add(id)
+    }
+    assert_eq(bulk.to_array(), incremental.to_array())
+    assert_eq(bulk.to_bytes(), incremental.to_bytes())
+    check_container_invariants(bulk)
+    // Duplicates must not change anything, and the run form must agree too.
+    let doubled : Array[Int32] = []
+    for id in ids {
+      doubled.push(id)
+      doubled.push(id)
+    }
+    assert_eq(RoaringBitmap::from_ids(doubled).to_bytes(), bulk.to_bytes())
+    bulk.run_optimize()
+    incremental.run_optimize()
+    assert_eq(bulk.to_bytes(), incremental.to_bytes())
+  }
+}
+
+///|
+test "roaring: an unsorted input still inserts one id at a time" {
+  let ids : Array[Int32] = [9, 1, 7, 3, 3, 1, 65540, 65536, 0]
+  let bitmap = RoaringBitmap::from_ids(ids)
+  let incremental = RoaringBitmap::new()
+  for id in ids {
+    incremental.add(id)
+  }
+  assert_eq(bitmap.to_bytes(), incremental.to_bytes())
+  check_container_invariants(bitmap)
+}
