@@ -47,6 +47,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   takes a wide-key set (32768 one-value containers) down another 16%. The shape
   rule is unchanged: it reads the distinct count of the whole key run, and the
   output stays byte-identical to pyroaring on every boundary case
+- Reading a bitmap back no longer pays a `roaring_read_u16` call and a length
+  check per value: the key/card table, the offset table and each container body
+  are each validated once and then walked with cursor arithmetic. On
+  `harness/perf` `from_bytes` drops 37.9% on the sparse column (324 -> 202 us)
+  and 26.3% on a wide-key set, and the scoreboard's sparse decode row goes from
+  1089 to 1889 MB/s
 - The sorted build now counts the distinct values of a key run in the same walk
   that finds the run, instead of a second pass over the ids: on `harness/perf`
   `from_ids` drops 13.4% on the sparse column (314 -> 272 us), 9.4% on the dense

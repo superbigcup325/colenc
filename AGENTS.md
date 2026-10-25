@@ -268,6 +268,15 @@ tracked documents ship in the release archive.
   remaining fill pass has to stay because an array container's length must be
   exact (`Array` has no truncate), and a lowercase-scratch copy instead of the
   fill was not worth the extra allocation
+- **A per-value read helper costs more than the bytes it reads** → decoding
+  used `roaring_read_u16` per value, so every 16-bit read paid a call and a
+  fresh `offset + 2 > length` check even though the container's byte count was
+  known before the loop. Validating the table (or container) once and walking
+  it with a cursor takes `from_bytes` down 37.9% on the sparse column and 26.3%
+  on a set of 32768 containers; the same treatment applied to the key/card and
+  offset tables, which are walked once per container. `unsafe_get` on top of
+  that is *mixed* (sparse -7.7%, a 32768-container set +1.8%), so the checked
+  indexing stays, matching the convention above
 - **The serialization path is already at the floor, so measure before rewriting
   it** → the control cases in `harness/perf -- candidates` price the two
   alternatives on 32768 u16 values into a buffer: two `write_byte` calls 38.0 us,

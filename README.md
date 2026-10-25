@@ -144,7 +144,7 @@ monotonic INT64 deltas on native, and about 1.1 GB/s / 1.2 GB/s on wasm-gc. The
 scoreboard also carries the bitmap rows, where the set replaces a raw INT32 id
 stream: a million sparse ids encode at 657 MB/s into 2.25 MB (56% of the id
 stream), the same million consecutive ids take 131 KB as bitmap containers and
-230 bytes once run-optimised, and reading a set back costs about 1.1 GB/s of
+230 bytes once run-optimised, and reading a set back costs about 1.9 GB/s of
 input ids. A sorted id column — the usual arrival order — is built container by
 container in a single walk that also counts the distinct values of the key run,
 and the two container arrays are sized from the key span up front; together
