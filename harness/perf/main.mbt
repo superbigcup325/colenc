@@ -921,6 +921,52 @@ fn bench_candidates(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
       abort("the unsafe candidate diverges from the checked one")
     }
   }
+  // What the serialization path costs per value. The bitmap writer used to
+  // reach the buffer one byte at a time, and `to_bytes` grew the buffer from
+  // zero: these three cases price both halves of that.
+  let byte_values : Array[Int32] = Array::makei(WIDE_COUNT, fn(i) { i & 0xFFFF })
+  record(b, label("alloc", "u16-two-bytes", WIDE_COUNT * 2, WIDE_COUNT), fn() {
+    let out = Buffer()
+    for value in byte_values {
+      out.write_byte((value & 0xFF).to_byte())
+      out.write_byte(((value >> 8) & 0xFF).to_byte())
+    }
+    sink.val = sink.val + out.length()
+  })
+  record(
+    b,
+    label("alloc", "u16-two-bytes-hinted", WIDE_COUNT * 2, WIDE_COUNT),
+    fn() {
+      let out = Buffer(size_hint=WIDE_COUNT * 2)
+      for value in byte_values {
+        out.write_byte((value & 0xFF).to_byte())
+        out.write_byte(((value >> 8) & 0xFF).to_byte())
+      }
+      sink.val = sink.val + out.length()
+    },
+  )
+  record(b, label("alloc", "u16-one-call", WIDE_COUNT * 2, WIDE_COUNT), fn() {
+    let out = Buffer()
+    for value in byte_values {
+      out.write_uint16_le(value.to_uint16())
+    }
+    sink.val = sink.val + out.length()
+  })
+  record(
+    b,
+    label("alloc", "u16-scratch-then-write", WIDE_COUNT * 2, WIDE_COUNT),
+    fn() {
+      let scratch : Array[Byte] = Array::make(WIDE_COUNT * 2, 0)
+      for index in 0..<WIDE_COUNT {
+        let value = byte_values[index]
+        scratch[index * 2] = (value & 0xFF).to_byte()
+        scratch[index * 2 + 1] = ((value >> 8) & 0xFF).to_byte()
+      }
+      let out = Buffer(size_hint=WIDE_COUNT * 2)
+      out.write_bytes(Bytes::from_array(scratch))
+      sink.val = sink.val + out.length()
+    },
+  )
   // What a container costs on its own. A bitmap of 32768 one-value containers
   // pays about 30 ns per container; these three cases say whether that is the
   // allocation, the array growth, or neither.

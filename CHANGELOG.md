@@ -47,6 +47,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   takes a wide-key set (32768 one-value containers) down another 16%. The shape
   rule is unchanged: it reads the distinct count of the whole key run, and the
   output stays byte-identical to pyroaring on every boundary case
+- The sorted build now counts the distinct values of a key run in the same walk
+  that finds the run, instead of a second pass over the ids: on `harness/perf`
+  `from_ids` drops 13.4% on the sparse column (314 -> 272 us), 9.4% on the dense
+  one and 9.3% on a wide-key set. The serialization path was measured as well
+  and left alone — the per-value buffer writes are already near the floor of
+  `Buffer::write_byte`, and sizing the buffer exactly from a computed length
+  helped the dense cases but cost 6.5% on a 32768-container set, so it is not
+  there
 - Verified against MoonBit toolchain `0.1.20261016`: the library output is
   unchanged (all five byte-diff harness checks still match the reference byte
   for byte, the fixture manifest is still reproducible, and the encoded sizes

@@ -260,6 +260,25 @@ tracked documents ship in the release archive.
   between the first and the last id takes the encode path down 16% on wide
   keys and 26% on the sparse column. Counting the containers per id instead
   was *slower* on the dense cases, which is why the span estimate stays O(1)
+- **The bulk build used to scan the ids three times** → finding the key run,
+  counting its distinct lows and filling the container were three passes, and
+  on a sparse column the counting pass alone was a third of the build time.
+  Counting inside the walk that finds the run (one `& 0xFFFF`, one compare, one
+  increment per id) takes `from_ids` down 13.4% sparse and 9.4% dense; the
+  remaining fill pass has to stay because an array container's length must be
+  exact (`Array` has no truncate), and a lowercase-scratch copy instead of the
+  fill was not worth the extra allocation
+- **The serialization path is already at the floor, so measure before rewriting
+  it** → the control cases in `harness/perf -- candidates` price the two
+  alternatives on 32768 u16 values into a buffer: two `write_byte` calls 38.0 us,
+  one `write_uint16_le` 44.3 us (slower, the `UInt16` conversion costs more than
+  the call saves), building a scratch array and one `write_bytes` 32.7 us. Sizing
+  the buffer exactly from a computed serialization length is the other half of
+  the idea, and it is a *mixed* result: dense and mixed containers improve 10%
+  and 18% while a set of 32768 one-value containers regresses 6.5%, because the
+  length pass walks every container (and re-derives `has_run_container`) for a
+  saving that only shows up when the buffer grows a lot. Rejected on that
+  evidence rather than kept for the flattering rows
 - **`Int32` has no `to_int` in this toolchain** → `x.to_int()` on an `Int32`
   fails with "Type Int has no method to_int", which reads as if the type were
   already `Int`; the wide path is `x.to_int64().to_int()`
