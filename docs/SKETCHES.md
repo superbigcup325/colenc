@@ -8,9 +8,10 @@ declared exception in the sense of §4 — the same position E7 FSST occupies �
 its criteria are properties plus a statistical rig, written here before any
 implementation.
 
-Which sketches and in what order is recorded in [next steps](NEXT-STEPS.md):
-HLL first, t-digest after it. This document carries the HLL contract; the
-t-digest section is added when that package starts.
+HLL and t-digest are implemented in the `sketches` package and published in
+0.1.1. This document retains the contracts recorded before their implementation,
+including the later acceptance decisions. [Next steps](NEXT-STEPS.md) now covers
+consumer adoption and measurement-driven follow-through.
 
 ## Decision record
 

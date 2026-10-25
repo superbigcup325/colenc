@@ -10,7 +10,7 @@
 **Integration (P5)**: merged into moonlake's `main` — the Parquet reader routed through colenc, a write path added, and the spill format re-encoded (8.08 → 4.86 MiB on the bake-off workload)
 **Release**: `superbigcup325/colenc@0.1.1` is published on mooncakes. It carries the Roaring index, the bitmap and key-search rewrites, and the `sketches` package (HyperLogLog and t-digest). The archive consumer check exercises the packaged surface — including both sketches — on all three backends before and after a publication
 **Phase two (P6)**: the bitmap index landed — E8 Roaring is byte-identical to CRoaring, container shapes and the run-optimisation rule included, judged by pyroaring
-**Next step**: verify the 0.1.1 release candidate, then measure Roaring query operations and validate an engine use case before starting HLL and, later, t-digest. The sorted build, container allocation, bulk-read and serialization rewrites have landed. [Next steps](NEXT-STEPS.md) records the work order, entry points, exit criteria and the limits of the planning evidence
+**Next step (2026-10-25)**: moonlake still imports 0.1.0. Consume the published 0.1.1 dependency and refresh the engine candidate, then define SQL sketch semantics and state costs before HLL and t-digest adoption. Investigate one Roaring engine workload with exact scan controls. The bitmap rewrites and both sketches are implemented; [Next steps](NEXT-STEPS.md) records consumer/library ownership, conditional kernel work and a final benchmark-update reminder
 
 ---
 
@@ -81,6 +81,7 @@ Every stage has deliverables and an exit criterion, and **no stage starts until 
 | **P4** E6 + E7 | BYTE_STREAM_SPLIT + FSST | E6 full criteria; E7 round-trip + scoreboard |
 | **P5** integration | consumed by a columnar engine: read-side hookup, write-side additions, spill serialization switched to encodings | consumer regression all green + on-disk size and IO gains recorded |
 | **P6** bitmap index (phase two) | E8 Roaring: container shapes, run optimisation, portable serialization, set operations | round-trip properties green; every container shape byte-identical to CRoaring through pyroaring; the fixture generator proves each case still exercises the shape it names |
+| **P7** sketches (phase two, implemented in 0.1.1) | Dedicated `sketches` package: HyperLogLog followed by t-digest | Recorded contracts in [SKETCHES.md](SKETCHES.md), register/serialization properties and the HLL statistical rig, then the t-digest structural and empirical-accuracy gates. Independent reference comparisons do not imply byte compatibility |
 
 P0 is the feasibility precondition: if the acceptance rig cannot be made to work, the whole "use a reference implementation as judge" route does not hold, the design needs re-evaluation, and no encodings get piled on top
 
@@ -122,7 +123,7 @@ Not in v1 (the boundary is written down to stop scope creep):
 Phase two, in progress:
 
 - **Bitmap indexes** — Roaring format, cross-checked against the C/Java implementations file by file. Landed as E8 / P6: portable serialization byte-identical to CRoaring, container shapes and the run-optimisation rule aligned, set operations in place
-- **Approximate aggregations**: HLL first, then t-digest, with their contracts and acceptance criteria recorded before implementation. The HLL contract is recorded in [sketches](SKETCHES.md); the implementation has not started. The proposed HLL gate measures statistical error across repeated trials; the proposed t-digest gate measures empirical error across specified distributions, input orders and merge trees. See [Next steps](NEXT-STEPS.md)
+- **Approximate aggregations**: HLL and t-digest are implemented in `sketches` and published in 0.1.1, with their contracts recorded before implementation. The HLL rig judges statistical error, register merge laws and serialization; the t-digest rig gates structure and absolute empirical rank-error ceilings while reporting the independent-reference comparison and order/merge spread. SQL adoption belongs to the consumer. See [sketches](SKETCHES.md) and [Next steps](NEXT-STEPS.md) for the current work order
 
 ## 7. Engineering conventions
 
@@ -134,3 +135,10 @@ Phase two, in progress:
 ---
 
 *This document is the public roadmap; it is updated as stages progress*
+
+## Final reminder: update benchmarks
+
+After the final kernel and consumer changes, regenerate `docs/scoreboard.md`,
+record sketch and bitmap query costs, and update moonlake's end-to-end baseline.
+These updates are pending; this planning pass measured no new performance.
+See the [final checklist](NEXT-STEPS.md#final-reminder-update-benchmarks).

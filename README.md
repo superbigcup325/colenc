@@ -30,6 +30,12 @@ Phase two has started with the bitmap index: a Roaring bitmap (E8) that is
 byte-identical to CRoaring, including its container choices and the run
 optimisation, judged by pyroaring instead of parquet-cpp.
 
+Phase two also includes HyperLogLog and t-digest in the dedicated `sketches`
+package, published in 0.1.1. Their properties and statistical/empirical accuracy
+gates are recorded in [the sketch contracts](docs/SKETCHES.md). Consumer
+adoption and conditional library work are planned in
+[the current next steps](docs/NEXT-STEPS.md).
+
 Integration with [moonlake](https://github.com/superbigcup325/moonlake) is
 merged on its `main`: Parquet decoding routed through colenc, a new write path,
 and the spill format re-encoded (40% smaller). The package is published as
@@ -211,6 +217,7 @@ them on every push.
 types/        neutral model: PhysicalType / Encoding / ColBuf / errors
 primitives/   L1: varint, zigzag, bit packing, bit width
 encoders/     L2: PLAIN, RLE hybrid, dictionary, delta family, BSS, FSST, Roaring
+sketches/     approximate aggregations: HyperLogLog and t-digest
 facade.mbt    L3: encode_column / decode_column + dictionary entry points
 examples/     runnable demo
 harness/      acceptance rig: fixtures, byte diffs, containers, judges

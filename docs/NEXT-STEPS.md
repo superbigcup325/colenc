@@ -1,200 +1,127 @@
-# Next steps after the Roaring implementation
+# Next steps after 0.1.1
 
-Planning snapshot: 2026-10-25, tree revision `3514ad1` (the code it carries is
-`c08cad8`).
+Planning snapshot: 2026-10-25 (Asia/Shanghai), source revision `c04d7e1`.
+The next work is consumer adoption and measured follow-through. Roaring, HLL
+and t-digest are implemented and released; the former A-through-E development
+sequence is complete for the library packages and bitmap rewrites, while its
+moonlake bitmap experiment is still pending. It is superseded by the plan here.
+The [roadmap](ROADMAP.md) and [sketch contracts](SKETCHES.md) retain their
+acceptance definitions.
 
-The next sequence is to finish the 0.1.1 release candidate, measure Roaring's
-query operations, validate an engine use case, then develop HLL before
-t-digest. The [roadmap](ROADMAP.md) remains the source of the existing
-acceptance criteria. The sketch contracts below are proposals to settle
-before implementation; they do not change the E0–E8 criteria.
+## Current evidence
 
-## Evidence and current position
-
-- The roadmap records P0–P6 as implemented, including the original moonlake
-  integration and the Roaring bitmap. The manifest carries version 0.1.1;
-  0.1.1 is published and the release text names it. The registry was checked
-  twice: before the publication it carried 0.1.0 alone, and afterwards 0.1.1,
-  which `check_consumer.py --registry-version 0.1.1` accepts on all three
-  backends.
-- The changelog and implementation already include the sorted bitmap build,
-  container-array reservation, cursor-based parsing, bulk body reads,
-  serialization planning and removal of redundant container zero-filling.
-  The old roadmap's next allocation investigation has been superseded.
-- The [scoreboard](scoreboard.md) contains measurements for revision
-  `0cb57e9`. Its numbers were not rerun for this plan. Roaring's timed decode
-  path in `harness/bench/main.mbt` calls `from_bytes` and `cardinality`;
-  `to_array` is only in the correctness check outside that timer. The reported
-  MB/s uses the equivalent raw INT32 id size as its numerator and does not
-  measure expansion to an id array.
-- Matching-key union and intersection currently convert both containers to
-  bitmap words. `container_of_words` then enumerates the result values even
-  when the result remains a bitmap. These are candidates for measurement;
-  this inspection establishes no performance gain from changing them.
-
-This pass inspected documentation, APIs and relevant implementation paths.
-It did not rerun the test suite, acceptance harness, benchmarks or moonlake
-regressions, and it did not establish release readiness.
-
-## Work order
-
-| Package | Deliverable | Dependency |
+| Project | Observed state | Planning implication |
 |---|---|---|
-| A | Verified 0.1.1 release candidate and separate registry acceptance | Current E0–E8 implementation |
-| B | Roaring query measurements and justified container-specific rewrites | A |
-| C | A measured Roaring use case in moonlake | B |
-| D | HLL contract, acceptance rig and implementation | C; record the sketch decisions before coding |
-| E | t-digest contract, empirical accuracy rig and implementation | D; settle quantile criteria before coding |
+| colenc | [0.1.1 is published](https://github.com/superbigcup325/colenc/releases/tag/v0.1.1), local and remote `main` are `c04d7e1`, and [CI passed on that revision](https://github.com/superbigcup325/colenc/actions/runs/40205435645) | Retain the released E0-E8 and sketch contracts. Do not schedule their implementation again |
+| Release artifact | Built from `504092a`; the tagged tree adds documentation and sketch coverage to the archive consumer, with identical library code. The release records three-target registry-consumer acceptance | Distinguish the registry artifact from its later documentation. Its older README wording does not mean HLL/t-digest are absent |
+| moonlake | Local `ae6a28c`, unreleased 0.6.0, still imports colenc 0.1.0; the live latest release is 0.5.0. No sibling workspace override was present | The original P5 page/writer/spill integration is complete, while adoption of 0.1.1 and SQL sketches/bitmap indexes are separate work |
+| Consumer acceptance | moonlake's full local pass is on `3ab2634`; its later Parquet reader fix has targeted evidence. Remote `main` remains `750b98c`, whose latest nightly failed on the locally fixed corpus case | Refresh the final consumer candidate. colenc's green CI and small registry probe do not certify an engine revision |
+| Measurements | `docs/scoreboard.md` names `0cb57e9`. The release also records later bitmap A/B measurements | Keep each measurement attached to its revision. No benchmark was rerun for this plan |
 
-## A. Finish the 0.1.1 release candidate
+This planning pass inspected source, generated APIs, existing verification
+records and live release/CI metadata. It did not rerun library or engine tests,
+registry consumers or accuracy rigs. The current engine work order and its
+exit criteria are maintained in
+[moonlake's roadmap](https://github.com/superbigcup325/moonlake/blob/main/docs/ROADMAP.md).
+That public branch may lag the local planning revision until it is pushed.
 
-Entry points: [manifest](../moon.mod), [changelog](../CHANGELOG.md),
-[CI](../.github/workflows/ci.yml),
-[consumer check](../harness/check_consumer.py), and
-[harness instructions](../harness/README.md).
+## Work order and ownership
 
-1. Verify the live registry version and reconcile the manifest, changelog and
-   release status. A dated changelog heading alone does not establish that a
-   registry artifact exists.
-2. On the selected candidate revision, run the pre-commit quartet, the tests on
-   all three backends (native, wasm-gc and JS), and all fixture, byte-diff,
-   operation-sequence and container checks defined in CI. Record the revision
-   and toolchain with the results.
-3. Inspect `moon package --list`, then run
-   `python3 harness/check_consumer.py`. Record the archive hash and the three
-   backend outcomes separately from the working-checkout results.
-4. After an explicitly authorized publication, run
-   `python3 harness/check_consumer.py --registry-version 0.1.1`. If that
-   version already exists, check it before planning another publication.
+| Package | Owner and delivery | Exit |
+|---|---|---|
+| C0 | moonlake consumes the published 0.1.1 dependency; colenc provides the released API and compatibility evidence | Fresh dependency resolution without a sibling override, three-target consumer regression, encoding/writer/spill checks and a fresh-cache archive consumer. New `Encoding` and `EncodingError` variants are checked against consumer matches |
+| R2 | moonlake refreshes its final 0.6.0 candidate, including its reader fix | The consumer's full correctness, archive, large-file and browser gates run on one final revision. Its own CI/nightly, registry and deployed-page evidence are recorded when the corresponding release actions are authorized |
+| A0/A1 | moonlake records SQL and state-cost decisions, then adds explicit HLL aggregation; colenc documents the typed-byte seam and supports defects exposed by that use | SQL NULL/type/value equivalence is specified before updates are hashed. Compare canonical inputs exactly and estimates statistically; measure state per group. Keep the existing exact distinct aggregate exact |
+| A2 | moonlake adds explicit approximate quantiles after HLL; colenc retains the t-digest contract and rig | Exact sorted inputs judge empirical rank error. Input conversion, non-finite values, empty input, q validation and merge/order sensitivity have explicit behavior. Keep exact median available |
+| I0 | moonlake investigates one immutable-table Roaring workload; colenc changes APIs only for a demonstrated need | Result equality and query/build/load/memory/size evidence include selective and unselective cases. A useful negative result completes the investigation; automatic or persistent indexes require further engine contracts |
+| K0 | colenc evaluates improvements exposed by actual consumer costs | Record the workload and unchanged or revised contract before implementation. Require correctness/statistical gates and reproducible cost evidence; do not add a new sketch family to fill the queue |
 
-**Exit:** the exact candidate passes the existing gates, its archive contains
-only publishable material, and its packaged API works on native, wasm-gc and
-JS. Registry acceptance is a separate post-publication result. Do not describe
-the archive check as registry verification or the small consumer probe as
-moonlake regression coverage.
+The engine packages are proposals rather than already shipped SQL functions.
+They do not require another colenc release merely to use the current APIs. No
+new release number or date is assigned by this plan.
 
-## B. Measure and improve Roaring query operations
+## HLL consumer seam and conditional library work
 
-Entry points: [bitmap implementation](../encoders/roaring.mbt),
-[performance rig](../harness/perf/main.mbt),
-[scoreboard benchmark](../harness/bench/main.mbt), and
-[scoreboard generator](../harness/scoreboard.py).
+Entry points: `sketches/hll.mbt`, `sketches/pkg.generated.mbti`,
+`harness/check_hll.py`, and the [HLL contract](SKETCHES.md#hll-contract-v1).
 
-Extend the existing rig instead of introducing another benchmark framework:
+- NULL skipping, numeric widening, DATE representation and string encoding
+  belong to moonlake. The kernel hashes typed bytes; signed zero and NaN
+  payloads remain distinct under the released format. SQL normalization must
+  happen in the adapter and must not silently alter the library hash/version.
+- At precision 14, the 16,384 registers are machine words in memory, about
+  64 KiB of payload, although serialization uses one byte per register plus
+  its header. Report memory in addition to serialized size; many small groups
+  can make dense HLL more expensive than an exact set.
+- Start engine adoption with the released precision and API. Consider sparse
+  registers, an exact-small-set transition or a precision option only after
+  measuring the per-group crossover and recording representation, merge and
+  serialization compatibility decisions.
+- Preserve the distinction between exact register merge laws and statistical
+  estimator error. Agreement with another estimator is useful independent
+  evidence, not an exact-value oracle or byte-compatibility claim.
 
-- Report `from_bytes`, `to_array`, and the combined parse-and-expand path
-  separately. Keep elapsed time alongside throughput, with each numerator
-  named explicitly.
-- Exercise `contains` hits and misses, and union/intersection across array,
-  bitmap and run containers. Cover disjoint, partially overlapping and
-  identical sets, small and large results, and narrow and wide key spans.
-- Keep model checks outside timing, consume timed results, and abort on
-  errors. Record revision, toolchain, dataset shape and measurement spread.
+## t-digest consumer seam and conditional library work
 
-Measure these rewrites in order:
+Entry points: `sketches/tdigest.mbt`, `harness/check_tdigest.py`, and the
+[t-digest contract](SKETCHES.md#t-digest-contract-v1).
 
-1. Merge sorted arrays directly for array/array operations.
-2. For bitmap/bitmap results, use popcount to choose the output shape and
-   enumerate values only when an array result is required.
-3. Investigate mixed-container and run paths if the measurements identify
-   them as material costs. A count-only intersection API is a separate
-   candidate if the consumer workload needs it.
+- Carry forward compression 100 and the recorded empirical acceptance matrix.
+  The 1% interior and 0.5% tail rank-error ceilings describe that matrix;
+  the independent-reference ratio and merge/order spread remain reported.
+- The SQL adapter must decide how Int64 values beyond Double's exact integer
+  range are handled, skip NULLs, map empty state to its SQL result, validate
+  q independently of data consumption and translate typed update errors.
+- Compare direct construction with sequential, balanced and unbalanced merges
+  using exact sorted values and the same tie/rank convention. Measure update,
+  merge, query and state size separately.
+- Investigate k2/k3 scaling, centroid rules or compression tuning only when a
+  real query's accuracy or merge spread warrants it. Set the comparison and
+  acceptance criteria before changing the implementation. Preserve format
+  versioning and the existing invalid-input checks.
 
-**Exit:** each accepted rewrite has same-machine, interleaved control and
-candidate measurements on native and wasm-gc. All three backends retain the
-semantic and boundary coverage. `check_roaring.py` still matches the reference
-bytes for its specified paths; `check_roaring_ops.py` still establishes legal
-containers, round trips and operand independence for the other sequences.
-Publish no speedup claim that the measurement spread cannot resolve.
+## Roaring consumer seam and conditional library work
 
-## C. Validate a Roaring use case in moonlake
+Entry points: `encoders/roaring.mbt`, `harness/perf/main.mbt`,
+`harness/check_roaring.py` and `harness/check_roaring_ops.py`.
 
-Entry points: [moonlake](https://github.com/superbigcup325/moonlake), the
-current bitmap API, and the consumer's existing regression suite.
+The sorted builder, container-specific set operations, bulk reads, allocation
+changes and branchless probe search have landed. Retain their existing tests
+and measurements; a new rewrite starts from the current implementation.
 
-First inspect the consumer's current revision and determine whether an E8
-path already exists. The documented P5 integration covers the earlier page
-encodings and does not by itself establish bitmap-index integration.
+moonlake owns the mapping from immutable source rows to 0..2^31-1 bitmap IDs,
+multi-file offsets, invalidation, SQL NULL/duplicate behavior and the scan
+contract that can use a selection. Its current `ScanRequest` has projection and
+advisory predicates but no row-selection/gather API. Intersecting a bitmap
+therefore establishes set computation, not reduced Parquet decoding by itself.
 
-Choose one real workload, such as combining predicate id sets for filtering
-or counting an intersection. Keep row-id mapping, NULL semantics, index
-lifetime, persistence and query planning in the consumer; colenc continues
-to operate on in-memory buffers and sets.
-
-Compare with an exact full-scan control on the same data. Record result
-equality, query latency, index build/load time, memory and stored size. Include
-selective and unselective predicates so the index overhead is visible.
-
-**Exit:** the consumer regression remains green and the chosen workload has
-reproducible correctness and cost evidence. If it shows no useful tradeoff,
-record that result before adding more bitmap APIs.
-
-## D. Define and implement HLL
-
-Use a dedicated sketch API. HLL summarizes distinct counts and cannot restore
-the original column, so a reversible `encode_column` / `decode_column`
-contract does not describe it.
-
-The contract is recorded in [sketches](SKETCHES.md): variant and estimator,
-input canonicalization and hash, precision range, merge and ownership rules,
-the serialization decision, the statistical acceptance groups, what is explicitly
-not claimed, and the pinned test-time reference. This package therefore starts
-from implementation, not from another design pass.
-
-Before implementation, record:
-
-- The HLL variant, estimator and pinned test-time reference implementation.
-- Input hashing, including either a pre-hashed `UInt64` boundary or canonical
-  typed input bytes, the hash algorithm and seed, and ownership of NULL and
-  floating-point normalization.
-- Precision range, memory budget, merge compatibility, incompatible-input
-  errors, operand ownership, and serialization version and byte order.
-- Whether serialization follows a named reference format or a colenc-owned
-  format. Estimate agreement alone cannot establish byte compatibility.
-- The statistical acceptance protocol: cardinality ranges, trial count,
-  deterministic seeds, bias, relative error distribution and failure
-  thresholds. Set the thresholds before measuring the implementation.
-
-Build the acceptance rig first, then the implementation and consumer-facing
-example. Check duplicate updates, empty inputs, state round trips, malformed
-bytes, merge behavior and backend consistency. State the merge laws supported
-by the selected variant and test its register state separately from its
-estimator. Measure accuracy against exact distinct counts across multiple
-trials; a standard error is not a hard limit for every individual sample.
-
-**Exit:** the recorded contract and statistical gates pass on the three
-backends, the reference comparison is reproducible, and update/merge/query
-cost and sketch size are reported separately. The reference stays a test-time
-judge, preserving zero FFI and zero runtime dependencies.
-
-Reference: [Apache DataSketches HLL overview](https://datasketches.apache.org/docs/HLL/HllSketches.html).
-Select the specific variant before adopting its estimator or accuracy figures.
-
-## E. Define t-digest's empirical accuracy criteria
-
-Start with a design and acceptance document. Select a pinned reference,
-compression parameter, centroid rules, merge policy, serialization contract
-and behavior for empty input, repeated values, invalid quantiles, NaN and
-infinities.
-
-Specify the quantile and rank conventions, including ties. Use exact sorted
-data as ground truth. Test central and tail quantiles on uniform, skewed,
-heavy-tailed and duplicate-heavy datasets, with ascending, descending and
-shuffled input. Compare single-pass construction with sequential, balanced
-and unbalanced merge trees. Set empirical rank-error thresholds and memory
-limits for the named test matrix before implementation.
-
-**Exit:** the agreed empirical matrix passes, state serialization and malformed
-input handling are covered, and the report states sensitivity to data order
-and merging. Keep proven structural invariants separate from measured
-accuracy; this plan makes no universal numerical error-bound promise.
-
-References: [Apache DataSketches t-digest overview](https://datasketches.apache.org/docs/tdigest/tdigest.html)
-and the [author's reference implementation](https://github.com/tdunning/t-digest).
+Begin with one opt-in repeated-predicate experiment and its exact scan control.
+Account for index construction and reuse, residual filtering, high and low
+selectivity, and stale source detection. Consider iteration, count-only
+intersection or wider IDs only if that experiment shows why the existing API
+is insufficient. Persistent sidecars and automatic planner selection are
+engine work, with a separate contract.
 
 ## Scope carried forward
 
-Byte-stream compression, full nested levels, a public Parquet container API
-and SIMD remain deferred under the roadmap. The next performance work is
-driven by measured query costs, and new sketch families begin with recorded
-contracts and acceptance criteria.
+Zero FFI and zero runtime dependencies remain library boundaries. Byte-stream
+compression, full nested levels, a public Parquet container API and SIMD remain
+deferred under the roadmap. No new kernel is scheduled solely because the
+current release is complete.
+
+## Final reminder: update benchmarks
+
+**Pending, after the final code and dependency changes.** This planning pass
+did not regenerate any performance or accuracy result.
+
+- colenc: run `python3 harness/scoreboard.py` to update `docs/scoreboard.md`;
+  retain native/wasm-gc medians, revision/toolchain/data identity and spread.
+  Keep Roaring parse, id expansion and combined costs separate, with each
+  throughput numerator named. Record HLL/t-digest update, merge, query, memory,
+  serialized size and accuracy separately from encoding throughput.
+- moonlake: use `harness/bench_release.py` for the final release candidate,
+  compare against a same-session exact control and update
+  `docs/bench-baseline.md`. New SQL or index paths need their own end-to-end
+  correctness, memory, accuracy or build-amortization evidence.
+
+**Reminder to the maintainer: update both projects' benchmarks last.**
