@@ -37,6 +37,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   working checkout, a local dependency cache or the repository-only harness.
   `--registry-version` checks the registry copy after a publish
 
+- HyperLogLog (`sketches`): `HllSketch` with precisions 4 through 16 (default
+  14), a typed entry point per column type, `merge`, `estimate`, and a
+  versioned serialization. The hash is MurmurHash3 x64 128 (lower half, seed 0)
+  over each value's canonical little-endian bytes, so the registers and the
+  serialized form are identical on native, wasm-gc and JS. The estimator is the
+  classical one with the linear-counting and large-range corrections; no fitted
+  bias tables. The contract, including what the criteria do *not* claim, is
+  `docs/SKETCHES.md`
 ### Changed
 
 - **A bitmap probe searches its key array branchlessly.** Every `contains` walked

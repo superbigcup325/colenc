@@ -33,7 +33,9 @@ t-digest section is added when that package starts.
 - `p`, the log2 of the register count, is chosen per sketch and must satisfy
   `4 <= p <= 16`. The default is `p = 14`, which is `m = 16384` registers and a
   standard error of about 0.81%.
-- **Dense registers only.** One register per byte, `m` bytes. The sparse
+- **Dense registers only.** One register per bucket, six bits of rank, held as
+  a machine word in memory and written as one byte each; the serialized sketch
+  is exactly `m` register bytes plus the two header bytes. The sparse
   representation a production HLL++ carries is not in v1: it exists to make small
   cardinalities cheap, and it doubles the state machine. That is a scope
   decision, recorded here rather than discovered later.
@@ -44,8 +46,8 @@ t-digest section is added when that package starts.
 
 ### Hashing
 
-A 64-bit hash, pure MoonBit, chosen so that the same input hashes to the same
-bits on native, wasm-gc and JS — the register update uses `Int64` arithmetic and
+MurmurHash3 x64 128, lower half, seed 0, in pure MoonBit — chosen so that the
+same input hashes to the same bits on native, wasm-gc and JS — the register update uses `Int64` arithmetic and
 `popcnt`/leading-zero operations only, never floating point. The hash function
 and its seed are part of the format: changing either invalidates every stored
 sketch, so the version byte covers it.
@@ -68,8 +70,10 @@ format, and stating it is cheaper than discovering it in a test.
 
 The sketch lives in its own package and exports:
 
-- construction from a precision, and a default-precision constructor
-- `add` for the scalar types a column carries, and `add_bytes` for `ByteArray`
+- construction from a precision (`HllSketch::new`) and a default-precision
+  constructor (`HllSketch::new_default`)
+- one typed entry point per column value: `add_int32`, `add_int64`, `add_float`,
+  `add_double`, `add_bool`, and `add_bytes` for `Bytes`
 - `merge` of two sketches with equal precision, returning a new sketch and
   leaving both operands untouched (the same ownership rule a set operation
   follows: a result never aliases an operand)

@@ -33,6 +33,8 @@ types/                   neutral model: PhysicalType / Encoding / ColBuf / error
 primitives/              L1: varint / zigzag / bit packing / bit width
 encoders/                L2: PLAIN, RLE hybrid, dictionary, delta family,
                          BYTE_STREAM_SPLIT, FSST and the Roaring bitmap
+sketches/                approximate aggregations (HLL; t-digest later), a
+                         separate API because a sketch is not a page encoding
 facade.mbt               L3: encode_column / decode_column dispatch
 harness/                 acceptance rig (repository only, excluded from the package)
 .githooks/               pre-commit gate

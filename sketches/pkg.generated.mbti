@@ -1,0 +1,33 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "superbigcup325/colenc/sketches"
+
+import {
+  "superbigcup325/colenc/types",
+}
+
+// Values
+
+// Errors
+
+// Types and methods
+pub struct HllSketch {
+  // private fields
+}
+pub fn HllSketch::add_bool(Self, Bool) -> Unit
+pub fn HllSketch::add_bytes(Self, Bytes) -> Unit
+pub fn HllSketch::add_double(Self, Double) -> Unit
+pub fn HllSketch::add_float(Self, Float) -> Unit
+pub fn HllSketch::add_int32(Self, Int32) -> Unit
+pub fn HllSketch::add_int64(Self, Int64) -> Unit
+pub fn HllSketch::estimate(Self) -> Double
+pub fn HllSketch::from_bytes(BytesView) -> Self raise @types.EncodingError
+pub fn HllSketch::merge(Self, Self) -> Self raise @types.EncodingError
+pub fn HllSketch::new(Int32) -> Self raise @types.EncodingError
+pub fn HllSketch::new_default() -> Self
+pub fn HllSketch::precision(Self) -> Int32
+pub fn HllSketch::register_count(Self) -> Int32
+pub fn HllSketch::to_bytes(Self) -> Bytes
+
+// Type aliases
+
+// Traits
