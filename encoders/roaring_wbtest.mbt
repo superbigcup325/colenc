@@ -190,6 +190,46 @@ test "roaring: truncated and malformed inputs raise with an offset" {
 }
 
 ///|
+test "roaring: a truncated table or body reports where it ran out" {
+  // The reader validates a range and then walks it with a cursor, so the
+  // offsets these errors carry are part of the contract too.
+  let cases : Array[(Bytes, Int32, Int32, Int32)] = [
+    (b"\x3a\x30\x00\x00\x02\x00\x00\x00", 8, 8, 0),
+    (b"\x3a\x30\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00", 12, 4, 0),
+    (
+      b"\x3a\x30\x00\x00\x01\x00\x00\x00\x00\x00\x01\x00\x10\x00\x00\x00\x05\x00",
+      16, 4, 2,
+    ),
+    (b"\x3b\x30\x00\x00\x01\x00\x00\x05\x00\x02\x00\x00\x00\x03\x00", 11, 8, 4),
+  ]
+  for case in cases {
+    let (bytes, want_offset, want_need, want_available) = case
+    try RoaringBitmap::from_bytes(bytes) catch {
+      @types.EncodingError::Truncated(offset, need, available) => {
+        assert_eq(offset, want_offset)
+        assert_eq(need, want_need)
+        assert_eq(available, want_available)
+      }
+      other => fail("unexpected error \{@types.EncodingError::message(other)}")
+    } noraise {
+      _ => fail("a truncated stream must be refused")
+    }
+  }
+}
+
+///|
+test "roaring: values that do not ascend inside a container are refused" {
+  // card 2, body [5, 3]: the second value is the one that breaks the order
+  let bytes = b"\x3a\x30\x00\x00\x01\x00\x00\x00\x00\x00\x01\x00\x10\x00\x00\x00\x05\x00\x03\x00"
+  try RoaringBitmap::from_bytes(bytes) catch {
+    @types.EncodingError::Corrupt(offset) => assert_eq(offset, 18)
+    other => fail("unexpected error \{@types.EncodingError::message(other)}")
+  } noraise {
+    _ => fail("descending values must be refused")
+  }
+}
+
+///|
 test "roaring: a wrong offset in the table is detected" {
   // a valid two-container bitmap with the second offset moved by one
   let bytes = b"\x3a\x30\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00\x18\x00\x00\x00\x1b\x00\x00\x00\x00\x00\x00\x00"
