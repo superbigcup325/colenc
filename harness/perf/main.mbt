@@ -423,6 +423,54 @@ fn bench_bitmap_case(
     }
     sink.val = sink.val + back.cardinality()
   })
+  // Expanding a set to ids is a separate query from rebuilding it, and the
+  // scoreboard timer folds the two together — B asks for them apart.
+  if bitmap.to_array().length() != values {
+    abort("\{name}: to_array disagrees with the model")
+  }
+  record(b, label("bitmap", name + "-to_array", plain, values), fn() {
+    sink.val = sink.val + bitmap.to_array().length()
+  })
+  record(
+    b,
+    label("bitmap", name + "-from_bytes-to_array", bytes.length(), values),
+    fn() {
+      let back = @encoders.RoaringBitmap::from_bytes(bytes) catch {
+        _ => abort("\{name}: from_bytes raised")
+      }
+      sink.val = sink.val + back.to_array().length()
+    },
+  )
+  // A miss stops inside a present container instead of matching a value, so it
+  // gets its own case: one probe per key finds lows the container does not
+  // hold. A container filled edge to edge has nothing to miss — the row is
+  // dropped rather than timed over three probes.
+  let misses : Array[Int32] = []
+  let mut seen_key = -65537
+  for id in ids {
+    let low = id & 0xFFFF
+    let base = id - low
+    if base != seen_key {
+      seen_key = base
+      for probe in [1, 65535, 2] {
+        let candidate = base + probe
+        if !bitmap.contains(candidate) {
+          misses.push(candidate)
+        }
+      }
+    }
+  }
+  if misses.length() >= 256 {
+    record(b, label("bitmap", name + "-contains-miss", plain, values), fn() {
+      let mut found = 0
+      for id in misses {
+        if bitmap.contains(id) {
+          found += 1
+        }
+      }
+      sink.val = sink.val + found
+    })
+  }
   if optimize {
     record(b, label("bitmap", name + "-run_optimize", plain, values), fn() {
       let copy = @encoders.RoaringBitmap::from_ids(ids) catch {
@@ -444,6 +492,7 @@ fn bench_bitmap_setop(
   name : String,
   left_ids : Array[Int32],
   right_ids : Array[Int32],
+  optimize : Bool,
 ) -> Unit {
   let left_model = model_of(left_ids)
   let right_model = model_of(right_ids)
@@ -451,6 +500,10 @@ fn bench_bitmap_setop(
   let intersect_model = model_intersect(left_model, right_model)
   let left = build_bitmap(left_ids, name)
   let right = build_bitmap(right_ids, name)
+  if optimize {
+    left.run_optimize()
+    right.run_optimize()
+  }
   let merged = left.union(right)
   guard_set(merged, union_model, "\{name}: union")
   let shared = left.intersect(right)
@@ -477,7 +530,7 @@ fn bench_bitmap_setop(
     sink.val = sink.val + left.intersect(right).cardinality()
   })
   println(
-    "meta|setop-\{name}|\{values}|\{union_model.length()}|\{merged.to_bytes().length()}|\{plain}",
+    "meta|setop-\{name}|\{values}|\{union_model.length()}|\{merged.to_bytes().length()}|\{plain}|\{optimize}",
   )
 }
 
@@ -527,15 +580,55 @@ fn bench_roaring(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
   bench_bitmap_case(b, sink, "few-keys", grouped, false)
   // Overlap shapes: disjoint, partial and identical.
   let disjoint = Array::makei(2000, fn(i) { 400000 + i * 2 })
-  bench_bitmap_setop(b, sink, "disjoint", mixed, disjoint)
+  bench_bitmap_setop(b, sink, "disjoint", mixed, disjoint, false)
   let partial : Array[Int32] = []
   for index in 0..<mixed.length() {
     if index % 2 == 0 {
       partial.push(mixed[index])
     }
   }
-  bench_bitmap_setop(b, sink, "partial", mixed, partial)
-  bench_bitmap_setop(b, sink, "identical", mixed, mixed)
+  bench_bitmap_setop(b, sink, "partial", mixed, partial, false)
+  bench_bitmap_setop(b, sink, "identical", mixed, mixed, false)
+  // A set operation answers differently per container shape, and the
+  // scoreboard carries one mixed case. Array, bitmap and run containers, each
+  // against a disjoint, a partially overlapping and an identical operand.
+  let arr_left : Array[Int32] = []
+  for key in 0..<4096 {
+    for offset in 0..<8 {
+      arr_left.push(key * 65536 + offset)
+    }
+  }
+  let arr_overlap : Array[Int32] = []
+  for index in 0..<arr_left.length() {
+    if index % 3 == 0 {
+      arr_overlap.push(arr_left[index])
+    }
+  }
+  let arr_apart : Array[Int32] = []
+  for key in 0..<4096 {
+    for offset in 0..<8 {
+      arr_apart.push(key * 65536 + 1000 + offset)
+    }
+  }
+  bench_bitmap_setop(b, sink, "array-disjoint", arr_left, arr_apart, false)
+  bench_bitmap_setop(b, sink, "array-partial", arr_left, arr_overlap, false)
+  bench_bitmap_setop(b, sink, "array-identical", arr_left, arr_left, false)
+  let bmp_left = Array::makei(300000, fn(i) { i })
+  let bmp_overlap : Array[Int32] = []
+  for index in 0..<300000 {
+    if index % 2 == 0 {
+      bmp_overlap.push(index)
+    }
+  }
+  let bmp_apart = Array::makei(300000, fn(i) { 1048576 + i })
+  bench_bitmap_setop(b, sink, "bitmap-disjoint", bmp_left, bmp_apart, false)
+  bench_bitmap_setop(b, sink, "bitmap-partial", bmp_left, bmp_overlap, false)
+  bench_bitmap_setop(b, sink, "bitmap-identical", bmp_left, bmp_left, false)
+  let run_apart = Array::makei(300000, fn(i) { 400000 + i })
+  let run_shift : Array[Int32] = Array::makei(300000, fn(i) { i + 1 })
+  bench_bitmap_setop(b, sink, "run-disjoint", dense, run_apart, true)
+  bench_bitmap_setop(b, sink, "run-partial", dense, run_shift, true)
+  bench_bitmap_setop(b, sink, "run-identical", dense, dense, true)
 }
 
 ///|
@@ -1153,6 +1246,12 @@ fn main {
   if argv.length() > 1 && argv[1] == "rle" {
     bench_rle(bencher, sink)
     println(bencher.dump_summaries())
+    return
+  }
+  if argv.length() > 1 && argv[1] == "roaring" {
+    bench_roaring(bencher, sink)
+    println(bencher.dump_summaries())
+    println("sink=\{sink.val}")
     return
   }
   if argv.length() > 1 && argv[1] == "candidates" {

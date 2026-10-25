@@ -82,7 +82,7 @@ its branch in `facade.mbt`.
   cases, so toolchain comparisons go through medians), while
   `moon run --target native --release harness/perf` reports medians and spreads
   for the primitives, dataset variants and candidate rewrites; `-- candidates`
-  runs only the A/B section
+  runs only the A/B section, `-- roaring` only the bitmap cases
 - `moon run harness/writer_min -- <out.parquet>` writes the minimal container
 - **Before committing**, run the quartet:
   `moon info && moon fmt && moon check --deny-warn && moon test`
