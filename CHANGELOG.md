@@ -6,6 +6,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-25
+
 ### Added
 
 - Roaring bitmap (E8, phase two): `RoaringBitmap` with `from_ids`, `add`,
@@ -24,6 +26,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   reference output really contains the container shapes it names) plus
   `check_roaring.py`, `roaring_probe/`, and pyroaring pinned as the reference
   judge
+- Harness: `check_roaring_ops.py` and `roaring_ops_probe/` judge the bitmap
+  sequences a byte diff cannot — round trip, container legality re-derived from
+  the bytes, operand independence — with the layout pinned separately as a
+  regression net rather than as a criterion
+- Archive consumer acceptance (`harness/check_consumer.py`, `harness/consumer/`):
+  unpacks the release archive into a throwaway module whose only members are the
+  archive and a consumer, then runs that consumer on native, wasm-gc and JS
+  against a fresh `MOON_HOME`, so the published surface is exercised without the
+  working checkout, a local dependency cache or the repository-only harness.
+  `--registry-version` checks the registry copy after a publish
 
 ### Changed
 
@@ -149,5 +161,6 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 P0 through P4 are complete, and this is the first published release.
 
-[Unreleased]: https://github.com/superbigcup325/colenc/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/superbigcup325/colenc/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/superbigcup325/colenc/releases/tag/v0.1.1
 [0.1.0]: https://github.com/superbigcup325/colenc/releases/tag/v0.1.0
