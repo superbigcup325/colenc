@@ -114,5 +114,7 @@ jobs:
         run: python3 harness/make_roaring_cases.py --check
       - name: Roaring byte diff
         run: python3 harness/check_roaring.py
+      - name: Roaring sequences with no reference bytes
+        run: python3 harness/check_roaring_ops.py
       - name: Container interop
         run: harness/check_container.sh

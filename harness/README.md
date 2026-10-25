@@ -26,6 +26,7 @@ check_bss.py       run the BSS probe and diff the planes
 check_fsst.py      round-trip FSST and print its PLAIN ratio
 make_roaring_cases.py build the bitmap cases and assert their container shapes
 check_roaring.py   byte-diff the bitmap in both container modes
+check_roaring_ops.py check the sequences that have no reference bytes
 check_container.sh end-to-end container check: wrap, judge, diff pages
 scoreboard.py      turn `bench` output into docs/scoreboard.md
 bench/             throughput bench the scoreboard reads
@@ -36,6 +37,7 @@ delta_probe/       minimal MoonBit CLI around the delta encoders
 bss_probe/         minimal MoonBit CLI around BYTE_STREAM_SPLIT
 fsst_probe/        minimal MoonBit CLI around FSST (round trip + ratio)
 roaring_probe/     minimal MoonBit CLI around the Roaring bitmap
+roaring_ops_probe/ minimal MoonBit CLI replaying the bitmap operation sequences
 requirements.txt   pinned judge versions (pyarrow, duckdb)
 fixtures/          committed reference samples + manifest
 writer_min/        minimal MoonBit Parquet writer (T0.2)
@@ -270,6 +272,36 @@ moon run --target native harness/roaring_probe -- \
 The generator parses its own reference output and fails when a case no longer
 contains the container shapes its label claims, so a fixture cannot silently
 drift into testing one shape twice.
+
+## Roaring sequences with no reference bytes
+
+```bash
+python3 harness/check_roaring_ops.py            # check the sequences
+python3 harness/check_roaring_ops.py --update   # re-pin the layout fixture
+```
+
+Two sequences cannot be judged by a byte diff. CRoaring keeps a run container
+when an id is added to it, while colenc de-optimises the run into an array or
+bitmap container, so both streams are legal and they differ. And a set operation
+whose result aliases an operand's container is still byte-identical to itself
+until someone mutates the result. The cases above never touch either path.
+
+So these sequences are judged by what actually broke in R0 instead:
+
+- the stream parses back to the expected set, decoded from the bytes alone;
+- each container is legal *as read from the bytes*: arrays at most 4096 values
+  and strictly ascending, bitmaps above 4096 with a popcount equal to the
+  declared cardinality, runs ascending, disjoint, non-adjacent and strictly
+  smaller than the form they replaced, keys ascending, bodies tiling the stream
+  and the offset table pointing at each body;
+- the operands are unchanged after the result is mutated, and the probe's own
+  cardinality and id hash agree with what the bytes say.
+
+`roaring_ops_probe` replays the sequences and writes one stream per step;
+`check_roaring_ops.py` parses them with its own reader, so the library never
+grades its own containers. `fixtures/roaring_ops.json` pins the encoded size and
+container shape of every step: that is a regression pin and not a criterion, so
+a legal but different shape choice shows up as a diff that has to be decided.
 
 ## P1 evidence
 

@@ -60,6 +60,29 @@ fn iterations(estimate_ms : UInt64) -> Int32 {
 }
 
 ///|
+/// Time `body` for `reps` calls, growing the count until the run outlasts the
+/// millisecond clock: a bitmap decode can finish inside one tick, and dividing
+/// a zero-millisecond total would report 0 MB/s for a working case.
+fn timed_loop(reps0 : Int32, body : () -> Unit) -> (Double, Int32) {
+  let mut reps = reps0
+  let mut elapsed = 0UL
+  let mut done = false
+  while !done {
+    let t0 = @env.now()
+    for _ in 0..<reps {
+      body()
+    }
+    elapsed = @env.now() - t0
+    if elapsed >= 20UL || reps >= 81920 {
+      done = true
+    } else {
+      reps = reps * 4
+    }
+  }
+  (elapsed.to_double(), reps)
+}
+
+///|
 fn run(
   name : String,
   column : @colenc_types.ColBuf,
@@ -76,18 +99,18 @@ fn run(
   let t0 = @env.now()
   let _ = encode(column, encoding)
   let estimate = @env.now() - t0
-  let reps = iterations(estimate)
-  let t0 = @env.now()
-  for _ in 0..<reps {
-    let _ = encode(column, encoding)
-  }
-  let encode_ms = (@env.now() - t0).to_double() / reps.to_double()
-
-  let t0 = @env.now()
-  for _ in 0..<reps {
-    let _ = @colenc.decode_column(bytes, type_of(column), encoding, values)
-  }
-  let decode_ms = (@env.now() - t0).to_double() / reps.to_double()
+  let (encode_total, encode_reps) = timed_loop(iterations(estimate), fn() {
+    let _ = encode(column, encoding) catch {
+      _ => abort("encode raised for \{name}")
+    }
+  })
+  let encode_ms = encode_total / encode_reps.to_double()
+  let (decode_total, decode_reps) = timed_loop(iterations(estimate), fn() {
+    let _ = @colenc.decode_column(bytes, type_of(column), encoding, values) catch {
+      _ => abort("decode raised for \{name}")
+    }
+  })
+  let decode_ms = decode_total / decode_reps.to_double()
 
   println(
     "\{name}\t\{@colenc_types.encoding_name(encoding)}\t\{values}\t\{plain_bytes}\t\{bytes.length()}\t\{encode_ms}\t\{decode_ms}",
@@ -121,28 +144,103 @@ fn run_dictionary(
   let t0 = @env.now()
   let _ = @colenc.encode_dictionary(column)
   let estimate = @env.now() - t0
-  let reps = iterations(estimate)
-  let t0 = @env.now()
-  for _ in 0..<reps {
-    let _ = @colenc.encode_dictionary(column)
-  }
-  let encode_ms = (@env.now() - t0).to_double() / reps.to_double()
-
-  let t0 = @env.now()
-  for _ in 0..<reps {
+  let (encode_total, encode_reps) = timed_loop(iterations(estimate), fn() {
+    let _ = @colenc.encode_dictionary(column) catch {
+      _ => abort("dictionary encode raised for \{name}")
+    }
+  })
+  let encode_ms = encode_total / encode_reps.to_double()
+  let (decode_total, decode_reps) = timed_loop(iterations(estimate), fn() {
     let _ = @colenc.decode_dictionary(
       encoded.dictionary,
       encoded.indices,
       type_of(column),
       values,
       encoded.dictionary_size,
-    )
-  }
-  let decode_ms = (@env.now() - t0).to_double() / reps.to_double()
+    ) catch {
+      _ => abort("dictionary decode raised for \{name}")
+    }
+  })
+  let decode_ms = decode_total / decode_reps.to_double()
 
   println(
     "\{name}\tdictionary\t\{values}\t\{plain_bytes}\t\{bytes}\t\{encode_ms}\t\{decode_ms}",
   )
+}
+
+///|
+/// Ascending unique ids: the Roaring encoding is a set, so its round trip
+/// returns the sorted set and a bench input for it has to be in that shape.
+fn sorted_unique(ids : Array[Int32]) -> Array[Int32] {
+  let sorted = ids.copy()
+  sorted.sort()
+  sorted.dedup()
+  sorted
+}
+
+///|
+fn roaring_encode(ids : Array[Int32], run_optimize : Bool) -> Bytes raise {
+  let bitmap = @encoders.RoaringBitmap::from_ids(ids)
+  if run_optimize {
+    bitmap.run_optimize()
+  }
+  bitmap.to_bytes()
+}
+
+///|
+/// A bitmap index row. `plain_bytes` is the raw INT32 id stream it replaces, so
+/// the ratio is against the ids themselves and not against a page encoding.
+fn run_roaring(
+  name : String,
+  ids : Array[Int32],
+  run_optimize : Bool,
+) -> Unit raise {
+  let expected = sorted_unique(ids)
+  let values = expected.length()
+  let plain_bytes = ids.length() * 4
+  let bytes = roaring_encode(ids, run_optimize)
+  let back = @encoders.RoaringBitmap::from_bytes(bytes)
+  if back.to_array() != expected || back.cardinality() != values {
+    abort("roaring round trip failed for \{name}")
+  }
+  let label = if run_optimize { "ROARING+run_optimize" } else { "ROARING" }
+  let t0 = @env.now()
+  let _ = roaring_encode(ids, run_optimize)
+  let estimate = @env.now() - t0
+  let (encode_total, encode_reps) = timed_loop(iterations(estimate), fn() {
+    let _ = roaring_encode(ids, run_optimize) catch { _ => b"" }
+  })
+  let encode_ms = encode_total / encode_reps.to_double()
+  let (decode_total, decode_reps) = timed_loop(iterations(estimate), fn() {
+    let back = @encoders.RoaringBitmap::from_bytes(bytes) catch {
+      _ => @encoders.RoaringBitmap::new()
+    }
+    if back.cardinality() != values {
+      abort("roaring decode drifted for \{name}")
+    }
+  })
+  let decode_ms = decode_total / decode_reps.to_double()
+
+  println(
+    "\{name}\t\{label}\t\{values}\t\{plain_bytes}\t\{bytes.length()}\t\{encode_ms}\t\{decode_ms}",
+  )
+}
+
+///|
+/// Three container shapes in one bitmap: one array key, one bitmap key and one
+/// key that `run_optimize` turns into a run.
+fn mixed_ids() -> Array[Int32] {
+  let ids : Array[Int32] = []
+  for id in [1, 5, 9, 13] {
+    ids.push(id)
+  }
+  for index in 0..<5000 {
+    ids.push(65536 + index * 2)
+  }
+  for index in 0..<8000 {
+    ids.push(196608 + index)
+  }
+  ids
 }
 
 ///|
@@ -195,4 +293,15 @@ fn main raise {
   )
   run("bool", flags, @colenc_types.Plain, (n_int + 7) / 8)
   run("bool", flags, @colenc_types.Rle, (n_int + 7) / 8)
+
+  // Bitmap index: the "column" is the set of ids, so the PLAIN baseline is the
+  // raw INT32 id stream (4 bytes per id) rather than a page encoding.
+  let sparse_ids = Array::makei(n_int, fn(i) { i * 2048 })
+  run_roaring("roaring-sparse", sparse_ids, false)
+  let dense_ids = Array::makei(n_int, fn(i) { i })
+  run_roaring("roaring-dense", dense_ids, false)
+  run_roaring("roaring-dense", dense_ids, true)
+  let mixed = mixed_ids()
+  run_roaring("roaring-mixed", mixed, false)
+  run_roaring("roaring-mixed", mixed, true)
 }

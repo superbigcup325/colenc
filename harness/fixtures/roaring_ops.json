@@ -1,0 +1,169 @@
+{
+ "steps": {
+  "base": {
+   "bytes": 8208,
+   "containers": [
+    {
+     "cardinality": 5000,
+     "key": 0,
+     "shape": "bitmap"
+    }
+   ]
+  },
+  "base-run": {
+   "bytes": 15,
+   "containers": [
+    {
+     "cardinality": 5000,
+     "key": 0,
+     "shape": "run"
+    }
+   ]
+  },
+  "base-run-add": {
+   "bytes": 8208,
+   "containers": [
+    {
+     "cardinality": 5001,
+     "key": 0,
+     "shape": "bitmap"
+    }
+   ]
+  },
+  "base-run-add-reparse": {
+   "bytes": 8208,
+   "containers": [
+    {
+     "cardinality": 5001,
+     "key": 0,
+     "shape": "bitmap"
+    }
+   ]
+  },
+  "cross-key-add": {
+   "bytes": 21,
+   "containers": [
+    {
+     "cardinality": 5000,
+     "key": 0,
+     "shape": "run"
+    },
+    {
+     "cardinality": 1,
+     "key": 2,
+     "shape": "array"
+    }
+   ]
+  },
+  "intersect": {
+   "bytes": 116,
+   "containers": [
+    {
+     "cardinality": 50,
+     "key": 0,
+     "shape": "array"
+    }
+   ]
+  },
+  "intersect-add": {
+   "bytes": 118,
+   "containers": [
+    {
+     "cardinality": 51,
+     "key": 0,
+     "shape": "array"
+    }
+   ]
+  },
+  "intersect-left-after": {
+   "bytes": 216,
+   "containers": [
+    {
+     "cardinality": 100,
+     "key": 0,
+     "shape": "array"
+    }
+   ]
+  },
+  "run-union-add": {
+   "bytes": 8218,
+   "containers": [
+    {
+     "cardinality": 5001,
+     "key": 0,
+     "shape": "bitmap"
+    },
+    {
+     "cardinality": 1,
+     "key": 1,
+     "shape": "array"
+    }
+   ]
+  },
+  "same-key-union": {
+   "bytes": 216,
+   "containers": [
+    {
+     "cardinality": 100,
+     "key": 0,
+     "shape": "array"
+    }
+   ]
+  },
+  "union": {
+   "bytes": 32,
+   "containers": [
+    {
+     "cardinality": 3,
+     "key": 0,
+     "shape": "array"
+    },
+    {
+     "cardinality": 1,
+     "key": 1,
+     "shape": "array"
+    }
+   ]
+  },
+  "union-left": {
+   "bytes": 20,
+   "containers": [
+    {
+     "cardinality": 2,
+     "key": 0,
+     "shape": "array"
+    }
+   ]
+  },
+  "union-left-after": {
+   "bytes": 20,
+   "containers": [
+    {
+     "cardinality": 2,
+     "key": 0,
+     "shape": "array"
+    }
+   ]
+  },
+  "union-right": {
+   "bytes": 18,
+   "containers": [
+    {
+     "cardinality": 1,
+     "key": 1,
+     "shape": "array"
+    }
+   ]
+  },
+  "union-right-after": {
+   "bytes": 18,
+   "containers": [
+    {
+     "cardinality": 1,
+     "key": 1,
+     "shape": "array"
+    }
+   ]
+  }
+ }
+}

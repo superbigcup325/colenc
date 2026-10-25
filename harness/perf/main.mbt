@@ -12,7 +12,7 @@
 /// Statistics come from `moonbitlang/core/bench`: it sizes each batch to
 /// ~100 ms, takes `count` samples, winsorizes the tails and reports median and
 /// standard deviation. One line of JSON per case goes to stdout; medians are
-/// in milliseconds.
+/// in microseconds.
 ///
 /// The case name encodes the input shape so the report can normalise without a
 /// side channel: `<phase>|<case>|<plain_bytes>|<values>`.
@@ -85,21 +85,6 @@ fn dictionary_decode(
     count,
     encoded.dictionary_size,
   )
-}
-
-///|
-fn bitmap_from_ids(ids : Array[Int32]) -> @encoders.RoaringBitmap raise {
-  @encoders.RoaringBitmap::from_ids(ids)
-}
-
-///|
-fn bitmap_from_bytes(data : Bytes) -> @encoders.RoaringBitmap raise {
-  @encoders.RoaringBitmap::from_bytes(data)
-}
-
-///|
-fn bitmap_add(bitmap : @encoders.RoaringBitmap, id : Int32) -> Unit raise {
-  bitmap.add(id)
 }
 
 ///|
@@ -237,34 +222,184 @@ fn lcg(seed : Int32) -> Int32 {
 }
 
 ///|
-fn bench_roaring(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
-  let count = 1000000
-  let ids = Array::makei(count, fn(i) { i * 3 })
-  let others = Array::makei(count, fn(i) { i * 3 + 1 })
-  let plain = count * 4
-  let bitmap = bitmap_from_ids(ids) catch {
-    _ => @encoders.RoaringBitmap::new()
+/// Ascending unique ids: a bitmap is a set, so this is the model every
+/// assertion below compares against.
+fn model_of(ids : Array[Int32]) -> Array[Int32] {
+  let sorted = ids.copy()
+  sorted.sort()
+  sorted.dedup()
+  sorted
+}
+
+///|
+fn model_union(left : Array[Int32], right : Array[Int32]) -> Array[Int32] {
+  let out : Array[Int32] = []
+  let mut i = 0
+  let mut j = 0
+  while i < left.length() || j < right.length() {
+    if j >= right.length() || (i < left.length() && left[i] < right[j]) {
+      out.push(left[i])
+      i += 1
+    } else if i >= left.length() || right[j] < left[i] {
+      out.push(right[j])
+      j += 1
+    } else {
+      out.push(left[i])
+      i += 1
+      j += 1
+    }
   }
-  let other = bitmap_from_ids(others) catch {
-    _ => @encoders.RoaringBitmap::new()
+  out
+}
+
+///|
+fn model_intersect(left : Array[Int32], right : Array[Int32]) -> Array[Int32] {
+  let out : Array[Int32] = []
+  let mut i = 0
+  let mut j = 0
+  while i < left.length() && j < right.length() {
+    if left[i] < right[j] {
+      i += 1
+    } else if right[j] < left[i] {
+      j += 1
+    } else {
+      out.push(left[i])
+      i += 1
+      j += 1
+    }
   }
-  let serialized = bitmap.to_bytes()
-  record(b, label("bitmap", "from_ids", plain, count), fn() {
-    let built = bitmap_from_ids(ids) catch {
-      _ => @encoders.RoaringBitmap::new()
+  out
+}
+
+///|
+/// The first id in 0..65535 that the set does not hold, or -1 when it holds
+/// them all; used as a negative probe for `contains`.
+fn first_missing(expected : Array[Int32]) -> Int32 {
+  let mut index = 0
+  let mut probe = 0
+  while probe < 65536 {
+    while index < expected.length() && expected[index] < probe {
+      index += 1
+    }
+    if index >= expected.length() || expected[index] != probe {
+      return probe
+    }
+    probe += 1
+  }
+  -1
+}
+
+///|
+/// Reject a measurement whose result is wrong: a bitmap that looks fast because
+/// a call raised, or because a container went missing, must never reach the
+/// report. Called before the timers, so its cost is not read as algorithm time.
+fn guard_set(
+  bitmap : @encoders.RoaringBitmap,
+  expected : Array[Int32],
+  what : String,
+) -> Unit {
+  if bitmap.cardinality() != expected.length() {
+    abort(
+      "\{what}: cardinality \{bitmap.cardinality()} != \{expected.length()}",
+    )
+  }
+  if bitmap.to_array() != expected {
+    abort("\{what}: ids differ from the model")
+  }
+  for id in expected {
+    if !bitmap.contains(id) {
+      abort("\{what}: missing id \{id}")
+    }
+  }
+  let missing = first_missing(expected)
+  if missing >= 0 && bitmap.contains(missing) {
+    abort("\{what}: reports id \{missing}, which the model does not hold")
+  }
+}
+
+///|
+fn guard_parse(
+  bytes : Bytes,
+  expected : Array[Int32],
+  what : String,
+) -> @encoders.RoaringBitmap {
+  let parsed = @encoders.RoaringBitmap::from_bytes(bytes) catch {
+    error =>
+      abort(
+        "\{what}: from_bytes raised (\{@colenc_types.EncodingError::message(error)})",
+      )
+  }
+  guard_set(parsed, expected, "\{what}: round trip")
+  if parsed.to_bytes() != bytes {
+    abort("\{what}: re-encoding the parsed bitmap changed the bytes")
+  }
+  parsed
+}
+
+///|
+fn build_bitmap(ids : Array[Int32], what : String) -> @encoders.RoaringBitmap {
+  @encoders.RoaringBitmap::from_ids(ids) catch {
+    error =>
+      abort(
+        "\{what}: from_ids raised (\{@colenc_types.EncodingError::message(error)})",
+      )
+  }
+}
+
+///|
+/// One bitmap case: verify it against the model, then report the phases. The
+/// case name says which container shape it exercises, and `meta|...` carries
+/// the values, cardinality and encoded size that a report needs alongside the
+/// timings.
+fn bench_bitmap_case(
+  b : @bench.Bench,
+  sink : @ref.Ref[Int32],
+  name : String,
+  ids : Array[Int32],
+  optimize : Bool,
+) -> Unit {
+  let expected = model_of(ids)
+  let plain = ids.length() * 4
+  let values = expected.length()
+  let bitmap = build_bitmap(ids, name)
+  if optimize {
+    bitmap.run_optimize()
+  }
+  guard_set(bitmap, expected, "\{name}: built")
+  let bytes = bitmap.to_bytes()
+  let _ = guard_parse(bytes, expected, name)
+  // The add path is checked once, here: input order and duplicates must not
+  // change the set, and without `run_optimize` it must agree with `from_ids`
+  // byte for byte.
+  let added = @encoders.RoaringBitmap::new()
+  for id in ids {
+    added.add(id) catch {
+      error =>
+        abort(
+          "\{name}: add raised (\{@colenc_types.EncodingError::message(error)})",
+        )
+    }
+  }
+  guard_set(added, expected, "\{name}: add loop")
+  if !optimize && added.to_bytes() != bytes {
+    abort("\{name}: the add path and from_ids disagree on the bytes")
+  }
+  record(b, label("bitmap", name + "-from_ids", plain, values), fn() {
+    let built = @encoders.RoaringBitmap::from_ids(ids) catch {
+      _ => abort("\{name}: from_ids raised")
     }
     sink.val = sink.val + built.cardinality()
   })
-  record(b, label("bitmap", "add-loop", plain, count), fn() {
+  record(b, label("bitmap", name + "-add", plain, values), fn() {
     let built = @encoders.RoaringBitmap::new()
     for id in ids {
-      bitmap_add(built, id) catch {
-        _ => ()
+      built.add(id) catch {
+        _ => abort("\{name}: add raised")
       }
     }
     sink.val = sink.val + built.cardinality()
   })
-  record(b, label("bitmap", "contains", plain, count), fn() {
+  record(b, label("bitmap", name + "-contains", plain, values), fn() {
     let mut hits = 0
     for id in ids {
       if bitmap.contains(id) {
@@ -273,23 +408,113 @@ fn bench_roaring(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
     }
     sink.val = sink.val + hits
   })
-  record(b, label("bitmap", "union", plain, count), fn() {
-    let merged = bitmap.union(other)
-    sink.val = sink.val + merged.cardinality()
-  })
-  record(b, label("bitmap", "intersect", plain, count), fn() {
-    let merged = bitmap.intersect(other)
-    sink.val = sink.val + merged.cardinality()
-  })
-  record(b, label("bitmap", "to_bytes", serialized.length(), count), fn() {
+  record(b, label("bitmap", name + "-to_bytes", bytes.length(), values), fn() {
     sink.val = sink.val + bitmap.to_bytes().length()
   })
-  record(b, label("bitmap", "from_bytes", serialized.length(), count), fn() {
-    let back = bitmap_from_bytes(serialized) catch {
-      _ => @encoders.RoaringBitmap::new()
+  record(b, label("bitmap", name + "-from_bytes", bytes.length(), values), fn() {
+    let back = @encoders.RoaringBitmap::from_bytes(bytes) catch {
+      _ => abort("\{name}: from_bytes raised")
     }
     sink.val = sink.val + back.cardinality()
   })
+  if optimize {
+    record(b, label("bitmap", name + "-run_optimize", plain, values), fn() {
+      let copy = @encoders.RoaringBitmap::from_ids(ids) catch {
+        _ => abort("\{name}: from_ids raised")
+      }
+      copy.run_optimize()
+      sink.val = sink.val + copy.cardinality()
+    })
+  }
+  println("meta|\{name}|\{ids.length()}|\{values}|\{bytes.length()}|\{plain}")
+}
+
+///|
+/// Union and intersect for one overlap shape, validated against the model
+/// before either timer starts.
+fn bench_bitmap_setop(
+  b : @bench.Bench,
+  sink : @ref.Ref[Int32],
+  name : String,
+  left_ids : Array[Int32],
+  right_ids : Array[Int32],
+) -> Unit {
+  let left_model = model_of(left_ids)
+  let right_model = model_of(right_ids)
+  let union_model = model_union(left_model, right_model)
+  let intersect_model = model_intersect(left_model, right_model)
+  let left = build_bitmap(left_ids, name)
+  let right = build_bitmap(right_ids, name)
+  let merged = left.union(right)
+  guard_set(merged, union_model, "\{name}: union")
+  let shared = left.intersect(right)
+  guard_set(shared, intersect_model, "\{name}: intersect")
+  // The result must own its containers: a later add may not rewrite an operand.
+  merged.add(union_model.length() + 1) catch {
+    error =>
+      abort(
+        "\{name}: add on the union result raised (\{@colenc_types.EncodingError::message(error)})",
+      )
+  }
+  guard_set(left, left_model, "\{name}: left operand after mutating the result")
+  guard_set(
+    right,
+    right_model,
+    "\{name}: right operand after mutating the result",
+  )
+  let plain = (left_ids.length() + right_ids.length()) * 4
+  let values = left_ids.length() + right_ids.length()
+  record(b, label("bitmap-setop", name + "-union", plain, values), fn() {
+    sink.val = sink.val + left.union(right).cardinality()
+  })
+  record(b, label("bitmap-setop", name + "-intersect", plain, values), fn() {
+    sink.val = sink.val + left.intersect(right).cardinality()
+  })
+  println(
+    "meta|setop-\{name}|\{values}|\{union_model.length()}|\{merged.to_bytes().length()}|\{plain}",
+  )
+}
+
+///|
+/// The bitmap matrix: one case per container shape and per key count, then the
+/// three overlap shapes a set operation actually has to handle. Every case is
+/// validated against a plain sorted-array model first, so a swallowed error can
+/// no longer read as a fast path.
+fn bench_roaring(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
+  // Array containers: 32 ids per key across 3125 keys.
+  let sparse = Array::makei(100000, fn(i) { i * 2048 })
+  bench_bitmap_case(b, sink, "sparse-array", sparse, false)
+  // Bitmap containers: five keys filled edge to edge.
+  let dense = Array::makei(300000, fn(i) { i })
+  bench_bitmap_case(b, sink, "dense-bitmap", dense, false)
+  // The same ids as runs.
+  bench_bitmap_case(b, sink, "dense-run", dense, true)
+  // All three shapes in one bitmap: an array key, a bitmap key and a run key.
+  let mixed : Array[Int32] = []
+  for id in [1, 5, 9, 13] {
+    mixed.push(id)
+  }
+  for index in 0..<5000 {
+    mixed.push(65536 + index * 2)
+  }
+  for index in 0..<8000 {
+    mixed.push(196608 + index)
+  }
+  bench_bitmap_case(b, sink, "mixed-shapes", mixed, true)
+  // One id per key: 32768 containers, which is the key walk itself.
+  let wide = Array::makei(32768, fn(i) { i * 65536 })
+  bench_bitmap_case(b, sink, "wide-keys", wide, false)
+  // Overlap shapes: disjoint, partial and identical.
+  let disjoint = Array::makei(2000, fn(i) { 400000 + i * 2 })
+  bench_bitmap_setop(b, sink, "disjoint", mixed, disjoint)
+  let partial : Array[Int32] = []
+  for index in 0..<mixed.length() {
+    if index % 2 == 0 {
+      partial.push(mixed[index])
+    }
+  }
+  bench_bitmap_setop(b, sink, "partial", mixed, partial)
+  bench_bitmap_setop(b, sink, "identical", mixed, mixed)
 }
 
 ///|

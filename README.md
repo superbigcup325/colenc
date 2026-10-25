@@ -139,8 +139,12 @@ fixtures, so its ratios differ from the table above while showing the same
 shape.
 
 Throughput lives in [`docs/scoreboard.md`](docs/scoreboard.md): on this machine
-a release build reaches about 2.3 GB/s encoding and 3.2 GB/s decoding for
-monotonic INT64 deltas on native, and about 1.1 GB/s / 1.0 GB/s on wasm-gc.
+a release build reaches about 2.3 GB/s encoding and 3.4 GB/s decoding for
+monotonic INT64 deltas on native, and about 1.0 GB/s / 1.1 GB/s on wasm-gc. The
+scoreboard also carries the bitmap rows, where the set replaces a raw INT32 id
+stream: a million sparse ids encode at 121 MB/s into 2.25 MB (56% of the id
+stream), the same million consecutive ids take 131 KB as bitmap containers and
+230 bytes once run-optimised.
 
 ## Boundaries (v1)
 

@@ -69,6 +69,9 @@ its branch in `facade.mbt`.
   bitmap cases and asserts each one still exercises its container shape,
   `python3 harness/check_roaring.py` byte-diffs the bitmap in both container
   modes,
+  `python3 harness/check_roaring_ops.py` checks the operation sequences that
+  have no reference bytes (round trip, container legality as parsed back, and
+  operand independence),
   `harness/check_container.sh` proves the container path end to end
 - Throughput has two rigs: `python3 harness/scoreboard.py` regenerates
   `docs/scoreboard.md` from `harness/bench` (native and wasm-gc, median of three
@@ -225,6 +228,13 @@ tracked documents ship in the release archive.
   could not be read back (10018 bytes written, no valid parse). The invariant is
   the contract: arrays hold at most 4096 values, bitmaps more, and a run form is
   adopted only when it is strictly smaller
+- **A byte diff cannot judge every bitmap path** → CRoaring keeps a run
+  container when an id is added to it while colenc de-optimises the run, so both
+  streams are legal and differ; an aliased set result is byte-identical to itself
+  until the result is mutated. Those sequences are judged by round trip, by the
+  container invariants re-derived from the bytes, and by leaving the operands
+  untouched, with the layout pinned separately as a regression net rather than
+  as a criterion
 - **Unchecked access is not a speedup here** → rewriting the bit unpacker with
   `unsafe_get` measured 0.271→0.305 ms at width 5, 0.361→0.445 at 12 and
   0.422→0.497 at 16 (and a wash elsewhere), so bounds checks are not the
