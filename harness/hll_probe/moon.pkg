@@ -1,0 +1,7 @@
+import {
+  "superbigcup325/colenc/sketches",
+  "superbigcup325/colenc/types",
+  "moonbitlang/core/env",
+}
+
+pkgtype(kind: "executable")

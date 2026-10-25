@@ -45,6 +45,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   classical one with the linear-counting and large-range corrections; no fitted
   bias tables. The contract, including what the criteria do *not* claim, is
   `docs/SKETCHES.md`
+- Harness: `hll_probe/` drives the sketch from the rig, and `check_hll.py` runs
+  the four acceptance groups — the error spread over twenty seeds against
+  `1.04/sqrt(m)` (bounded from above, because linear counting beats the
+  asymptotic bound below `2.5m`), merge as a register algebra, serialization
+  with the malformed states rejected, and the boundaries. Apache DataSketches'
+  `datasketches` is pinned as the outside opinion on the estimate
 ### Changed
 
 - **A bitmap probe searches its key array branchlessly.** Every `contains` walked

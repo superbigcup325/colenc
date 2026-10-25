@@ -75,6 +75,8 @@ its branch in `facade.mbt`.
   have no reference bytes (round trip, container legality as parsed back, and
   operand independence),
   `harness/check_container.sh` proves the container path end to end,
+  `python3 harness/check_hll.py` runs the four acceptance groups the sketch
+  contract defines (error spread, merge algebra, serialization, boundaries),
   `python3 harness/check_consumer.py` runs a consumer against the unpacked
   release archive on all three backends with a fresh `MOON_HOME` (add
   `--registry-version X.Y.Z` after a publish)

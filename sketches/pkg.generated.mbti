@@ -26,6 +26,7 @@ pub fn HllSketch::new(Int32) -> Self raise @types.EncodingError
 pub fn HllSketch::new_default() -> Self
 pub fn HllSketch::precision(Self) -> Int32
 pub fn HllSketch::register_count(Self) -> Int32
+pub fn HllSketch::registers(Self) -> ArrayView[Int32]
 pub fn HllSketch::to_bytes(Self) -> Bytes
 
 // Type aliases

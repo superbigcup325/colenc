@@ -56,6 +56,6 @@ test "the serialized form of a fixed sequence" {
   }
   inspect(
     hll_hex(sketch.to_bytes()),
-    content="010400000000010000000100000000010000",
+    content="010400000000010000000100000000020000",
   )
 }

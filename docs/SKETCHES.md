@@ -107,11 +107,22 @@ claims otherwise.
 
 Four groups, all of which must pass before the sketch is called done.
 
-1. **Error at the default precision.** Cardinalities 1, 10, 1k, 100k, 1M and
-   10M, each with several fixed seeds, asserting the relative error is inside
-   `1.96 * 1.04 / sqrt(m)` and reporting the worst deviation observed. The
-   bound is a confidence interval, not a guarantee; the worst case is reported
-   so a reader can see the spread rather than only the pass.
+1. **Error at the default precision.** The relative error is measured over
+   twenty fixed seeds at 1k, 20 at 100k and 5 at 1M, and the group asserts that
+   the measured standard deviation is within a quarter of `1.04 / sqrt(m)`,
+   that the mean is centred, and that at most a tenth of the samples fall
+   outside `1.96 sigma`. One 10M sample is reported and not promised.
+
+   The spread is bounded from above rather than pinned to the analytic value:
+   below about `2.5m` the linear-counting correction is *more* accurate than
+   `1.04 / sqrt(m)`, so a smaller deviation there is the estimator working, and
+   the upper bound is what catches a defect.
+
+   Asserting that *every* sample sits inside `1.96 sigma` was the first draft
+   and is not a stricter criterion, it is a broken one: a 95% interval is
+   violated by construction about one time in twenty, so the draft would fail at
+   random. Measuring the spread is the same claim stated so that it can pass or
+   fail for a reason. The worst sample is printed either way.
 2. **Merge algebra.** Union must be commutative and associative as a register
    array: `merge` in either order and any grouping produces bit-identical
    registers, and merging into an empty sketch equals building directly.

@@ -203,14 +203,24 @@ pub fn HllSketch::register_count(self : HllSketch) -> Int32 {
 }
 
 ///|
+/// The register array, for a rig that wants to look at the state rather than
+/// only at the estimate. Reading it does not copy.
+pub fn HllSketch::registers(self : HllSketch) -> ArrayView[Int32] {
+  self.registers.exact_view()
+}
+
+///|
 /// The register update: the top `precision` bits choose the bucket, the rest
 /// carry the rank. Written once so every typed entry point shares it.
 fn HllSketch::absorb_hash(self : HllSketch, hash : UInt64) -> Unit {
   let precision = self.precision
   let index = (hash >> (64 - precision)).reinterpret_as_int64().to_int()
   let rest = hash << precision
+  // `rest` already has the index bits shifted out, so its leading zeros are the
+  // rank minus one: subtracting the precision again here charged the shift
+  // twice and pinned every register at the floor of 1.
   let zeros = hll_leading_zeros(rest)
-  let mut rank = zeros - precision + 1
+  let mut rank = zeros + 1
   if rank < 1 {
     rank = 1
   }
