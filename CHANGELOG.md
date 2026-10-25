@@ -39,6 +39,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **A bitmap probe searches its key array branchlessly.** Every `contains` walked
+  the sorted key array with a branch per step, and a probe's path is not
+  predictable. Measured in the rig's new `-- search` section on a 32768-key
+  array: the branchy lower bound 36.8 ns per probe, an unchecked spelling 35.6 ns
+  (so the bounds check was never the cost), the branchless form 13.1 ns. Probes
+  of up to eight keys go linear instead, and the build path keeps the branchy
+  search, where ascending inserts make the branch predictable: the same rewrite
+  measured 26% to 90% *slower* on `add`. Interleaved pairs on a quiet host:
+  `contains` -53% on the sparse column, -49% on the 1M column, -57% on 4096
+  containers, -46% on 32768 one-value containers, -44% on misses, and `add`
+  unchanged within noise on every case
 - **Bitmap set operations merge the shapes they are given.** `union` and
   `intersect` turned both operands into 1024-bitmap-word arrays, ORed or ANDed
   them, and then enumerated the result back into values — even when the result

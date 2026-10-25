@@ -82,7 +82,8 @@ its branch in `facade.mbt`.
   cases, so toolchain comparisons go through medians), while
   `moon run --target native --release harness/perf` reports medians and spreads
   for the primitives, dataset variants and candidate rewrites; `-- candidates`
-  runs only the A/B section, `-- roaring` only the bitmap cases
+  runs only the A/B section, `-- roaring` only the bitmap cases, `-- search`
+  only the key-search spellings
 - `moon run harness/writer_min -- <out.parquet>` writes the minimal container
 - **Before committing**, run the quartet:
   `moon info && moon fmt && moon check --deny-warn && moon test`
@@ -351,6 +352,17 @@ tracked documents ship in the release archive.
 - **`Int32` has no `to_int` in this toolchain** → `x.to_int()` on an `Int32`
   fails with "Type Int has no method to_int", which reads as if the type were
   already `Int`; the wide path is `x.to_int64().to_int()`
+- **A binary search costs its mispredictions before its bounds checks** → the
+  key lookup behind `contains` was `low/high` with a branch per step. Four
+  spellings of the same lower bound were priced in `harness/perf -- search` on a
+  32768-key array: branchy 36.8 ns per probe, branchy with the length hoisted
+  40.3, an unchecked copy 35.6 (no gain, so the bounds check is not the cost),
+  branchless 13.1. The branchless form is *not* universally better: on the build
+  path, where a sorted column walks the keys forward, the branch predicts and
+  speculation runs ahead, so the same change measured +26% to +90% on `add` and
+  had to be kept to the probe path only. Short arrays want a linear scan
+  (a 5-key bitmap: 3.8 ns branchy, 6.4 ns branchless, 1.4 ns linear). Pick the
+  spelling by access pattern, and price it — not by principle
 - **Unchecked access is not a speedup here** → rewriting the bit unpacker with
   `unsafe_get` measured 0.271→0.305 ms at width 5, 0.361→0.445 at 12 and
   0.422→0.497 at 16 (and a wash elsewhere), so bounds checks are not the

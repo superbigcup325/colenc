@@ -643,6 +643,122 @@ fn bench_roaring(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
 }
 
 ///|
+fn bench_search(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
+  // The key lookup a bitmap index pays on every probe: a sorted key array of the
+  // size a 1M-id column produces, probed in ascending order like a column scan.
+  // Four spellings of the same search, so the choice is measured rather than
+  // argued: the generic helper as it stands, the same loop with the length
+  // hoisted, a branchless variant that reads both halves, and an unchecked one.
+  let count = 32768
+  let keys : Array[Int32] = Array::makei(count, fn(i) { i * 32 })
+  let probes : Array[Int32] = Array::makei(count, fn(i) { i * 32 })
+  let plain = count * 4
+  record(b, label("search", "generic", plain, count), fn() {
+    let mut found = 0
+    for probe in probes {
+      let mut low = 0
+      let mut high = keys.length()
+      while low < high {
+        let mid = (low + high) >> 1
+        if keys[mid] < probe {
+          low = mid + 1
+        } else {
+          high = mid
+        }
+      }
+      if low < keys.length() && keys[low] == probe {
+        found += 1
+      }
+    }
+    sink.val = sink.val + found
+  })
+  record(b, label("search", "hoisted", plain, count), fn() {
+    let mut found = 0
+    let n = keys.length()
+    for probe in probes {
+      let mut low = 0
+      let mut high = n
+      while low < high {
+        let mid = low + ((high - low) >> 1)
+        if keys[mid] < probe {
+          low = mid + 1
+        } else {
+          high = mid
+        }
+      }
+      if low < n && keys[low] == probe {
+        found += 1
+      }
+    }
+    sink.val = sink.val + found
+  })
+  // Two reads per step and one branch: the comparison is turned into an index
+  // update, so the misprediction a data-dependent branch costs disappears.
+  record(b, label("search", "branchless", plain, count), fn() {
+    let mut found = 0
+    let n = keys.length()
+    for probe in probes {
+      let mut base = 0
+      let mut rest = n
+      while rest > 1 {
+        let half = rest >> 1
+        let mid = base + half
+        let v = keys[mid]
+        base = if v < probe { mid } else { base }
+        rest = rest - half
+      }
+      if base < n && keys[base] == probe {
+        found += 1
+      }
+    }
+    sink.val = sink.val + found
+  })
+  record(b, label("search", "unchecked", plain, count), fn() {
+    let mut found = 0
+    let n = keys.length()
+    for probe in probes {
+      let mut low = 0
+      let mut high = n
+      while low < high {
+        let mid = low + ((high - low) >> 1)
+        if keys.unsafe_get(mid) < probe {
+          low = mid + 1
+        } else {
+          high = mid
+        }
+      }
+      if low < n && keys.unsafe_get(low) == probe {
+        found += 1
+      }
+    }
+    sink.val = sink.val + found
+  })
+  // The same array probed at one fixed id, as a control: no search movement at
+  // all, so it prices the call and the array read alone.
+  record(b, label("search", "fixed-probe", plain, count), fn() {
+    let mut found = 0
+    let probe = probes[count >> 1]
+    let n = keys.length()
+    for _ in 0..<count {
+      let mut low = 0
+      let mut high = n
+      while low < high {
+        let mid = low + ((high - low) >> 1)
+        if keys[mid] < probe {
+          low = mid + 1
+        } else {
+          high = mid
+        }
+      }
+      if low < n && keys[low] == probe {
+        found += 1
+      }
+    }
+    sink.val = sink.val + found
+  })
+}
+
+///|
 fn bench_plain(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
   let n = INT_COUNT
   let ints = @colenc_types.ColBuf::Int32s(Array::makei(n, fn(i) { i % 4093 }))
@@ -1257,6 +1373,12 @@ fn main {
   if argv.length() > 1 && argv[1] == "rle" {
     bench_rle(bencher, sink)
     println(bencher.dump_summaries())
+    return
+  }
+  if argv.length() > 1 && argv[1] == "search" {
+    bench_search(bencher, sink)
+    println(bencher.dump_summaries())
+    println("sink=\{sink.val}")
     return
   }
   if argv.length() > 1 && argv[1] == "roaring" {
