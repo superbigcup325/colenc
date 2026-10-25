@@ -251,6 +251,18 @@ tracked documents ship in the release archive.
   (`ps` inside it showed nothing, `load average` did), so read that line first
   and regenerate rather than picking the flattering run — a reused median from
   an overloaded machine is a wrong number in a tracked document
+- **A container's cost is one allocation, and the arrays around it grow** →
+  a bitmap of 32768 one-value containers spends about 29 ns per container,
+  of which `Array::make(1, value)` is 8.4 ns and the two pushes into
+  `keys`/`containers` are the rest (measured as control cases in
+  `harness/perf -- candidates`, where 32768 pushes cost 21 µs against 5 µs for
+  one exact-size `Array::make`); reserving both arrays from the key span
+  between the first and the last id takes the encode path down 16% on wide
+  keys and 26% on the sparse column. Counting the containers per id instead
+  was *slower* on the dense cases, which is why the span estimate stays O(1)
+- **`Int32` has no `to_int` in this toolchain** → `x.to_int()` on an `Int32`
+  fails with "Type Int has no method to_int", which reads as if the type were
+  already `Int`; the wide path is `x.to_int64().to_int()`
 - **Unchecked access is not a speedup here** → rewriting the bit unpacker with
   `unsafe_get` measured 0.271→0.305 ms at width 5, 0.361→0.445 at 12 and
   0.422→0.497 at 16 (and a wash elsewhere), so bounds checks are not the
