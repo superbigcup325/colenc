@@ -9,3 +9,7 @@
 pyarrow==26.0.0
 duckdb==1.5.6
 pyroaring==1.2.0
+# datasketches is the outside opinion on the HLL estimate: it is HLL++ with bias
+# tables and a sparse mode, so it can judge whether an estimate is in the right
+# place, not whether the registers or the bytes match. Test time only.
+datasketches==5.2.0

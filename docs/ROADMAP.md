@@ -99,6 +99,7 @@ Criteria must not be weakened: a new encoding passes all three layers; if it can
 Declared exceptions:
 
 - **E7 FSST**: Parquet has no native FSST, so the byte and container layers do not apply; downgraded to round-trip properties + a compression-ratio / throughput scoreboard
+- **Approximate aggregations (HLL, t-digest)**: no Parquet writer emits a sketch, so there is no reference byte stream to diff and no decode path to round-trip through. Criteria are properties plus a statistical rig, recorded in [sketches](SKETCHES.md) before the implementation starts
 - **E8 Roaring**: the bitmap is an index, so the Parquet container layer does not apply. Round-trip properties and byte diffs against CRoaring apply to the reference-aligned paths. As documented in the README and harness, sequences such as adding after `run_optimize` can produce legal bytes different from CRoaring; those paths are judged by round trip, container invariants derived from the bytes and operand independence, with a separate layout regression pin
 
 ## 5. Scoreboard definitions
@@ -121,7 +122,7 @@ Not in v1 (the boundary is written down to stop scope creep):
 Phase two, in progress:
 
 - **Bitmap indexes** — Roaring format, cross-checked against the C/Java implementations file by file. Landed as E8 / P6: portable serialization byte-identical to CRoaring, container shapes and the run-optimisation rule aligned, set operations in place
-- **Approximate aggregations**: HLL first, then t-digest, with their contracts and acceptance criteria recorded before implementation (not started). The proposed HLL gate measures statistical error across repeated trials; the proposed t-digest gate measures empirical error across specified distributions, input orders and merge trees. See [Next steps](NEXT-STEPS.md)
+- **Approximate aggregations**: HLL first, then t-digest, with their contracts and acceptance criteria recorded before implementation. The HLL contract is recorded in [sketches](SKETCHES.md); the implementation has not started. The proposed HLL gate measures statistical error across repeated trials; the proposed t-digest gate measures empirical error across specified distributions, input orders and merge trees. See [Next steps](NEXT-STEPS.md)
 
 ## 7. Engineering conventions
 

@@ -134,6 +134,12 @@ Use a dedicated sketch API. HLL summarizes distinct counts and cannot restore
 the original column, so a reversible `encode_column` / `decode_column`
 contract does not describe it.
 
+The contract is recorded in [sketches](SKETCHES.md): variant and estimator,
+input canonicalization and hash, precision range, merge and ownership rules,
+the serialization decision, the statistical acceptance groups, what is explicitly
+not claimed, and the pinned test-time reference. This package therefore starts
+from implementation, not from another design pass.
+
 Before implementation, record:
 
 - The HLL variant, estimator and pinned test-time reference implementation.
