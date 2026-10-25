@@ -238,6 +238,19 @@ tracked documents ship in the release archive.
   container invariants re-derived from the bytes, and by leaving the operands
   untouched, with the layout pinned separately as a regression net rather than
   as a criterion
+- **A bulk build must settle on the shape repeated adds would have chosen** →
+  building a bitmap from a sorted column key run by key run is 4-7x faster than
+  one insert per id, but the shape rule reads the *final* cardinality of the
+  run, not the cardinality at some insert: an array up to 4096 values, a bitmap
+  above. Proving the rewrite means comparing bytes with the incremental path on
+  the boundary cases (4096/4097, a full 65536-value key, duplicates, MAX_ID,
+  before and after `run_optimize`), not comparing the decoded sets
+- **A scoreboard run is only as good as the machine it ran on** → the header
+  records the worst round-to-round swing for a reason: one regeneration here
+  reported 148% and another 502% while the host was busy outside the sandbox
+  (`ps` inside it showed nothing, `load average` did), so read that line first
+  and regenerate rather than picking the flattering run — a reused median from
+  an overloaded machine is a wrong number in a tracked document
 - **Unchecked access is not a speedup here** → rewriting the bit unpacker with
   `unsafe_get` measured 0.271→0.305 ms at width 5, 0.361→0.445 at 12 and
   0.422→0.497 at 16 (and a wash elsewhere), so bounds checks are not the
