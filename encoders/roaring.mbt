@@ -739,26 +739,53 @@ pub fn RoaringBitmap::from_bytes_with_consumed(
     }
     position += run_bytes
   }
+  // The key/card table and the offset table are read with one bounds check per
+  // table and cursor arithmetic in the loops: a per-value `roaring_read_u16`
+  // costs a call and a redundant length check, and these tables are walked
+  // once per container.
+  if position + 4 * size > data.length() {
+    raise @types.EncodingError::Truncated(
+      position,
+      4 * size,
+      data.length() - position,
+    )
+  }
   let keys : Array[Int32] = Array::make(size, 0)
   let cards : Array[Int32] = Array::make(size, 0)
+  let mut cursor = position
   for index in 0..<size {
-    keys[index] = roaring_read_u16(data, position)
-    cards[index] = roaring_read_u16(data, position + 2) + 1
-    position += 4
+    keys[index] = data[cursor].to_int() | (data[cursor + 1].to_int() << 8)
+    cards[index] = (
+        data[cursor + 2].to_int() | (data[cursor + 3].to_int() << 8)
+      ) +
+      1
+    cursor += 4
     if index > 0 && keys[index] <= keys[index - 1] {
-      raise @types.EncodingError::Corrupt(position - 4)
+      raise @types.EncodingError::Corrupt(cursor - 4)
     }
     if cards[index] < 1 || cards[index] > ROARING_CONTAINER_VALUES {
-      raise @types.EncodingError::Corrupt(position - 2)
+      raise @types.EncodingError::Corrupt(cursor - 2)
     }
   }
+  position = cursor
   let offsets : Array[Int32] = Array::make(size, 0)
   let has_offsets = !with_runs || size >= ROARING_NO_OFFSET_THRESHOLD
   if has_offsets {
-    for index in 0..<size {
-      offsets[index] = roaring_read_u32(data, position)
-      position += 4
+    if position + 4 * size > data.length() {
+      raise @types.EncodingError::Truncated(
+        position,
+        4 * size,
+        data.length() - position,
+      )
     }
+    for index in 0..<size {
+      offsets[index] = data[cursor].to_int() |
+        (data[cursor + 1].to_int() << 8) |
+        (data[cursor + 2].to_int() << 16) |
+        (data[cursor + 3].to_int() << 24)
+      cursor += 4
+    }
+    position = cursor
   }
   let containers : Array[RoaringContainer] = Array::make(
     size,
@@ -771,20 +798,42 @@ pub fn RoaringBitmap::from_bytes_with_consumed(
     let container = if flags[index] {
       let run_count = roaring_read_u16(data, position)
       position += 2
-      let pairs : Array[Int32] = Array::make(2 * run_count, 0)
-      for pair in 0..<(2 * run_count) {
-        pairs[pair] = roaring_read_u16(data, position)
+      let count = 2 * run_count
+      if position + 2 * count > data.length() {
+        raise @types.EncodingError::Truncated(
+          position,
+          2 * count,
+          data.length() - position,
+        )
+      }
+      let pairs : Array[Int32] = Array::make(count, 0)
+      for pair in 0..<count {
+        pairs[pair] = data[position].to_int() |
+          (data[position + 1].to_int() << 8)
         position += 2
       }
       RunContainer(pairs)
     } else if cards[index] <= ROARING_ARRAY_MAX {
-      let values : Array[Int32] = Array::make(cards[index], 0)
-      for value in 0..<cards[index] {
-        values[value] = roaring_read_u16(data, position)
-        position += 2
-        if value > 0 && values[value] <= values[value - 1] {
-          raise @types.EncodingError::Corrupt(position - 2)
+      let card = cards[index]
+      let needed = 2 * card
+      if position + needed > data.length() {
+        raise @types.EncodingError::Truncated(
+          position,
+          needed,
+          data.length() - position,
+        )
+      }
+      let values : Array[Int32] = Array::make(card, 0)
+      let mut previous : Int32 = -1
+      for value in 0..<card {
+        let current = data[position].to_int() |
+          (data[position + 1].to_int() << 8)
+        if current <= previous {
+          raise @types.EncodingError::Corrupt(position)
         }
+        values[value] = current
+        previous = current
+        position += 2
       }
       ArrayContainer(values)
     } else {
