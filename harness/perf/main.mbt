@@ -461,15 +461,26 @@ fn bench_bitmap_case(
     }
   }
   if misses.length() >= 256 {
-    record(b, label("bitmap", name + "-contains-miss", plain, values), fn() {
-      let mut found = 0
-      for id in misses {
-        if bitmap.contains(id) {
-          found += 1
+    // The probe count is the miss list, not the set's cardinality: normalizing
+    // a miss row by the set size would report a cost ten times too low.
+    record(
+      b,
+      label(
+        "bitmap",
+        name + "-contains-miss",
+        misses.length() * 4,
+        misses.length(),
+      ),
+      fn() {
+        let mut found = 0
+        for id in misses {
+          if bitmap.contains(id) {
+            found += 1
+          }
         }
-      }
-      sink.val = sink.val + found
-    })
+        sink.val = sink.val + found
+      },
+    )
   }
   if optimize {
     record(b, label("bitmap", name + "-run_optimize", plain, values), fn() {

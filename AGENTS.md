@@ -223,6 +223,17 @@ tracked documents ship in the release archive.
 - **The Roaring surface takes INT32 ids** → the portable format's upper u32 half
   needs a column type `ColBuf` does not have yet, so ids above 2^31-1 are
   rejected with `OutOfRange` rather than truncated
+- **A set operation converted every operand to bitmap words** → `union` and
+  `intersect` materialized 8 KB per container regardless of shape, ORed the
+  words, and then re-derived the result's values, which meant a dense container
+  enumerated 60k values it threw away when the result stayed a bitmap. Measured
+  on the same call: an 8-value array container cost 68.5 ns per id while a
+  bitmap container of 60k values cost 0.42 ns per id — the small container was
+  paying the large container's price. Merging two sorted value arrays, filtering
+  an array against a bitmap's words, and choosing the result shape by popcount
+  takes the array case to 2.7 ns per id (-96%) and the bitmap case to 0.026 ns
+  per id (-94%). The lesson generalizes: a container's shape is already known,
+  so an operation that densifies both operands throws that knowledge away
 - **A set operation that reuses an operand's container aliases it** → the union
   used to push the surviving side's container by reference, so a later `add` on
   the result rewrote the operand (the array container's `insert` is in place);

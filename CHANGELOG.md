@@ -39,6 +39,20 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Bitmap set operations merge the shapes they are given.** `union` and
+  `intersect` turned both operands into 1024-bitmap-word arrays, ORed or ANDed
+  them, and then enumerated the result back into values — even when the result
+  was going to stay a bitmap, so a dense container paid to mirror 60k values it
+  discarded. Two sorted array containers now merge value by value, an array
+  against a bitmap filters the array, and the word path decides the result shape
+  by popcount instead of enumerating. Interleaved median-of-three pairs on a
+  quiet host: an array-container union 4489 -> 174 us (68.5 -> 2.7 ns per id,
+  -96%), the same call on bitmap containers 253 -> 15 us (0.42 -> 0.026 ns per
+  id, -94%), the mixed shape -51% to -65%, and the run path -18% to -21% from
+  the dropped enumeration. The container shapes, the byte stream and the
+  reference diff are unchanged; the operation-sequence checks and both
+  container-mode byte diffs pass on all three backends
+
 - Container bodies are no longer zero-filled before they are overwritten: the
   reader and the sorted build create each array with `Array::unsafe_make_uninit`
   and write every slot in the loop that follows. Zeroing a container costs
