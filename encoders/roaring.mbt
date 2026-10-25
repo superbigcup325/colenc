@@ -412,8 +412,22 @@ fn distinct_in_range(ids : Array[Int32], start : Int32, end : Int32) -> Int32 {
 /// repeated `add` calls would have settled on: an array up to 4096 values and a
 /// bitmap above that. Only `run_optimize` turns a container into runs.
 fn from_ascending_ids(ids : Array[Int32]) -> RoaringBitmap {
-  let bitmap = RoaringBitmap::new()
   let total = ids.length()
+  // Ascending ids occupy the keys between the first and the last one, so that
+  // span bounds the container count without a second pass over the ids (a
+  // per-id key comparison cost 5% on the dense cases). A sparse id column is
+  // mostly one-value containers, so reserving the right capacity is worth it:
+  // growing the two arrays one push at a time was measurable here.
+  let mut estimate : Int32 = 0
+  if total > 0 {
+    let first_key : Int32 = ids[0] >> 16
+    let last_key : Int32 = ids[total - 1] >> 16
+    // Int32 has no `to_int` in this toolchain, so the subtraction goes wide.
+    let span : Int32 = (last_key - first_key).to_int64().to_int() + 1
+    estimate = if span < total { span } else { total }
+  }
+  let keys : Array[Int32] = Array(capacity=estimate)
+  let containers : Array[RoaringContainer] = Array(capacity=estimate)
   let mut start = 0
   while start < total {
     let key = ids[start] >> 16
@@ -421,18 +435,22 @@ fn from_ascending_ids(ids : Array[Int32]) -> RoaringBitmap {
     while end < total && ids[end] >> 16 == key {
       end += 1
     }
-    bitmap.keys.push(key)
-    if distinct_in_range(ids, start, end) <= ROARING_ARRAY_MAX {
-      let values : Array[Int32] = []
+    let distinct = distinct_in_range(ids, start, end)
+    keys.push(key)
+    if distinct <= ROARING_ARRAY_MAX {
+      // Exact size, filled by index: one allocation of `2 * distinct` bytes.
+      let values : Array[Int32] = Array::make(distinct, 0)
       let mut previous = -1
+      let mut value_slot = 0
       for index in start..<end {
         let low = ids[index] & 0xFFFF
         if low != previous {
-          values.push(low)
+          values[value_slot] = low
+          value_slot += 1
           previous = low
         }
       }
-      bitmap.containers.push(ArrayContainer(values))
+      containers.push(ArrayContainer(values))
     } else {
       let words : Array[Int64] = Array::make(ROARING_WORDS, 0L)
       for index in start..<end {
@@ -440,11 +458,11 @@ fn from_ascending_ids(ids : Array[Int32]) -> RoaringBitmap {
         let word = low >> 6
         words[word] = words[word] | (1L << (low & 63))
       }
-      bitmap.containers.push(BitmapContainer(words))
+      containers.push(BitmapContainer(words))
     }
     start = end
   }
-  bitmap
+  { keys, containers, }
 }
 
 ///|
@@ -748,7 +766,10 @@ pub fn RoaringBitmap::from_bytes_with_consumed(
       position += 4
     }
   }
-  let containers : Array[RoaringContainer] = []
+  let containers : Array[RoaringContainer] = Array::make(
+    size,
+    ArrayContainer([]),
+  )
   for index in 0..<size {
     if has_offsets && offsets[index] != position {
       raise @types.EncodingError::Corrupt(position)
@@ -795,7 +816,7 @@ pub fn RoaringBitmap::from_bytes_with_consumed(
     if container_cardinality(container) != cards[index] {
       raise @types.EncodingError::Corrupt(position)
     }
-    containers.push(container)
+    containers[index] = container
   }
   ({ keys, containers, }, position)
 }

@@ -27,6 +27,12 @@ const INT_COUNT : Int32 = 500000
 const STR_COUNT : Int32 = 200000
 
 ///|
+
+///|
+/// One-value containers: the shape a sparse id column produces.
+const WIDE_COUNT : Int32 = 32768
+
+///|
 const SAMPLES : UInt32 = 7
 
 ///|
@@ -504,6 +510,16 @@ fn bench_roaring(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
   // One id per key: 32768 containers, which is the key walk itself.
   let wide = Array::makei(32768, fn(i) { i * 65536 })
   bench_bitmap_case(b, sink, "wide-keys", wide, false)
+  // The same 32768 ids, eight per key: 4096 containers instead of 32768, so
+  // the difference between this case and `wide-keys` is the per-container cost
+  // rather than the per-value cost.
+  let grouped : Array[Int32] = []
+  for key in 0..<4096 {
+    for offset in 0..<8 {
+      grouped.push(key * 65536 + offset)
+    }
+  }
+  bench_bitmap_case(b, sink, "few-keys", grouped, false)
   // Overlap shapes: disjoint, partial and identical.
   let disjoint = Array::makei(2000, fn(i) { 400000 + i * 2 })
   bench_bitmap_setop(b, sink, "disjoint", mixed, disjoint)
@@ -905,6 +921,28 @@ fn bench_candidates(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
       abort("the unsafe candidate diverges from the checked one")
     }
   }
+  // What a container costs on its own. A bitmap of 32768 one-value containers
+  // pays about 30 ns per container; these three cases say whether that is the
+  // allocation, the array growth, or neither.
+  record(b, label("alloc", "array-make-32768", 0, WIDE_COUNT), fn() {
+    let made : Array[Int32] = Array::make(WIDE_COUNT, 0)
+    sink.val = sink.val + made.length()
+  })
+  record(b, label("alloc", "array-push-32768", 0, WIDE_COUNT), fn() {
+    let grown : Array[Int32] = []
+    for value in 0..<WIDE_COUNT {
+      grown.push(value)
+    }
+    sink.val = sink.val + grown.length()
+  })
+  record(b, label("alloc", "one-value-arrays", 0, WIDE_COUNT), fn() {
+    let mut total = 0
+    for value in 0..<WIDE_COUNT {
+      let values : Array[Int32] = Array::make(1, value)
+      total = total + values[0]
+    }
+    sink.val = sink.val + total
+  })
   // The per-value Buffer round trip in `encode_fsst` costs this much on its
   // own; 200k values is the string column the scoreboard measures.
   record(b, label("alloc", "buffer-per-value", 0, STR_COUNT), fn() {

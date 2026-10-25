@@ -440,6 +440,12 @@ test "roaring: a sorted input builds the same containers as repeated adds" {
     consecutive_ids(0, 65536),
     consecutive_ids(65530, 20),
     [0, 65535, 65536, 131072, 2147483647],
+    // The build reserves its capacity from the key span between the first and
+    // the last id, so the cases that could break it are the ones where that
+    // span says little: a gap wider than the container count, and the top key.
+    [0, 131072],
+    [0, 1, 2000000000],
+    [2147483647 - 65536, 2147483647],
     Array::makei(5000, fn(i) { i * 13 }),
     Array::makei(4096, fn(i) { 70000 + i * 2 }),
   ]
