@@ -200,3 +200,228 @@ test "roaring: a wrong offset in the table is detected" {
     _ => fail("a wrong offset must be refused")
   }
 }
+
+// --- Regressions for operand aliasing and container-shape legality -------------
+//
+// The byte layout is a function of the container's shape: the writer emits an
+// array body or a bitmap body from the container it holds, while the reader
+// picks the shape from the cardinality. Two defects hid behind that coupling —
+// a set operation that reused an operand's container by reference (so a later
+// `add` rewrote the operand), and a run container that was de-optimised into an
+// array above the 4096-value range (so the writer and reader disagreed about
+// the body). Both are shape-invariant violations, which is why the cases below
+// assert the invariants after every operation rather than the symptom alone.
+
+///|
+/// Build a bitmap or fail where the raise happened. The older cases in this file
+/// turn a raise into an empty bitmap, which would hide a regression behind a
+/// confusing assertion.
+fn wb_bitmap(ids : Array[Int32]) -> RoaringBitmap raise {
+  RoaringBitmap::from_ids(ids) catch {
+    error => fail("from_ids raised: \{@types.EncodingError::message(error)}")
+  }
+}
+
+///|
+fn wb_parse(bytes : Bytes) -> RoaringBitmap raise {
+  RoaringBitmap::from_bytes(bytes) catch {
+    error => fail("from_bytes raised: \{@types.EncodingError::message(error)}")
+  }
+}
+
+///|
+fn consecutive_ids(start : Int32, count : Int32) -> Array[Int32] {
+  Array::makei(count, fn(index) { start + index })
+}
+
+///|
+/// Assert the container invariants the serialization depends on.
+fn check_container_invariants(bitmap : RoaringBitmap) -> Unit raise {
+  assert_eq(bitmap.keys.length(), bitmap.containers.length())
+  for index in 0..<bitmap.keys.length() {
+    if index > 0 {
+      assert_true(
+        bitmap.keys[index - 1] < bitmap.keys[index],
+        msg="keys are strictly ascending",
+      )
+    }
+    let container = bitmap.containers[index]
+    let cardinality = container_cardinality(container)
+    assert_true(cardinality > 0, msg="containers are never empty")
+    match container {
+      ArrayContainer(values) => {
+        assert_true(
+          cardinality <= ROARING_ARRAY_MAX,
+          msg="an array container holds at most 4096 values",
+        )
+        assert_eq(values.length(), cardinality)
+        for position in 0..<values.length() {
+          assert_true(
+            values[position] >= 0 && values[position] < ROARING_CONTAINER_VALUES,
+            msg="an array value stays in the low half",
+          )
+          if position > 0 {
+            assert_true(
+              values[position - 1] < values[position],
+              msg="array values are strictly ascending",
+            )
+          }
+        }
+      }
+      BitmapContainer(words) => {
+        assert_true(
+          cardinality > ROARING_ARRAY_MAX,
+          msg="a bitmap container holds more than 4096 values",
+        )
+        assert_eq(words.length(), ROARING_WORDS)
+      }
+      RunContainer(runs) => {
+        assert_true(
+          runs.length() % 2 == 0,
+          msg="runs come as (start, length) pairs",
+        )
+        let mut covered = 0
+        let mut position = 0
+        while position < runs.length() {
+          let start = runs[position]
+          let length = runs[position + 1]
+          assert_true(length >= 0, msg="a run length is non-negative")
+          assert_true(
+            start >= 0 && start + length < ROARING_CONTAINER_VALUES,
+            msg="a run stays in the low half",
+          )
+          if position > 0 {
+            let previous_end = runs[position - 2] + runs[position - 1]
+            assert_true(
+              start > previous_end + 1,
+              msg="runs are disjoint and not adjacent",
+            )
+          }
+          covered += length + 1
+          position += 2
+        }
+        assert_eq(covered, cardinality)
+        // `run_optimize` only adopts the run form when it is strictly smaller.
+        let alternative = if cardinality <= ROARING_ARRAY_MAX {
+          2 * cardinality
+        } else {
+          8 * ROARING_WORDS
+        }
+        assert_true(
+          2 + 2 * runs.length() < alternative,
+          msg="the run form is strictly smaller than the form it replaced",
+        )
+      }
+    }
+  }
+}
+
+///|
+test "roaring: a union result is independent of its operands" {
+  // Disjoint keys, one container per side: the result reuses a side as-is.
+  let left = wb_bitmap([1, 2])
+  let right = wb_bitmap([65536])
+  let merged = left.union(right)
+  merged.add(3)
+  assert_eq(left.to_array(), [1, 2])
+  assert_eq(right.to_array(), [65536])
+  assert_eq(merged.to_array(), [1, 2, 3, 65536])
+  // The same with bitmap containers.
+  let dense_left = wb_bitmap(consecutive_ids(0, 5000))
+  let dense_right = wb_bitmap(consecutive_ids(65536, 5000))
+  let dense_merged = dense_left.union(dense_right)
+  dense_merged.add(6000)
+  assert_eq(dense_left.cardinality(), 5000)
+  assert_eq(dense_left.contains(6000), false)
+  assert_eq(dense_merged.cardinality(), 10001)
+  // And with a run container on one side.
+  let run_left = wb_bitmap(consecutive_ids(0, 5000))
+  run_left.run_optimize()
+  let run_merged = run_left.union(wb_bitmap([65536]))
+  run_merged.add(6000)
+  assert_eq(run_left.cardinality(), 5000)
+  assert_eq(run_left.contains(6000), false)
+  // Mutating an operand after the union leaves the result alone.
+  let first = wb_bitmap([10, 20])
+  let second = wb_bitmap([65536, 131072])
+  let both = first.union(second)
+  first.add(30)
+  second.add(65537)
+  assert_eq(both.to_array(), [10, 20, 65536, 131072])
+  check_container_invariants(both)
+  // Intersect keeps its operands too.
+  let base = wb_bitmap(consecutive_ids(0, 100))
+  let overlap = wb_bitmap(consecutive_ids(50, 100))
+  let shared = base.intersect(overlap)
+  shared.add(200)
+  assert_eq(base.cardinality(), 100)
+  assert_eq(base.contains(200), false)
+  check_container_invariants(shared)
+}
+
+///|
+test "roaring: adding after run_optimize keeps a legal container at every size" {
+  for size in [4095, 4096, 4097, 5000, 65535] {
+    let bitmap = wb_bitmap(consecutive_ids(0, size))
+    bitmap.run_optimize()
+    check_container_invariants(bitmap)
+    bitmap.add(size)
+    check_container_invariants(bitmap)
+    assert_eq(bitmap.cardinality(), size + 1)
+    assert_eq(bitmap.contains(size), true)
+    let back = wb_parse(bitmap.to_bytes())
+    check_container_invariants(back)
+    assert_eq(back.to_array(), bitmap.to_array())
+  }
+}
+
+///|
+test "roaring: a run container that outgrows the array range becomes a bitmap" {
+  let bitmap = wb_bitmap(consecutive_ids(0, 5000))
+  bitmap.run_optimize()
+  bitmap.add(6000)
+  // Header of 16 bytes (cookie, container count, key/cardinality, offset) plus
+  // one bitmap body; the array body of 5001 values would be 10002 bytes.
+  assert_eq(bitmap.to_bytes().length(), 16 + 8 * ROARING_WORDS)
+  let back = wb_parse(bitmap.to_bytes())
+  assert_eq(back.cardinality(), 5001)
+  assert_eq(back.contains(6000), true)
+  assert_eq(back.to_array(), bitmap.to_array())
+  check_container_invariants(back)
+  // A value in a later key must not disturb the de-optimised container.
+  let crossing = wb_bitmap(consecutive_ids(0, 5000))
+  crossing.run_optimize()
+  crossing.add(131072)
+  check_container_invariants(crossing)
+  assert_eq(crossing.cardinality(), 5001)
+  assert_eq(wb_parse(crossing.to_bytes()).to_array(), crossing.to_array())
+}
+
+///|
+test "roaring: adding a duplicate after run_optimize changes nothing" {
+  let bitmap = wb_bitmap(consecutive_ids(0, 5000))
+  bitmap.run_optimize()
+  let before = bitmap.to_bytes()
+  bitmap.add(4999)
+  assert_eq(bitmap.to_bytes(), before)
+  check_container_invariants(bitmap)
+}
+
+///|
+test "roaring: mixed operation sequences keep the container invariants" {
+  let mut bitmap = wb_bitmap([1, 2, 3, 65535, 65536])
+  let mut state = 12345
+  for step in 0..<48 {
+    state = (state * 1103515245 + 12345) & 0x7FFFFFFF
+    let id = (state >> 9) & 0x1FFFF
+    match step % 4 {
+      0 => bitmap.add(id)
+      1 => bitmap = bitmap.union(wb_bitmap(consecutive_ids(id, 40)))
+      2 => bitmap = bitmap.intersect(wb_bitmap(consecutive_ids(id, 40)))
+      _ => bitmap.run_optimize()
+    }
+    check_container_invariants(bitmap)
+    let back = wb_parse(bitmap.to_bytes())
+    assert_eq(back.to_array(), bitmap.to_array())
+  }
+}

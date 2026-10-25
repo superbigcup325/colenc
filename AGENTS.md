@@ -213,6 +213,18 @@ tracked documents ship in the release archive.
 - **The Roaring surface takes INT32 ids** → the portable format's upper u32 half
   needs a column type `ColBuf` does not have yet, so ids above 2^31-1 are
   rejected with `OutOfRange` rather than truncated
+- **A set operation that reuses an operand's container aliases it** → the union
+  used to push the surviving side's container by reference, so a later `add` on
+  the result rewrote the operand (the array container's `insert` is in place);
+  every container a result carries has to be copied, and the regression belongs
+  in a test, not in a review note
+- **A container's shape must be chosen from the cardinality the operation
+  produces** → `container_add` used to convert a run container only when its old
+  length was exactly 4096, so a 5000-id run grew into a 5001-value *array*; the
+  writer serializes by shape while the reader picks by cardinality, so the bytes
+  could not be read back (10018 bytes written, no valid parse). The invariant is
+  the contract: arrays hold at most 4096 values, bitmaps more, and a run form is
+  adopted only when it is strictly smaller
 - **Unchecked access is not a speedup here** → rewriting the bit unpacker with
   `unsafe_get` measured 0.271→0.305 ms at width 5, 0.361→0.445 at 12 and
   0.422→0.497 at 16 (and a wash elsewhere), so bounds checks are not the

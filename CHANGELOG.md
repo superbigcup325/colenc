@@ -38,6 +38,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   enough to invent a 20% "regression" when comparing two toolchains
 - `moonbitlang/x` 0.5.5 → 0.5.6 (the harness-only dependency)
 
+### Fixed
+
+- `RoaringBitmap::union` no longer shares a container with either operand: the
+  result owns a copy of every container it carries, so adding to the result
+  cannot rewrite an input, and mutating an input cannot rewrite a result. The
+  aliasing reached array, bitmap and run containers alike
+- Adding an id to a run container whose cardinality already exceeded the
+  4096-value array range produced an *array* container above that range. The
+  writer serializes by container shape while the reader picks the shape from
+  the cardinality, so the output could not be read back (a 5001-id bitmap
+  serialized to 10018 bytes that no parse accepted). `add` now chooses the shape
+  from the cardinality it produces, and a whitebox invariant checker (arrays at
+  most 4096, bitmaps above, runs strictly smaller and disjoint) runs after mixed
+  add / union / intersect / `run_optimize` sequences
+
 ## [0.1.0] - 2026-10-19
 
 ### Added

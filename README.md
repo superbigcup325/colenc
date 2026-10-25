@@ -162,6 +162,13 @@ monotonic INT64 deltas on native, and about 1.1 GB/s / 1.0 GB/s on wasm-gc.
   matching the reference's incremental path, and decoding accepts them either
   way. It is a bitmap index, not a Parquet page encoding, so the container
   interop layer does not apply
+- **Set operations return bitmaps that own their containers**: mutating a union
+  or intersect result never rewrites an operand, and mutating an operand never
+  rewrites an existing result
+- **An `add` after `run_optimize` de-optimises the run container** into an array
+  or bitmap, so that sequence is not byte-identical to CRoaring (which keeps the
+  run); the criteria there are round trip plus the container invariants, not the
+  byte diff. Call `run_optimize` again after a batch of adds to re-adopt runs
 - **No SIMD kernels**: scalar + lookup tables first
 
 ## Neighbours and the seams

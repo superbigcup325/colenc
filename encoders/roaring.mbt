@@ -275,24 +275,33 @@ fn container_contains(container : RoaringContainer, low : Int32) -> Bool {
 }
 
 ///|
+/// Deep copy a container, so a result can never alias an operand's storage.
+fn container_copy(container : RoaringContainer) -> RoaringContainer {
+  match container {
+    ArrayContainer(values) => ArrayContainer(values.copy())
+    BitmapContainer(words) => BitmapContainer(words.copy())
+    RunContainer(runs) => RunContainer(runs.copy())
+  }
+}
+
+///|
 /// Add one low-half value to a container. A run container is de-optimised into
 /// an array or bitmap first; call `run_optimize` after a batch of adds.
+///
+/// The shape is chosen from the cardinality the add *produces*, never from the
+/// cardinality it started with: an array must not grow past `ROARING_ARRAY_MAX`
+/// and a bitmap must stay above it, or the writer (which serializes by shape)
+/// and the reader (which picks the shape by cardinality) disagree on the body.
 fn container_add(container : RoaringContainer, low : Int32) -> RoaringContainer {
   if container_contains(container, low) {
     return container
   }
   match container {
-    ArrayContainer(values) =>
-      if values.length() == ROARING_ARRAY_MAX {
-        let words = bitmap_words_of(values)
-        let word = low >> 6
-        words[word] = words[word] | (1L << (low & 63))
-        BitmapContainer(words)
-      } else {
-        let position = sorted_position(values, low)
-        values.insert(position, low)
-        ArrayContainer(values)
-      }
+    ArrayContainer(values) => {
+      let position = sorted_position(values, low)
+      values.insert(position, low)
+      container_of_values(values)
+    }
     BitmapContainer(words) => {
       let word = low >> 6
       words[word] = words[word] | (1L << (low & 63))
@@ -301,15 +310,8 @@ fn container_add(container : RoaringContainer, low : Int32) -> RoaringContainer 
     RunContainer(runs) => {
       let values = values_of_runs(runs)
       let position = sorted_position(values, low)
-      if values.length() == ROARING_ARRAY_MAX {
-        let words = bitmap_words_of(values)
-        let word = low >> 6
-        words[word] = words[word] | (1L << (low & 63))
-        BitmapContainer(words)
-      } else {
-        values.insert(position, low)
-        ArrayContainer(values)
-      }
+      values.insert(position, low)
+      container_of_values(values)
     }
   }
 }
@@ -435,6 +437,9 @@ pub fn RoaringBitmap::to_array(self : RoaringBitmap) -> Array[Int32] {
 }
 
 ///|
+/// The union of two bitmaps. The result owns its containers: a container that
+/// only one side carries is copied, so mutating the result never rewrites an
+/// operand (and vice versa).
 pub fn RoaringBitmap::union(
   self : RoaringBitmap,
   other : RoaringBitmap,
@@ -446,11 +451,11 @@ pub fn RoaringBitmap::union(
     if right >= other.keys.length() ||
       (left < self.keys.length() && self.keys[left] < other.keys[right]) {
       result.keys.push(self.keys[left])
-      result.containers.push(self.containers[left])
+      result.containers.push(container_copy(self.containers[left]))
       left += 1
     } else if left >= self.keys.length() || other.keys[right] < self.keys[left] {
       result.keys.push(other.keys[right])
-      result.containers.push(other.containers[right])
+      result.containers.push(container_copy(other.containers[right]))
       right += 1
     } else {
       result.keys.push(self.keys[left])
