@@ -8,7 +8,7 @@
 
 **Status (2026-10)**: project scoped, design settled; **P0 through P4 complete in this package** — every v1 encoding family sits behind the facade dispatch, E1 to E6 are byte-identical to the reference, E7 round-trips with its scoreboard measured, and CI runs the three-backend matrix plus the byte-diff and container jobs
 **Integration (P5)**: merged into moonlake's `main` — the Parquet reader routed through colenc, a write path added, and the spill format re-encoded (8.08 → 4.86 MiB on the bake-off workload)
-**Release**: `superbigcup325/colenc@0.1.0` is published on mooncakes; the consumer depends on that version from the registry. The manifest now carries the 0.1.1 candidate — the Roaring index plus the bitmap fixes — and an archive consumer check exercises the packaged surface on all three backends before it ships
+**Release**: `superbigcup325/colenc@0.1.1` is published on mooncakes. It carries the Roaring index, the bitmap and key-search rewrites, and the `sketches` package (HyperLogLog and t-digest). The archive consumer check exercises the packaged surface — including both sketches — on all three backends before and after a publication
 **Phase two (P6)**: the bitmap index landed — E8 Roaring is byte-identical to CRoaring, container shapes and the run-optimisation rule included, judged by pyroaring
 **Next step**: verify the 0.1.1 release candidate, then measure Roaring query operations and validate an engine use case before starting HLL and, later, t-digest. The sorted build, container allocation, bulk-read and serialization rewrites have landed. [Next steps](NEXT-STEPS.md) records the work order, entry points, exit criteria and the limits of the planning evidence
 

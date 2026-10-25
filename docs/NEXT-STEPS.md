@@ -13,9 +13,10 @@ before implementation; they do not change the E0–E8 criteria.
 
 - The roadmap records P0–P6 as implemented, including the original moonlake
   integration and the Roaring bitmap. The manifest carries version 0.1.1;
-  the release text still identifies 0.1.0 as the published version. The registry
-  was checked: it carries 0.1.0 alone (published 2026-10-19), so 0.1.1 is
-  unpublished and there is no earlier artifact to reconcile.
+  0.1.1 is published and the release text names it. The registry was checked
+  twice: before the publication it carried 0.1.0 alone, and afterwards 0.1.1,
+  which `check_consumer.py --registry-version 0.1.1` accepts on all three
+  backends.
 - The changelog and implementation already include the sorted bitmap build,
   container-array reservation, cursor-based parsing, bulk body reads,
   serialization planning and removal of redundant container zero-filling.

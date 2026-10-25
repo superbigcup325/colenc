@@ -141,6 +141,7 @@ def check_output(output: str, version: str, expected_version: str | None) -> Non
         "fsst",
         "dictionary",
         "roaring",
+        "sketches",
         "names",
         "errors",
     }
@@ -179,6 +180,16 @@ def check_output(output: str, version: str, expected_version: str | None) -> Non
 
     # Seven ids spread over three keys: the set is deduplicated, and the union
     # with a disjoint three-id set has six.
+    # The sketch package is public surface from 0.1.1: the consumer builds both
+    # sketches, round trips them through the packaged bytes and checks an answer.
+    sketches = [float(field) for field in rows["sketches"]]
+    hll_estimate = sketches[0]
+    if not 400.0 < hll_estimate < 600.0:
+        raise ValueError(f"sketches: HLL estimate {hll_estimate} for 500 values")
+    median = sketches[2]
+    if not 200.0 < median < 300.0:
+        raise ValueError(f"sketches: t-digest median {median} for 0..499")
+
     roaring = numbers(rows, "roaring", 3)
     if roaring[0] != 7 or roaring[2] != 6:
         raise ValueError(f"roaring: cardinalities {roaring[0]} and {roaring[2]}")
@@ -247,7 +258,7 @@ def check_consumer(
             record["targets"][target] = "passed"
             print(
                 f"ok: consumer {target} — PLAIN, RLE, dictionary, delta family, "
-                "BSS, FSST, Roaring set ops and the typed error paths",
+                "BSS, FSST, Roaring set ops, both sketches and the typed error paths",
                 flush=True,
             )
     return record

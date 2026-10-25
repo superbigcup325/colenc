@@ -207,6 +207,40 @@ fn roaring(values : Array[Int32]) -> Unit raise {
 }
 
 ///|
+fn sketches() -> Unit raise {
+  // The sketch package is public surface from 0.1.1 on: a consumer builds both,
+  // serializes them, reads them back and compares an answer. If the archive ever
+  // ships this package without its interfaces, this call is what notices.
+  let hll = @sketches.HllSketch::new_default()
+  for index in 0..<500 {
+    hll.add_int32(index)
+  }
+  let hll_bytes = hll.to_bytes()
+  let hll_back = @sketches.HllSketch::from_bytes(hll_bytes.exact_view())
+  ensure(
+    hll_back.to_bytes() == hll_bytes,
+    "hll round trip through the packaged surface",
+  )
+  ensure(hll.estimate() > 400.0 && hll.estimate() < 600.0, "hll estimate")
+
+  let digest = @sketches.TDigest::new_default()
+  for index in 0..<500 {
+    digest.update(index.to_double())
+  }
+  let median = digest.quantile(0.5)
+  ensure(median > 200.0 && median < 300.0, "t-digest median")
+  let digest_bytes = digest.to_bytes()
+  let digest_back = @sketches.TDigest::from_bytes(digest_bytes.exact_view())
+  ensure(
+    digest_back.to_bytes() == digest_bytes,
+    "t-digest round trip through the packaged surface",
+  )
+  println(
+    "sketches|\{hll.estimate()}|\{hll_back.precision()}|\{median}|\{digest_back.compression()}",
+  )
+}
+
+///|
 fn names() -> Unit {
   // The neutral model is public surface too: a consumer switches on these.
   println(
@@ -281,6 +315,7 @@ fn main raise {
   fsst(strings)
   dictionary([7, 7, 9, 7, 11, 9, 7, 11, 11])
   roaring([1, 5, 9, 13, 65536, 65537, 131072])
+  sketches()
   names()
   errors()
 }

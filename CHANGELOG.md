@@ -62,6 +62,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `EncodingError::InvalidArgument(String)`: a NaN or an infinity has no rank, a
   quantile outside 0..1 has no answer, and two different compression parameters
   cannot be merged; each is now rejected with the reason spelled out
+
 ### Changed
 
 - **A bitmap probe searches its key array branchlessly.** Every `contains` walked

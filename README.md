@@ -33,7 +33,7 @@ optimisation, judged by pyroaring instead of parquet-cpp.
 Integration with [moonlake](https://github.com/superbigcup325/moonlake) is
 merged on its `main`: Parquet decoding routed through colenc, a new write path,
 and the spill format re-encoded (40% smaller). The package is published as
-`superbigcup325/colenc@0.1.0` on mooncakes, so a consumer resolves it from the
+`superbigcup325/colenc@0.1.1` on mooncakes, so a consumer resolves it from the
 registry by version.
 
 ## Quick start

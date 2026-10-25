@@ -1,6 +1,7 @@
 import {
   "superbigcup325/colenc",
   "superbigcup325/colenc/encoders",
+  "superbigcup325/colenc/sketches",
   "superbigcup325/colenc/types",
 }
 
