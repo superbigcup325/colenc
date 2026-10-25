@@ -72,7 +72,10 @@ its branch in `facade.mbt`.
   `python3 harness/check_roaring_ops.py` checks the operation sequences that
   have no reference bytes (round trip, container legality as parsed back, and
   operand independence),
-  `harness/check_container.sh` proves the container path end to end
+  `harness/check_container.sh` proves the container path end to end,
+  `python3 harness/check_consumer.py` runs a consumer against the unpacked
+  release archive on all three backends with a fresh `MOON_HOME` (add
+  `--registry-version X.Y.Z` after a publish)
 - Throughput has two rigs: `python3 harness/scoreboard.py` regenerates
   `docs/scoreboard.md` from `harness/bench` (native and wasm-gc, median of three
   rounds per phase — one round of the same binary swings by 10-20% on the small

@@ -303,6 +303,32 @@ grades its own containers. `fixtures/roaring_ops.json` pins the encoded size and
 container shape of every step: that is a regression pin and not a criterion, so
 a legal but different shape choice shows up as a diff that has to be decided.
 
+## The packaged surface
+
+```bash
+python3 harness/check_consumer.py                  # archive built by `moon package`
+python3 harness/check_consumer.py --registry-version 0.1.1   # after publishing
+```
+
+Every other check runs against the working checkout, where a package the archive
+forgot to ship or an import that only resolves locally still passes. This one
+builds the release archive, unpacks it into a throwaway module whose only members
+are that archive and `harness/consumer/`, and points `MOON_HOME` at a fresh
+directory that reuses the installed compiler and nothing else — no credentials,
+no registry cache, no `.mooncakes`. The consumer's `moon.mod` imports
+`superbigcup325/colenc@<version from the archive>`, so a version mismatch fails
+resolution instead of silently testing the checkout.
+
+The consumer walks the published surface on native, wasm-gc and JS: PLAIN int32,
+DELTA over a monotonic INT64 column, boolean RLE, BYTE_STREAM_SPLIT doubles, the
+two byte-array delta families, FSST, dictionary (three entries, two-bit indices),
+the Roaring set operations through both `RoaringBitmap` and the facade, the
+`Encoding` / `PhysicalType` names, and the two typed error paths. It checks its
+own round trips and aborts on mismatch; the script asserts the facts it prints.
+Sizes the format fixes are compared exactly (PLAIN int32, byte-stream-split);
+sizes a future encoder may legitimately change are compared as relations against
+PLAIN.
+
 ## P1 evidence
 
 - `check_rle.py`: three cases, all byte-identical to the reference, covering
