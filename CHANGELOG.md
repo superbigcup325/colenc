@@ -65,8 +65,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   container -67.5%, mixed shapes -65.0%, the sparse column -14.2%, a sparse
   array container -19.9%, a wide-key set -3.4%. On wasm-gc the same A/B is
   -40.2% dense, -40.7% sparse-array, -19.8% wide keys and -2.4% on the 1M
-  column. In `docs/scoreboard.md` that moves the sparse decode row from 1889 to
-  2377 MB/s and the 300k-id dense row from 38.1 to 114.3 GB/s
+  column. In `docs/scoreboard.md` the sparse column is the row that moves most,
+  and the 300k-id dense row now decodes at over a hundred gigabytes per second
 - Serializing a bitmap now plans before it writes: one walk over the containers
   collects each card, each body size and the run flags, adds up the exact byte
   count, and the buffer is created at that size, so nothing is re-derived and
