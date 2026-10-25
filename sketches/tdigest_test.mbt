@@ -214,3 +214,28 @@ test "malformed streams are rejected" {
   assert_true(rejects(corrupt(1, 1).exact_view()))
   assert_true(rejects(bytes.exact_view(start=0, end=10)))
 }
+
+///|
+test "the serialized form of a fixed sequence is pinned" {
+  // The three backends have to produce these bytes, which is what keeps the
+  // compression decisions (they depend on `asin`) from drifting apart silently.
+  let digest = @sketches.TDigest::new(20) catch { _ => abort("x") }
+  for index in 0..<300 {
+    digest.update((index % 37).to_double() * 1.5) catch {
+      _ => abort("u")
+    }
+  }
+  let bytes = digest.to_bytes()
+  let mut hex = ""
+  for index in 0..<bytes.length() {
+    let byte = bytes[index].to_int()
+    if byte < 16 {
+      hex = hex + "0"
+    }
+    hex = hex + byte.to_string()
+  }
+  inspect(
+    hex,
+    content="0120000110000000000000000000000000000000000756400000000000000000000000000001664454545454545245630000000000004964000000000019219640000000000005664171170170170170106366400000000000066641162096923932124964000000000000706445100330118972586400000000000071644718623216213994656400000000000070642168094671214569640000000000006764219182109219182617264000000000000606437731463673507464000000000000446400000000000075640000000000002064",
+  )
+}

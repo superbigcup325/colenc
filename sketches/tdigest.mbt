@@ -55,11 +55,37 @@ fn tdigest_compress_centroids(
   means : Array[Double],
   weights : Array[Double],
   total : Double,
+  reverse : Bool,
 ) -> (Array[Double], Array[Double]) {
   let out_means : Array[Double] = []
   let out_weights : Array[Double] = []
   if means.length() == 0 || total <= 0.0 {
     return (out_means, out_weights)
+  }
+  // Alternating the sweep direction keeps the error uniform: a pass that always
+  // starts at the minimum leaves the centroids near the maximum coarser than
+  // they need to be, which is exactly where the tail quantiles live.
+  if reverse {
+    let flipped_means : Array[Double] = []
+    let flipped_weights : Array[Double] = []
+    let mut cursor = means.length() - 1
+    while cursor >= 0 {
+      flipped_means.push(means[cursor])
+      flipped_weights.push(weights[cursor])
+      cursor -= 1
+    }
+    let (reversed_means, reversed_weights) = tdigest_compress_centroids(
+      compression, flipped_means, flipped_weights, total, false,
+    )
+    let final_means : Array[Double] = []
+    let final_weights : Array[Double] = []
+    let mut index = reversed_means.length() - 1
+    while index >= 0 {
+      final_means.push(reversed_means[index])
+      final_weights.push(reversed_weights[index])
+      index -= 1
+    }
+    return (final_means, final_weights)
   }
   let mut before = 0.0
   let mut index = 0
@@ -129,6 +155,8 @@ pub struct TDigest {
   priv mut minimum : Double
   priv mut maximum : Double
   priv mut has_values : Bool
+  /// Which end the next compression pass starts from.
+  priv mut reverse : Bool
 }
 
 ///|
@@ -150,6 +178,7 @@ pub fn TDigest::new(compression : Int32) -> TDigest raise @types.EncodingError {
     minimum: 0.0,
     maximum: 0.0,
     has_values: false,
+    reverse: false,
   }
 }
 
@@ -164,6 +193,7 @@ pub fn TDigest::new_default() -> TDigest {
     minimum: 0.0,
     maximum: 0.0,
     has_values: false,
+    reverse: false,
   }
 }
 
@@ -247,10 +277,12 @@ pub fn TDigest::compress(self : TDigest) -> Unit {
     means,
     weights,
     self.total,
+    self.reverse,
   )
   self.means = folded_means
   self.weights = folded_weights
   self.buffer = []
+  self.reverse = !self.reverse
 }
 
 ///|
@@ -297,6 +329,7 @@ pub fn TDigest::merge(
     means,
     weights,
     total,
+    self.reverse,
   )
   let has_values = self.has_values || other.has_values
   let mut minimum = self.minimum
@@ -318,6 +351,7 @@ pub fn TDigest::merge(
     minimum,
     maximum,
     has_values,
+    reverse: !self.reverse,
   }
 }
 
@@ -431,8 +465,8 @@ fn tdigest_read_f64_le(bytes : BytesView, offset : Int32) -> Double {
 ///|
 /// Read a digest back, rejecting every state the writer cannot produce: an
 /// unknown version, a compression outside the range, a count beyond `2k + 1`, a
-/// weight that is not positive and finite, and means that do not strictly
-/// increase.
+/// weight that is not positive and finite, means that go backwards, and a mean
+/// outside the recorded extremes.
 pub fn TDigest::from_bytes(
   bytes : BytesView,
 ) -> TDigest raise @types.EncodingError {
@@ -484,7 +518,9 @@ pub fn TDigest::from_bytes(
     if !tdigest_is_finite(weight) || weight <= 0.0 {
       raise @types.EncodingError::Corrupt(offset + 8)
     }
-    if index > 0 && mean <= previous {
+    // Sorted, not strictly increasing: a duplicate-heavy column produces
+    // adjacent centroids with the same mean, and the writer can emit them.
+    if index > 0 && mean < previous {
       raise @types.EncodingError::Corrupt(offset)
     }
     if mean < minimum || mean > maximum {
@@ -505,6 +541,7 @@ pub fn TDigest::from_bytes(
       minimum: 0.0,
       maximum: 0.0,
       has_values: false,
+      reverse: false,
     }
   }
   {
@@ -516,5 +553,6 @@ pub fn TDigest::from_bytes(
     minimum,
     maximum,
     has_values: true,
+    reverse: false,
   }
 }

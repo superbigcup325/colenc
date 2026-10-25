@@ -51,6 +51,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   asymptotic bound below `2.5m`), merge as a register algebra, serialization
   with the malformed states rejected, and the boundaries. Apache DataSketches'
   `datasketches` is pinned as the outside opinion on the estimate
+- t-digest (`sketches`): `TDigest` with k1 scaling at `k = 100`, a raw buffer of
+  `8k` values, alternating-direction compression, exact extremes carried through
+  the byte stream, and `quantile` interpolating between centroid positions. The
+  contract is `docs/SKETCHES.md`; the acceptance rig is
+  `harness/check_tdigest.py`, which runs 4 distributions × 3 input orders × 3
+  sizes against exact sorted data and gates on the structural layer and the
+  absolute ceilings (1% interior, 0.5% tails), reporting the comparison against
+  Apache DataSketches' t-digest rather than gating on it
+- `EncodingError::InvalidArgument(String)`: a NaN or an infinity has no rank, a
+  quantile outside 0..1 has no answer, and two different compression parameters
+  cannot be merged; each is now rejected with the reason spelled out
 ### Changed
 
 - **A bitmap probe searches its key array branchlessly.** Every `contains` walked

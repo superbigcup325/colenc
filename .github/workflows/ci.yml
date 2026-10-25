@@ -118,7 +118,9 @@ jobs:
         run: python3 harness/check_roaring_ops.py
       - name: Container interop
         run: harness/check_container.sh
-      - name: Sketch acceptance
+      - name: Sketch acceptance (HLL)
         run: python3 harness/check_hll.py
+      - name: Sketch acceptance (t-digest)
+        run: python3 harness/check_tdigest.py
       - name: Packaged surface
         run: python3 harness/check_consumer.py

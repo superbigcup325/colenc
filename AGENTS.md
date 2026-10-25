@@ -33,8 +33,8 @@ types/                   neutral model: PhysicalType / Encoding / ColBuf / error
 primitives/              L1: varint / zigzag / bit packing / bit width
 encoders/                L2: PLAIN, RLE hybrid, dictionary, delta family,
                          BYTE_STREAM_SPLIT, FSST and the Roaring bitmap
-sketches/                approximate aggregations (HLL; t-digest later), a
-                         separate API because a sketch is not a page encoding
+sketches/                approximate aggregations (HLL and t-digest), a separate
+                         API because a sketch is not a page encoding
 facade.mbt               L3: encode_column / decode_column dispatch
 harness/                 acceptance rig (repository only, excluded from the package)
 .githooks/               pre-commit gate
@@ -77,6 +77,9 @@ its branch in `facade.mbt`.
   `harness/check_container.sh` proves the container path end to end,
   `python3 harness/check_hll.py` runs the four acceptance groups the sketch
   contract defines (error spread, merge algebra, serialization, boundaries),
+  `python3 harness/check_tdigest.py` runs the quantile matrix and its three
+  layers (structure, the reference comparison it reports, the absolute ceilings
+  it gates on),
   `python3 harness/check_consumer.py` runs a consumer against the unpacked
   release archive on all three backends with a fresh `MOON_HOME` (add
   `--registry-version X.Y.Z` after a publish)
