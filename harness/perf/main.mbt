@@ -490,6 +490,11 @@ fn bench_roaring(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
   // Array containers: 32 ids per key across 3125 keys.
   let sparse = Array::makei(100000, fn(i) { i * 2048 })
   bench_bitmap_case(b, sink, "sparse-array", sparse, false)
+  // The same shape at the scoreboard's size: 1M ids over 31250 keys. The
+  // per-id cost is the question — a column of 4 MB stops fitting in cache, and
+  // the scoreboard row is this size, not the 100k one above.
+  let sparse_wide = Array::makei(1000000, fn(i) { i * 2048 })
+  bench_bitmap_case(b, sink, "sparse-1m", sparse_wide, false)
   // Bitmap containers: five keys filled edge to edge.
   let dense = Array::makei(300000, fn(i) { i })
   bench_bitmap_case(b, sink, "dense-bitmap", dense, false)

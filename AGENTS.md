@@ -277,17 +277,29 @@ tracked documents ship in the release archive.
   offset tables, which are walked once per container. `unsafe_get` on top of
   that is *mixed* (sparse -7.7%, a 32768-container set +1.8%), so the checked
   indexing stays, matching the convention above
-- **The serialization path is already at the floor, so measure before rewriting
-  it** → the control cases in `harness/perf -- candidates` price the two
+- **The per-value write is at the floor; the per-container control flow was
+  not** → the control cases in `harness/perf -- candidates` price the byte-level
   alternatives on 32768 u16 values into a buffer: two `write_byte` calls 38.0 us,
   one `write_uint16_le` 44.3 us (slower, the `UInt16` conversion costs more than
-  the call saves), building a scratch array and one `write_bytes` 32.7 us. Sizing
-  the buffer exactly from a computed serialization length is the other half of
-  the idea, and it is a *mixed* result: dense and mixed containers improve 10%
-  and 18% while a set of 32768 one-value containers regresses 6.5%, because the
-  length pass walks every container (and re-derives `has_run_container`) for a
-  saving that only shows up when the buffer grows a lot. Rejected on that
-  evidence rather than kept for the flattering rows
+  the call saves), building a scratch array and one `write_bytes` 32.7 us — so
+  writing the values differently buys little. A first attempt at sizing the
+  buffer exactly was *mixed* (dense and mixed -10/-18%, a 32768-container set
+  +6.5%) because it added a whole extra length pass that re-derived
+  `has_run_container`. The version that works fuses that pass into the tables
+  the writer already walks: one match per container yields its card, its body
+  size and its run flag, the exact total comes out of the same loop, and the
+  buffer is created at that size. Four matches per container became two and the
+  buffer never grows: `to_bytes` -22.8% dense, -19.5% on 32768 one-value
+  containers, -28.3% mixed; on wasm-gc the same A/B is -13.8% to -33.1%
+- **A run container's pairs are `[start, length - 1]`, not `[start, end]`** →
+  the serializer's planning pass re-derives each container's cardinality to fill
+  the card table, and the first version subtracted `start` from `end`; every
+  run-optimised case then wrote a wrong card (the byte diff caught one, the
+  reader's cardinality check caught the rest). The fix belongs in the code, but
+  the guard is a test: `check_serialization_plan` in `roaring_wbtest.mbt` pins
+  the plan's card and size for every container against `container_cardinality`
+  and `container_byte_size`, on all three shapes, before and after
+  `run_optimize`, plus the empty bitmap
 - **`Int32` has no `to_int` in this toolchain** → `x.to_int()` on an `Int32`
   fails with "Type Int has no method to_int", which reads as if the type were
   already `Int`; the wide path is `x.to_int64().to_int()`

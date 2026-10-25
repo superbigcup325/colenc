@@ -601,21 +601,6 @@ pub fn RoaringBitmap::run_optimize(self : RoaringBitmap) -> Unit {
 }
 
 ///|
-fn RoaringBitmap::has_run_container(self : RoaringBitmap) -> Bool {
-  let mut found = false
-  for container in self.containers {
-    match container {
-      RunContainer(_) => {
-        found = true
-        break
-      }
-      _ => ()
-    }
-  }
-  found
-}
-
-///|
 fn write_container(container : RoaringContainer, out : @buffer.Buffer) -> Unit {
   match container {
     ArrayContainer(values) =>
@@ -636,24 +621,75 @@ fn write_container(container : RoaringContainer, out : @buffer.Buffer) -> Unit {
 }
 
 ///|
-/// Append the portable Roaring serialization.
-pub fn RoaringBitmap::serialize(
+/// The serialized form is written in one pass over the containers: this walks
+/// the containers once to collect what every later table needs (each card, each
+/// body size, whether any container is a run) and to add up the exact byte
+/// count, and only then writes. Two matches per container instead of four, and
+/// a buffer that never grows.
+fn RoaringBitmap::roaring_serialized_plan(
   self : RoaringBitmap,
-  out : @buffer.Buffer,
-) -> Unit {
+) -> (Array[Int32], Array[Int32], Array[Int32], Bool, Int32) {
   let size = self.keys.length()
-  let with_runs = self.has_run_container()
-  if with_runs {
-    out.write_int_le(ROARING_COOKIE_RUN | ((size - 1) << 16))
-    let run_bytes = (size + 7) / 8
-    let flags : Array[Int32] = Array::make(run_bytes, 0)
-    for index in 0..<size {
-      match self.containers[index] {
-        RunContainer(_) =>
-          flags[index / 8] = flags[index / 8] | (1 << (index % 8))
-        _ => ()
+  let cards : Array[Int32] = Array::make(size, 0)
+  let sizes : Array[Int32] = Array::make(size, 0)
+  let run_bytes = (size + 7) / 8
+  let flags : Array[Int32] = Array::make(run_bytes, 0)
+  let mut bodies = 0
+  let mut with_runs = false
+  for index in 0..<size {
+    let (card, bytes, is_run) = match self.containers[index] {
+      ArrayContainer(values) => {
+        let count = values.length()
+        (count, 2 * count, false)
+      }
+      BitmapContainer(words) => {
+        let mut count = 0
+        for word in words {
+          count += word.popcnt()
+        }
+        (count, 8 * ROARING_WORDS, false)
+      }
+      RunContainer(runs) => {
+        // `runs` holds a start and a length-minus-one per pair, which is what
+        // `container_cardinality` and the reader both assume
+        let mut count = 0
+        let mut pair = 0
+        while pair < runs.length() {
+          count += runs[pair + 1] + 1
+          pair += 2
+        }
+        (count, 2 + 2 * runs.length(), true)
       }
     }
+    cards[index] = card
+    sizes[index] = bytes
+    bodies += bytes
+    if is_run {
+      with_runs = true
+      flags[index / 8] = flags[index / 8] | (1 << (index % 8))
+    }
+  }
+  let header = if with_runs { 4 + run_bytes } else { 8 }
+  let offsets = if !with_runs || size >= ROARING_NO_OFFSET_THRESHOLD {
+    4 * size
+  } else {
+    0
+  }
+  (cards, sizes, flags, with_runs, header + 4 * size + offsets + bodies)
+}
+
+///|
+fn RoaringBitmap::roaring_write_plan(
+  self : RoaringBitmap,
+  out : @buffer.Buffer,
+  cards : Array[Int32],
+  sizes : Array[Int32],
+  flags : Array[Int32],
+  with_runs : Bool,
+) -> Unit {
+  let size = self.keys.length()
+  if with_runs {
+    out.write_int_le(ROARING_COOKIE_RUN | ((size - 1) << 16))
     for flag in flags {
       out.write_byte(flag.to_byte())
     }
@@ -663,13 +699,13 @@ pub fn RoaringBitmap::serialize(
   }
   for index in 0..<size {
     roaring_write_u16(out, self.keys[index])
-    roaring_write_u16(out, container_cardinality(self.containers[index]) - 1)
+    roaring_write_u16(out, cards[index] - 1)
   }
   if !with_runs || size >= ROARING_NO_OFFSET_THRESHOLD {
     let mut offset = out.length() + 4 * size
     for index in 0..<size {
       out.write_int_le(offset)
-      offset += container_byte_size(self.containers[index])
+      offset += sizes[index]
     }
   }
   for container in self.containers {
@@ -678,10 +714,21 @@ pub fn RoaringBitmap::serialize(
 }
 
 ///|
+/// Append the portable Roaring serialization.
+pub fn RoaringBitmap::serialize(
+  self : RoaringBitmap,
+  out : @buffer.Buffer,
+) -> Unit {
+  let (cards, sizes, flags, with_runs, _) = self.roaring_serialized_plan()
+  self.roaring_write_plan(out, cards, sizes, flags, with_runs)
+}
+
+///|
 /// The portable Roaring serialization as a fresh buffer.
 pub fn RoaringBitmap::to_bytes(self : RoaringBitmap) -> Bytes {
-  let out = @buffer.Buffer()
-  self.serialize(out)
+  let (cards, sizes, flags, with_runs, total) = self.roaring_serialized_plan()
+  let out = @buffer.Buffer(size_hint=total)
+  self.roaring_write_plan(out, cards, sizes, flags, with_runs)
   out.to_bytes()
 }
 

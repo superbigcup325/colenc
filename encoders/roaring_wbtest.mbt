@@ -190,6 +190,66 @@ test "roaring: truncated and malformed inputs raise with an offset" {
 }
 
 ///|
+/// The serializer derives each container's card and body size in one match
+/// instead of calling the helpers; this pins the two views together, on every
+/// shape, so a divergence cannot hide in a path the byte diff does not reach.
+fn check_serialization_plan(bitmap : RoaringBitmap) -> Unit raise {
+  let (cards, sizes, flags, with_runs, total) = bitmap.roaring_serialized_plan()
+  let size = bitmap.keys.length()
+  assert_eq(cards.length(), size)
+  assert_eq(sizes.length(), size)
+  let mut expected_runs = false
+  for index in 0..<size {
+    assert_eq(cards[index], container_cardinality(bitmap.containers[index]))
+    assert_eq(sizes[index], container_byte_size(bitmap.containers[index]))
+    let flag = (flags[index / 8] >> (index % 8)) & 1
+    match bitmap.containers[index] {
+      RunContainer(_) => {
+        expected_runs = true
+        assert_eq(flag, 1)
+      }
+      _ => assert_eq(flag, 0)
+    }
+  }
+  assert_eq(with_runs, expected_runs)
+  assert_eq(total, bitmap.to_bytes().length())
+}
+
+///|
+test "roaring: the serialization plan agrees with the per-container helpers" {
+  // array containers
+  let sparse : Array[Int32] = Array::makei(3200, fn(i) { i * 2048 })
+  let array = RoaringBitmap::from_ids(sparse) catch { _ => abort("raise") }
+  check_serialization_plan(array)
+  // one bitmap container
+  let dense : Array[Int32] = Array::makei(5000, fn(i) { i })
+  let bitmap = RoaringBitmap::from_ids(dense) catch { _ => abort("raise") }
+  check_serialization_plan(bitmap)
+  // run containers after optimisation
+  let contiguous : Array[Int32] = Array::makei(8000, fn(i) { i * 2 })
+  let runs = RoaringBitmap::from_ids(contiguous) catch { _ => abort("raise") }
+  runs.run_optimize()
+  check_serialization_plan(runs)
+  // all three shapes at once
+  let mixed : Array[Int32] = []
+  for id in [1, 5, 9, 13] {
+    mixed.push(id)
+  }
+  for index in 0..<5000 {
+    mixed.push(65536 + index * 2)
+  }
+  for index in 0..<8000 {
+    mixed.push(196608 + index)
+  }
+  let all = RoaringBitmap::from_ids(mixed) catch { _ => abort("raise") }
+  check_serialization_plan(all)
+  all.run_optimize()
+  check_serialization_plan(all)
+  // and the empty bitmap
+  check_serialization_plan(RoaringBitmap::new())
+}
+
+///|
 test "roaring: a truncated table or body reports where it ran out" {
   // The reader validates a range and then walks it with a cursor, so the
   // offsets these errors carry are part of the contract too.

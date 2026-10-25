@@ -47,6 +47,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   takes a wide-key set (32768 one-value containers) down another 16%. The shape
   rule is unchanged: it reads the distinct count of the whole key run, and the
   output stays byte-identical to pyroaring on every boundary case
+- Serializing a bitmap now plans before it writes: one walk over the containers
+  collects each card, each body size and the run flags, adds up the exact byte
+  count, and the buffer is created at that size, so nothing is re-derived and
+  nothing is regrown. Measured with `harness/perf` (median of 7, `to_bytes`):
+  dense container -22.8%, a set of 32768 one-value containers -19.5%, mixed
+  shapes -28.3%, a 1M-value sparse column -7.2%. The same A/B on wasm-gc, run
+  with the same binary before and after the change, is -13.8% to -33.1%
 - Reading a bitmap back no longer pays a `roaring_read_u16` call and a length
   check per value: the key/card table, the offset table and each container body
   are each validated once and then walked with cursor arithmetic. On
