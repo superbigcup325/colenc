@@ -296,6 +296,19 @@ tracked documents ship in the release archive.
   Watch the noise: the same HEAD binary measured 2026 and 2526 us on the 1M
   read, so a single A/B pair cannot resolve a 10% claim on that case — the
   numbers above come from interleaved median-of-three pairs
+- **A container's array is zero-filled and then overwritten** → `from_bytes`
+  and the bulk build both allocated their container body with
+  `Array::make(len, 0)` and then wrote every slot, so half of the allocation
+  was a pass nobody read. `Array::unsafe_make_uninit(len)` (hidden core API,
+  same allocation without the zeroing) is safe exactly here: the loop that
+  creates the array also writes all `len` slots, an error drops the array
+  instead of exposing it, and `Int32`/`Int64` arrays hold no pointers the
+  collector could follow. Measured on a quiet host, zeroing costs about 7.5 ns
+  of a 30-value container's 27.8 ns alloc-and-fill pair (20.4 ns without it)
+  and 186 ns per 8 KB bitmap body (456 -> 270 ns); the reader and the sorted
+  build both stop paying it. Do not reach for it where the body is *read*
+  before it is written (a bitmap container built by ORing bits in) — that one
+  still needs the zeroed array
 - **The per-value write is at the floor; the per-container control flow was
   not** → the control cases in `harness/perf -- candidates` price the byte-level
   alternatives on 32768 u16 values into a buffer: two `write_byte` calls 38.0 us,

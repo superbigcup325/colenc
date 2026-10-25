@@ -39,6 +39,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Container bodies are no longer zero-filled before they are overwritten: the
+  reader and the sorted build create each array with `Array::unsafe_make_uninit`
+  and write every slot in the loop that follows. Zeroing a container costs
+  about 7.5 ns at 30 values and 186 ns at 8 KB, which is a pass nobody reads.
 - `RoaringBitmap::from_ids` builds a sorted id column key run by key run instead
   of one `add` per id, and sizes both container arrays from the key span between
   the first and the last id rather than growing them one push at a time. On

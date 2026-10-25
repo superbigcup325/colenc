@@ -433,7 +433,8 @@ fn from_ascending_ids(ids : Array[Int32]) -> RoaringBitmap {
     keys.push(key)
     if distinct <= ROARING_ARRAY_MAX {
       // Exact size, filled by index: one allocation of `2 * distinct` bytes.
-      let values : Array[Int32] = Array::make(distinct, 0)
+      // Every slot is written by the loop below, so the zero pass is skipped.
+      let values : Array[Int32] = Array::unsafe_make_uninit(distinct)
       let mut previous = -1
       let mut value_slot = 0
       for index in start..<end {
@@ -847,7 +848,9 @@ pub fn RoaringBitmap::from_bytes_with_consumed(
           data.length() - position,
         )
       }
-      let pairs : Array[Int32] = Array::make(count, 0)
+      // Both slots of every pair are written by the loop below, so the zero
+      // pass is skipped; an error drops the array rather than exposing it.
+      let pairs : Array[Int32] = Array::unsafe_make_uninit(count)
       let mut counted = 0
       for run in 0..<run_count {
         let start = data.unsafe_read_uint16_le(position).to_int()
@@ -871,7 +874,7 @@ pub fn RoaringBitmap::from_bytes_with_consumed(
           data.length() - position,
         )
       }
-      let values : Array[Int32] = Array::make(card, 0)
+      let values : Array[Int32] = Array::unsafe_make_uninit(card)
       let mut previous : Int32 = -1
       for value in 0..<card {
         let current = data.unsafe_read_uint16_le(position).to_int()
@@ -884,7 +887,7 @@ pub fn RoaringBitmap::from_bytes_with_consumed(
       }
       ArrayContainer(values)
     } else {
-      let words : Array[Int64] = Array::make(ROARING_WORDS, 0L)
+      let words : Array[Int64] = Array::unsafe_make_uninit(ROARING_WORDS)
       if position + 8 * ROARING_WORDS > data.length() {
         raise @types.EncodingError::Truncated(
           position,

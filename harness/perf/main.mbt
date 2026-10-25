@@ -994,6 +994,63 @@ fn bench_candidates(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
     }
     sink.val = sink.val + total
   })
+  // The sparse million-id column decodes 32768 array containers of about 30
+  // values each, so this prices the allocation half of that walk.
+  record(b, label("alloc", "container-arrays-30", 0, WIDE_COUNT), fn() {
+    let mut total = 0
+    for _ in 0..<WIDE_COUNT {
+      let values : Array[Int32] = Array::make(30, 0)
+      total = total + values.length()
+    }
+    sink.val = sink.val + total
+  })
+  // `from_bytes` creates each container zero-filled and then overwrites every
+  // slot; these two controls price the zeroing separately from the fill.
+  record(b, label("alloc", "container-arrays-30-zfill", 0, WIDE_COUNT), fn() {
+    let mut total = 0
+    for _ in 0..<WIDE_COUNT {
+      let values : Array[Int32] = Array::make(30, 0)
+      for slot in 0..<30 {
+        values[slot] = slot
+      }
+      total = total + values[29]
+    }
+    sink.val = sink.val + total
+  })
+  record(b, label("alloc", "container-arrays-30-uninit", 0, WIDE_COUNT), fn() {
+    let mut total = 0
+    for _ in 0..<WIDE_COUNT {
+      let values : Array[Int32] = Array::unsafe_make_uninit(30)
+      for slot in 0..<30 {
+        values[slot] = slot
+      }
+      total = total + values[29]
+    }
+    sink.val = sink.val + total
+  })
+  record(b, label("alloc", "bitmap-words-1024-zfill", 0, 64), fn() {
+    let mut total = 0L
+    for _ in 0..<64 {
+      let words : Array[Int64] = Array::make(1024, 0L)
+      for slot in 0..<1024 {
+        words[slot] = slot.to_int64()
+      }
+      total = total + words[1023]
+    }
+    sink.val = sink.val + total.to_int()
+  })
+  // Same question for a bitmap container's 1024 words: 64 of them is 512 KB.
+  record(b, label("alloc", "bitmap-words-1024-uninit", 0, 64), fn() {
+    let mut total = 0L
+    for _ in 0..<64 {
+      let words : Array[Int64] = Array::unsafe_make_uninit(1024)
+      for slot in 0..<1024 {
+        words[slot] = slot.to_int64()
+      }
+      total = total + words[1023]
+    }
+    sink.val = sink.val + total.to_int()
+  })
   // The per-value Buffer round trip in `encode_fsst` costs this much on its
   // own; 200k values is the string column the scoreboard measures.
   record(b, label("alloc", "buffer-per-value", 0, STR_COUNT), fn() {
