@@ -392,21 +392,6 @@ pub fn RoaringBitmap::from_ids(
 }
 
 ///|
-/// Distinct low values in `ids[start..end)`, an already-ascending range.
-fn distinct_in_range(ids : Array[Int32], start : Int32, end : Int32) -> Int32 {
-  let mut count = 0
-  let mut previous = -1
-  for index in start..<end {
-    let low = ids[index] & 0xFFFF
-    if low != previous {
-      count += 1
-      previous = low
-    }
-  }
-  count
-}
-
-///|
 /// Build from ascending ids, one container per key, without a single insert.
 /// The shape comes from the distinct count of the whole key run, which is what
 /// repeated `add` calls would have settled on: an array up to 4096 values and a
@@ -431,11 +416,20 @@ fn from_ascending_ids(ids : Array[Int32]) -> RoaringBitmap {
   let mut start = 0
   while start < total {
     let key = ids[start] >> 16
+    // One walk finds the key run and counts the distinct lows in it: the count
+    // used to be a second pass, and the extra pass was a third of the build
+    // time on a sparse column.
     let mut end = start
+    let mut distinct = 0
+    let mut previous_low : Int32 = -1
     while end < total && ids[end] >> 16 == key {
+      let low = ids[end] & 0xFFFF
+      if low != previous_low {
+        distinct += 1
+        previous_low = low
+      }
       end += 1
     }
-    let distinct = distinct_in_range(ids, start, end)
     keys.push(key)
     if distinct <= ROARING_ARRAY_MAX {
       // Exact size, filled by index: one allocation of `2 * distinct` bytes.
