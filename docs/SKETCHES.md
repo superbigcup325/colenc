@@ -135,7 +135,101 @@ Four groups, all of which must pass before the sketch is called done.
    largest legal precision, and the point where linear counting hands over to
    the raw estimator.
 
+### t-digest contract (v1)
+
+### Decision record
+
+- **Accuracy criterion**: three layers, chosen by the maintainer on 2026-10-25 —
+  structural invariants that always hold, a comparison against an independent
+  implementation, and absolute ceilings. A purely absolute criterion would rest
+  on numbers invented before measuring; a purely relative one would inherit
+  whatever cell the reference gets wrong. The plan already asks for proven
+  structure to stay separate from measured accuracy, and this is that split.
+- **Scaling function**: `k1`, compression `k = 100`. The k2/k3 variants buy tail
+  accuracy with a more involved merge rule; v1 takes the simple one and *measures*
+  the tails rather than promising them.
+- **Scope**: `Double` values. A quantile summary over integers compresses to the
+  same thing through the callers' conversion, and a quantile over booleans has no
+  meaning.
+
+### Parameters and state
+
+- Centroids are `(mean, weight)` pairs. After a compression pass there are at
+  most `2k` of them; the serialized form is taken after compression, so the byte
+  stream never exceeds that bound.
+- Updates land in a buffer of at most `8k` values; filling it triggers a
+  compression. Memory is therefore bounded by the centroids plus the buffer, not
+  by the input size.
+- The scale function is `k1(q) = k / (2 pi) * asin(2q - 1)`. A centroid that
+  would span `[q_lo, q_hi]` is legal only while `k1(q_hi) - k1(q_lo) <= 1`.
+
+### Construction, merge and query
+
+- `update` appends to the buffer; `compress` sorts centroids by mean and walks
+  them left to right, accumulating while the centroid stays legal.
+- `merge` concatenates both sketches' centroids and compresses once, so the
+  result holds at most `2k` centroids whatever the inputs were.
+- **Compression runs in one direction only in v1.** The alternating sweep a
+  mature implementation uses trades merges between the ends; it is not here, and
+  the order-sensitivity number the rig reports is where that shows up.
+- `rank(x) = count(values <= x) / N`. A centroid's mass is split evenly around
+  its mean, so its quantile position is `(weight_before + weight_after) / 2`.
+- `quantile(q)` returns the minimum exactly for `q <= 0` and the maximum exactly
+  for `q >= 1`; otherwise it interpolates linearly between the two centroids
+  whose positions bracket `q`, clamping to the extremes outside them.
+
+### Serialization
+
+A **colenc-owned** format: a version byte, the compression parameter, the
+centroid count little-endian, then one `(mean f64le, weight f64le)` pair per
+centroid. Reading back validates the version, the compression range, the count
+against `2k`, that weights are positive and finite, and that means are strictly
+increasing — a sketch with two centroids at the same mean is a state the writer
+cannot produce. Cross-backend byte identity is required.
+
+### Errors
+
+- `update` with a NaN or an infinity is rejected rather than folded in: those
+  values have no rank, and silently keeping them corrupts every query.
+- `quantile` with `q` outside `[0, 1]`, or NaN, is rejected.
+- `quantile` on an empty sketch reports an incomplete stream.
+- `merge` between sketches of different compression parameters is rejected.
+- `from_bytes` reports a truncated header or body, an unknown version, a count
+  beyond the bound, a non-positive or non-increasing centroid, with an offset.
+
+### Acceptance — the three layers
+
+**Matrix.** Distributions: uniform, skewed (exponential), heavy-tailed (Pareto)
+and duplicate-heavy (fewer than 1000 distinct values). Input orders: ascending,
+descending, shuffled with a fixed seed. Sizes: 1k, 100k, 10M. Quantiles: 0.001,
+0.01, 0.05 through 0.95 in steps of 0.05, 0.99, 0.999. Ground truth is the exact
+sorted array. Merge trees: sequential, balanced pairwise and unbalanced, and the
+report states the spread across orders instead of asserting they agree.
+
+1. **Structure, always.** After `to_bytes`: at most `2k + 1` centroids; the
+   weights sum to `N` exactly; the minimum and maximum are exact; quantiles are
+   monotone in `q`; a merge preserves the weight sum and the extremes; a round
+   trip is exact; the three backends produce the same bytes.
+2. **Against the reference.** The same matrix runs through Apache DataSketches'
+   `tdigest_double` at the same `k`, and each `(distribution, size, q)` cell must
+   have a rank error no worse than twice the reference's. The reference is an
+   independent implementation, so this says nothing about byte compatibility.
+3. **Absolute ceilings.** At most 1% rank error for interior quantiles
+   (`0.05 .. 0.95`) and 0.5% in the tails (`0.001, 0.01, 0.99, 0.999`). Every
+   cell is printed, so a pass is visible as numbers rather than as a verdict.
+
 ### Explicitly not claimed
+
+- A universal error bound: t-digest has none, and the ceilings above are
+  empirical values for the named matrix at `k = 100`.
+- Exact quantiles, or agreement with the reference on which value a quantile
+  lands on.
+- Stability across input orders or merge trees — the spread is reported, and
+  reducing it is future work.
+- Windowed or decaying digests, and weighted input beyond the centroid weights
+  the sketch itself carries.
+
+## Explicitly not claimed
 
 - A maximum relative error for a single sample. The standard error is an
   expectation over hashes, not a bound.

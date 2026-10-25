@@ -18,6 +18,7 @@ pub(all) suberror EncodingError {
   InvalidTag(Int32)
   OutOfRange(Int64, Int32)
   Corrupt(Int32)
+  InvalidArgument(String)
 }
 pub fn EncodingError::message(Self) -> String
 

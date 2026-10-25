@@ -23,6 +23,10 @@ pub(all) suberror EncodingError {
   OutOfRange(Int64, Int32)
   /// A malformed structure inside an encoded stream, at this byte offset.
   Corrupt(Int32)
+  /// An argument the operation cannot represent, spelled out: a value with no
+  /// rank (NaN, an infinity), a quantile outside 0..1, or a merge between two
+  /// different parameter sets.
+  InvalidArgument(String)
 }
 
 ///|
@@ -44,6 +48,7 @@ pub fn EncodingError::message(self : EncodingError) -> String {
     OutOfRange(value, offset) =>
       "byte \{offset}: value \{value} outside the representable range"
     Corrupt(offset) => "byte \{offset}: corrupt stream structure"
+    InvalidArgument(detail) => "invalid argument: \{detail}"
   }
 }
 

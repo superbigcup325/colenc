@@ -29,6 +29,23 @@ pub fn HllSketch::register_count(Self) -> Int32
 pub fn HllSketch::registers(Self) -> ArrayView[Int32]
 pub fn HllSketch::to_bytes(Self) -> Bytes
 
+pub struct TDigest {
+  // private fields
+}
+pub fn TDigest::centroid_count(Self) -> Int32
+pub fn TDigest::compress(Self) -> Unit
+pub fn TDigest::compression(Self) -> Int32
+pub fn TDigest::count(Self) -> Double
+pub fn TDigest::from_bytes(BytesView) -> Self raise @types.EncodingError
+pub fn TDigest::maximum(Self) -> Double raise @types.EncodingError
+pub fn TDigest::merge(Self, Self) -> Self raise @types.EncodingError
+pub fn TDigest::minimum(Self) -> Double raise @types.EncodingError
+pub fn TDigest::new(Int32) -> Self raise @types.EncodingError
+pub fn TDigest::new_default() -> Self
+pub fn TDigest::quantile(Self, Double) -> Double raise @types.EncodingError
+pub fn TDigest::to_bytes(Self) -> Bytes
+pub fn TDigest::update(Self, Double) -> Unit raise @types.EncodingError
+
 // Type aliases
 
 // Traits
