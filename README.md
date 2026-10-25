@@ -10,6 +10,7 @@ it never touches files, containers or query plans, and it is not a byte-stream
 compressor.
 
 - Design, milestones and acceptance criteria: [`docs/ROADMAP.md`](docs/ROADMAP.md)
+- Next work packages and exit criteria: [`docs/NEXT-STEPS.md`](docs/NEXT-STEPS.md)
 - Acceptance rig: lives in the source repository under `harness/` (not shipped in
   the package); the summary is below
 - Throughput scoreboard: [`docs/scoreboard.md`](docs/scoreboard.md)

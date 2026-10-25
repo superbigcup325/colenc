@@ -209,9 +209,11 @@ def main() -> int:
         "the small cases, so compare toolchains or rewrites through medians, "
         "never through one run.",
         "- Ratio is encoded bytes against PLAIN for the same column.",
-        "- A `ROARING+run_optimize` decode expands a 230-byte stream back into "
-        "a million ids, so its decode MB/s is the rate ids come out, not the "
-        "rate bytes are read; compare it with the ratio column, not alone.",
+        "- Roaring decode times `from_bytes` plus `cardinality`; `to_array` is "
+        "outside the timer. Its decode MB/s is normalized to the equivalent "
+        "raw INT32 id size, so it measures bitmap reconstruction at that "
+        "scale, not expansion to an id array or encoded-byte read bandwidth. "
+        "Compare it with the ratio column and report id expansion separately.",
         "- The `roaring-*` rows are a bitmap index, not a page encoding: "
         "`values` is the cardinality of the set, `plain` is the raw INT32 id "
         "stream it replaces (4 bytes per id, so MB/s is per input id byte), "

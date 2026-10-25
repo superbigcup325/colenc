@@ -10,7 +10,7 @@
 **Integration (P5)**: merged into moonlake's `main` — the Parquet reader routed through colenc, a write path added, and the spill format re-encoded (8.08 → 4.86 MiB on the bake-off workload)
 **Release**: `superbigcup325/colenc@0.1.0` is published on mooncakes; the consumer depends on that version from the registry. The manifest now carries the 0.1.1 candidate — the Roaring index plus the bitmap fixes — and an archive consumer check exercises the packaged surface on all three backends before it ships
 **Phase two (P6)**: the bitmap index landed — E8 Roaring is byte-identical to CRoaring, container shapes and the run-optimisation rule included, judged by pyroaring
-**Next step**: publish the 0.1.1 candidate; on the performance side the first measured rewrite has landed (a sorted id column is built container by container in one walk rather than one insert per id, which lifted the bitmap encode rows 3-7x), and the next measured candidate is the per-container allocation cost; the approximate-aggregation family (HLL / t-digest) starts with its contract and its acceptance criteria written down first
+**Next step**: verify the 0.1.1 release candidate, then measure Roaring query operations and validate an engine use case before starting HLL and, later, t-digest. The sorted build, container allocation, bulk-read and serialization rewrites have landed. [Next steps](NEXT-STEPS.md) records the work order, entry points, exit criteria and the limits of the planning evidence
 
 ---
 
@@ -62,7 +62,7 @@ Physical types: `Int32` / `Int64` / `Float` / `Double` / `ByteArray` / `Bool`
 | E7 | FSST | ByteArray (high-cardinality short strings) | round-trip + compression scoreboard | done — round trip + scoreboard, no byte diff (§4 exception) |
 | E8 | Roaring bitmap | Int32 ids (a set, not a sequence) | round-trip + byte diff | done — byte-identical to CRoaring, both container modes |
 
-E0–E6 follow the Parquet spec; **choice bits align with the reference implementation** (RLE's run-selection heuristic, the dictionary threshold and bit-width derivation, DELTA's block 128 / miniblock 4). If the choice bits drift, byte diffing becomes meaningless — so these rules are spelled out one by one in the README
+E0–E6 follow the Parquet spec; **choice bits align with the reference implementation** (RLE's run-selection heuristic, the dictionary threshold and bit-width derivation, DELTA's blocks of 128 for INT32 and 256 for INT64, with four miniblocks each). If the choice bits drift, byte diffing becomes meaningless, so these rules are spelled out one by one in the README
 
 E7 FSST is not a native Parquet encoding, so its criteria are downgraded (§4)
 
@@ -96,14 +96,16 @@ Three layers, each stricter than the last:
 
 Criteria must not be weakened: a new encoding passes all three layers; if it cannot, it is demoted to the roadmap and declared in this document — the criteria are never bent to fit the implementation
 
-Declared exception:
+Declared exceptions:
 
 - **E7 FSST**: Parquet has no native FSST, so the byte and container layers do not apply; downgraded to round-trip properties + a compression-ratio / throughput scoreboard
+- **E8 Roaring**: the bitmap is an index, so the Parquet container layer does not apply. Round-trip properties and byte diffs against CRoaring apply to the reference-aligned paths. As documented in the README and harness, sequences such as adding after `run_optimize` can produce legal bytes different from CRoaring; those paths are judged by round trip, container invariants derived from the bytes and operand independence, with a separate layout regression pin
 
 ## 5. Scoreboard definitions
 
 - **Compression ratio**: bytes relative to a PLAIN baseline, broken out by column kind (monotonic integer columns / high-cardinality string columns / dictionary-friendly low-cardinality columns / float columns)
 - **Throughput**: encode and decode MB/s, listed **separately for native and wasm-gc**
+- **Bitmap timing**: the current Roaring decode timer covers `from_bytes` plus `cardinality`, with MB/s normalized to the raw INT32 id size. Expanding the bitmap with `to_array` is outside that timer and needs a separate measurement
 - **Integration regression**: the consumer's golden tests stay green
 
 ## 6. Explicitly deferred
@@ -119,7 +121,7 @@ Not in v1 (the boundary is written down to stop scope creep):
 Phase two, in progress:
 
 - **Bitmap indexes** — Roaring format, cross-checked against the C/Java implementations file by file. Landed as E8 / P6: portable serialization byte-identical to CRoaring, container shapes and the run-optimisation rule aligned, set operations in place
-- **Approximate aggregations** — HLL / t-digest with property-tested error bounds (not started)
+- **Approximate aggregations**: HLL first, then t-digest, with their contracts and acceptance criteria recorded before implementation (not started). The proposed HLL gate measures statistical error across repeated trials; the proposed t-digest gate measures empirical error across specified distributions, input orders and merge trees. See [Next steps](NEXT-STEPS.md)
 
 ## 7. Engineering conventions
 
