@@ -801,11 +801,8 @@ pub fn RoaringBitmap::from_bytes_with_consumed(
   let cards : Array[Int32] = Array::make(size, 0)
   let mut cursor = position
   for index in 0..<size {
-    keys[index] = data[cursor].to_int() | (data[cursor + 1].to_int() << 8)
-    cards[index] = (
-        data[cursor + 2].to_int() | (data[cursor + 3].to_int() << 8)
-      ) +
-      1
+    keys[index] = data.unsafe_read_uint16_le(cursor).to_int()
+    cards[index] = data.unsafe_read_uint16_le(cursor + 2).to_int() + 1
     cursor += 4
     if index > 0 && keys[index] <= keys[index - 1] {
       raise @types.EncodingError::Corrupt(cursor - 4)
@@ -826,10 +823,7 @@ pub fn RoaringBitmap::from_bytes_with_consumed(
       )
     }
     for index in 0..<size {
-      offsets[index] = data[cursor].to_int() |
-        (data[cursor + 1].to_int() << 8) |
-        (data[cursor + 2].to_int() << 16) |
-        (data[cursor + 3].to_int() << 24)
+      offsets[index] = data.unsafe_read_uint32_le(cursor).reinterpret_as_int()
       cursor += 4
     }
     position = cursor
@@ -854,10 +848,17 @@ pub fn RoaringBitmap::from_bytes_with_consumed(
         )
       }
       let pairs : Array[Int32] = Array::make(count, 0)
-      for pair in 0..<count {
-        pairs[pair] = data[position].to_int() |
-          (data[position + 1].to_int() << 8)
-        position += 2
+      let mut counted = 0
+      for run in 0..<run_count {
+        let start = data.unsafe_read_uint16_le(position).to_int()
+        let length_minus_one = data.unsafe_read_uint16_le(position + 2).to_int()
+        pairs[2 * run] = start
+        pairs[2 * run + 1] = length_minus_one
+        counted += length_minus_one + 1
+        position += 4
+      }
+      if counted != cards[index] {
+        raise @types.EncodingError::Corrupt(position)
       }
       RunContainer(pairs)
     } else if cards[index] <= ROARING_ARRAY_MAX {
@@ -873,8 +874,7 @@ pub fn RoaringBitmap::from_bytes_with_consumed(
       let values : Array[Int32] = Array::make(card, 0)
       let mut previous : Int32 = -1
       for value in 0..<card {
-        let current = data[position].to_int() |
-          (data[position + 1].to_int() << 8)
+        let current = data.unsafe_read_uint16_le(position).to_int()
         if current <= previous {
           raise @types.EncodingError::Corrupt(position)
         }
@@ -892,20 +892,26 @@ pub fn RoaringBitmap::from_bytes_with_consumed(
           data.length() - position,
         )
       }
+      // The card table's word is checked here rather than by a second walk over
+      // the same 8 KB: the counts come out of the read.
+      let mut counted = 0
       for word in 0..<ROARING_WORDS {
-        let mut value = 0L
-        for byte in 0..<8 {
-          value = value |
-            (data[position + word * 8 + byte].to_int().to_int64() << (byte * 8))
-        }
+        let value = data
+          .unsafe_read_uint64_le(position + word * 8)
+          .reinterpret_as_int64()
         words[word] = value
+        counted += value.popcnt()
       }
       position += 8 * ROARING_WORDS
+      if counted != cards[index] {
+        raise @types.EncodingError::Corrupt(position)
+      }
       BitmapContainer(words)
     }
-    if container_cardinality(container) != cards[index] {
-      raise @types.EncodingError::Corrupt(position)
-    }
+    // Each branch has already compared what it built against the card table: a
+    // bitmap container counts its words, a run container adds its lengths, and
+    // an array container is read by length, so its cardinality is the card word
+    // by construction and there is nothing left to check here.
     containers[index] = container
   }
   ({ keys, containers, }, position)

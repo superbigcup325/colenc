@@ -100,7 +100,11 @@ its branch in `facade.mbt`.
 - Hot loops stay bounds-checked: the length precondition is checked once at
   the top of the function, then the loop indexes normally. Measured on this
   toolchain, `unsafe_get` in the bit unpacker is **not** faster (within noise,
-  and slower at some widths), so the checked form stays — see Known Pitfalls
+  and slower at some widths), so the checked form stays — see Known Pitfalls.
+  Reading *bytes* is the exception: once the range is validated, a body is read
+  with the toolchain's bulk loads (`unsafe_read_uint16_le` /
+  `unsafe_read_uint32_le` / `unsafe_read_uint64_le`), which are intrinsics that
+  replace a byte-at-a-time assembly — see Known Pitfalls
 - Everything little-endian; no platform branches; no FFI
 - Decoding errors are typed errors carrying an offset ("byte N, item M"), never
   a panic
@@ -276,7 +280,22 @@ tracked documents ship in the release archive.
   on a set of 32768 containers; the same treatment applied to the key/card and
   offset tables, which are walked once per container. `unsafe_get` on top of
   that is *mixed* (sparse -7.7%, a 32768-container set +1.8%), so the checked
-  indexing stays, matching the convention above
+  array indexing stays, matching the convention above
+- **A byte-at-a-time load is the next step up from that** → even with the
+  cursor in place, a 64-bit bitmap word was assembled from eight checked byte
+  reads, so a sparse column's 8 KB bodies cost 256M byte accesses. The
+  toolchain's `unsafe_read_uint64_le` / `_uint32_le` / `_uint16_le` on a
+  `BytesView` are intrinsics (they lower to one load), and reading each body
+  with them after the same single range check takes `from_bytes` down 67.5% on
+  a dense container, 65.0% mixed, 19.9% on a sparse array container and 14.2%
+  on the 1M-value sparse column; wasm-gc agrees (-40.2% / -38.8% / -40.7% /
+  -2.4%). The card check came along for free by counting the popcount inside
+  the same walk (and a run container's lengths in the pairs loop) instead of a
+  second pass — but the *array* container's card is the word by construction,
+  so that branch has nothing to check and the old tautological check is gone.
+  Watch the noise: the same HEAD binary measured 2026 and 2526 us on the 1M
+  read, so a single A/B pair cannot resolve a 10% claim on that case — the
+  numbers above come from interleaved median-of-three pairs
 - **The per-value write is at the floor; the per-container control flow was
   not** → the control cases in `harness/perf -- candidates` price the byte-level
   alternatives on 32768 u16 values into a buffer: two `write_byte` calls 38.0 us,

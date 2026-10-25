@@ -47,6 +47,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   takes a wide-key set (32768 one-value containers) down another 16%. The shape
   rule is unchanged: it reads the distinct count of the whole key run, and the
   output stays byte-identical to pyroaring on every boundary case
+- Reading a bitmap back now loads each body with the widest bulk read the
+  toolchain provides instead of assembling values byte by byte, and the card
+  table's value is counted in that same walk rather than by a second pass: one
+  `unsafe_read_uint64_le` per 64-bit word, one `unsafe_read_uint16_le` per
+  16-bit value. Every body is still range-checked once before the loop, which
+  is what makes the loads safe. Measured with `harness/perf` as interleaved
+  median-of-three A/B pairs on the same machine (`from_bytes`): a dense bitmap
+  container -67.5%, mixed shapes -65.0%, the sparse column -14.2%, a sparse
+  array container -19.9%, a wide-key set -3.4%. On wasm-gc the same A/B is
+  -40.2% dense, -40.7% sparse-array, -19.8% wide keys and -2.4% on the 1M
+  column
 - Serializing a bitmap now plans before it writes: one walk over the containers
   collects each card, each body size and the run flags, adds up the exact byte
   count, and the buffer is created at that size, so nothing is re-derived and
