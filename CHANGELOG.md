@@ -6,7 +6,29 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `HllSketch::register(index)` reads one register's rank without copying and
+  reports an out-of-range index as `OutOfRange`.
+
 ### Changed
+
+- HyperLogLog registers are held as bytes. A precision-14 sketch carries 16 KiB
+  of register state instead of 64 KiB; the hash, rank rule, estimator and the v1
+  serialized bytes are unchanged. `HllSketch::registers()` keeps its type but
+  now returns a snapshot built per call rather than a non-copying view of the
+  live state; use `register(index)` to read ranks without that cost. Measured on
+  native release (medians of three): 1000 groups of 1000 values 40.7 to 36.0 ms,
+  `from_bytes` 10.5 to 7.4 us, `to_bytes` 7.3 to 5.9 us, and peak RSS of that
+  grouped state 96.7 to 25.0 MB.
+- Fixed-width PLAIN decoding reads one word per value and checks the count
+  against the view length without multiplying first, so a count near 2^29 can no
+  longer wrap the size check. Native release, 500k values: Int64 1991 to 236 us,
+  Int32 666 to 152 us.
+- Dictionary encoding stops as soon as the dictionary would pass
+  `max_dictionary_bytes` instead of building it in full and comparing afterwards.
+  Accepted dictionaries are byte-identical; refused columns return `None` sooner
+  (500k distinct Int32 values 59.8 to 24.7 ms).
 
 - The set encoding left the generic dispatch. `encode_column` and
   `decode_column` now refuse `Encoding::Roaring` with `Unsupported` instead of
