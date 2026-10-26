@@ -1,35 +1,38 @@
-# Kernel improvements after 0.1.1
+# Kernel implementation record after 0.1.1
 
-Implementation handoff, 2026-10-26 (Asia/Shanghai). The inspected library is
-`9fdd252`; the latest published version is 0.1.1. K1 through K6 below are
-unimplemented proposals. Only K1 has a new isolated timing experiment. This
-document assigns neither a release version nor a publication date.
+Updated 2026-10-26 (Asia/Shanghai), source revision `f0c6454`. K0 and the first
+deliveries of K1 through K6 are implemented and unreleased. The original task
+scope and acceptance rules below are retained, with the outcomes identified.
+The original handoff and PLAIN experiment used `9fdd252` as their baseline.
 
 Start with [Next steps](NEXT-STEPS.md) for the release and consumer state, and
 retain the [roadmap's acceptance rules](ROADMAP.md#4-the-acceptance-system)
 and [sketch contracts](SKETCHES.md).
 
-## Work order
+## Completed deliveries
 
-The bitmap dispatch separation is already implemented in `9fdd252` (K0).
-Its remaining release and registry-consumer work is separate from this queue.
-Do not repeat that implementation, the earlier bitmap rewrites, or HLL and
-t-digest adoption in moonlake. Adding a task to the accepted moonlake 0.6.0
-candidate requires acceptance on the resulting source and dependency again.
+The bitmap dispatch separation landed in `9fdd252` (K0). The remaining
+release and registry-consumer work follows the ordered plan in
+[Next steps](NEXT-STEPS.md#release-order-and-ownership). Do not repeat these
+implementations, the earlier bitmap rewrites, or SQL sketch adoption in
+moonlake. Changing its accepted 0.6.0 candidate or dependency requires acceptance
+on the resulting source again.
 
-| Order | Task | Evidence and first delivery |
+| Task | Implementation | Outcome and boundary |
 |---|---|---|
-| 1 | K1: PLAIN word loads | Isolated Int64 decoding experiment on native and wasm-gc; start with loads only, retaining the result allocation |
-| 2 | K2: Dictionary budget checked during construction | Source shows full dictionary and index construction before the limit is checked; stop as soon as the encoded dictionary would exceed the limit |
-| 3 | K3: Compact HLL state | The consumer already measures the cost of one 64 KiB sketch per group; settle API compatibility, then try byte registers before a sparse state machine |
-| 4 | K4: Roaring query APIs | Add count-only intersection, overlap testing and batch iteration against a named consumer workload |
-| 5 | K5: t-digest compression and batch quantiles | Profile temporary arrays and scale evaluation under the existing k1 contract before changing the algorithm |
-| 6 | K6: Reusable FSST model | Measure training amortization on repeated batches before introducing a reusable model or a new frame |
+| K1: PLAIN word loads | `cf91004`, `c68e39a` | Word loads for all four fixed-width numeric types and count checks without multiplication overflow; the full-width unpacker was not changed |
+| K2: Dictionary budget during construction | `5df03c6` | Early `None` once the dictionary payload would pass the budget; accepted bytes unchanged |
+| K3: Compact HLL state | `d497326` | Dense byte registers, snapshot `registers()` and allocation-free `register(index)`; sparse state deferred |
+| K4: Roaring query APIs | `5163107` | Intersection count, overlap testing and stateless ordered batches; engine adoption still follows I0 |
+| K5: t-digest compression and batch quantiles | `353e692` | Ordered centroid/buffer merge and cached lower scale values; batch queries deferred after measurement |
+| K6: Reusable FSST model | `3bb6ca0` | Immutable trained model and `encode_fsst_with`, retaining the existing self-contained frame |
 
-K1 and K2 can be delivered independently. K3 through K6 need their API or
-representation decisions recorded before implementation. Their speed and RSS
-benefits have not been measured by this investigation. A negative measured
-result completes an investigation; it does not justify changing an oracle.
+The [final benchmark record](NEXT-STEPS.md#final-benchmark-record) and
+[scoreboard](scoreboard.md) contain the post-implementation measurements.
+Sparse HLL, consumer FSST reuse and I0 are conditional follow-ups in
+[Next steps](NEXT-STEPS.md#conditional-work-after-consumer-acceptance).
+A negative measured result completes an investigation; it does not justify
+changing an oracle.
 
 ## Shared delivery requirements
 
@@ -46,8 +49,8 @@ result completes an investigation; it does not justify changing an oracle.
   distinguish serialized bytes, retained state and process peak RSS.
 - Deliver the contract decision, implementation, relevant correctness results,
   repeatable performance record and remaining limitations together. Keep changes
-  separable by task. Publication and release sequencing follow the existing
-  authorization in [Next steps](NEXT-STEPS.md).
+  separable by task. Publication and release sequencing follow
+  [Next steps](NEXT-STEPS.md#release-order-and-ownership).
 
 ## K1. PLAIN word loads
 
@@ -55,14 +58,18 @@ result completes an investigation; it does not justify changing an oracle.
 [bits.mbt](../primitives/bits.mbt), and
 [PLAIN tests](../encoders/plain_wbtest.mbt).
 
-`read_u64_le` currently assembles eight bytes per value. The isolated experiment
-below replaces that loop with `BytesView::unsafe_read_uint64_le` after range
-validation. Both paths retain `Array::make(count, 0L)` and fill every output.
-Roaring already uses these bulk-load intrinsics after validating its bodies.
+The baseline `read_u64_le` assembled eight bytes per value. The isolated
+experiment below replaced that loop with `BytesView::unsafe_read_uint64_le`
+after range validation, retaining `Array::make(count, 0L)` and filling every
+output. The production delivery uses word loads for Int64/Double and
+Int32/Float, with a count check against `data.length() / width` before the load.
+The full-width bit unpacker, allocation and SIMD were not changed.
 
-Start with Int64 and Double decoding. Extend to Int32/Float and the full-width
-bit unpacker only after checking their own benefit. Keep allocation changes,
-SIMD and wider algorithm changes out of the first comparison.
+*Outcome:* native release, 500k values, interleaved median-of-three comparisons:
+Int64 1991 to 236 us, Double 1992 to 236 us, Int32 666 to 152 us and Float
+678 to 152 us. wasm-gc also improved. The JS tests retain their existing NaN
+class contract rather than claiming NaN payload preservation. Consumer
+Parquet/spill measurements remain part of the release follow-through.
 
 **Exit:**
 
@@ -84,13 +91,17 @@ SIMD and wider algorithm changes out of the first comparison.
 [dictionary tests](../encoders/dictionary_wbtest.mbt),
 `harness/check_dict.py` and `harness/perf`.
 
-`encode_dictionary` currently builds the complete map, distinct-value array and
-Int64 index array, encodes the dictionary, and only then checks
-`max_dictionary_bytes`. High-cardinality input pays for work that will return
-`None` anyway. Track the PLAIN dictionary payload as each new value is inserted
-and stop once it exceeds the limit. A distinct Int64 costs eight bytes; a byte
-array costs four length bytes plus its payload. At the default 1 MiB limit,
-131,073 distinct Int64 values are already enough to decide against a dictionary.
+The baseline built the complete dictionary and indices before checking
+`max_dictionary_bytes`. The planners now track the PLAIN payload while adding
+new values and return `None` as soon as the next entry would pass the limit.
+Fixed-width types use entries times width; byte arrays use a running
+`4 + length` total in 64 bits. Accepted dictionaries keep their bytes and order.
+
+*Outcome:* refused columns on native release took 59.8 to 24.7 ms for 500k
+distinct Int32 values and 22.3 to 6.9 ms for 200k strings; wasm-gc improved by
+65% and 78%. Accepted low-cardinality Int32 results showed layout noise, so a
+difference below 15% in that recorded case remains unresolved. The limit still
+bounds dictionary payload rather than all input or index allocations.
 
 **Exit:**
 
@@ -113,27 +124,26 @@ array costs four length bytes plus its payload. At the default 1 MiB limit,
 [moonlake's state-cost record](https://github.com/superbigcup325/moonlake/blob/main/docs/sketches.md).
 The linked consumer branch may lag the local record.
 
-At precision 14, 16,384 Int32 registers occupy 65,536 bytes of payload, while
-serialization already uses one byte per register. The consumer measured
-145.8 MB peak RSS for 1,000 groups with approximate distinct counts versus
-152.8 MB for exact counts. Byte registers would reduce the register payload to
-16,384 bytes; this is arithmetic, not a measured RSS reduction. Compact and
-warm-up representations have a mature reference in
-[Apache DataSketches](https://datasketches.apache.org/docs/HLL/HllSketches.html).
+The released 0.1.1 state used 16,384 Int32 registers at precision 14, or 64 KiB
+of payload. The current state uses `FixedArray[Byte]`, or 16 KiB, with the same
+precision, hash, rank rule, estimator and v1 bytes. In the library's native
+grouped control, peak RSS fell from 96.7 to 25.0 MB for 1000 groups of 1000
+values and from 428 to 109 MB for 5000 groups of 10. These are dense-state
+results; the consumer's exact-state crossover still needs re-measurement.
 
-Deliver in stages:
+The delivery decisions and conditional next stage are:
 
-1. Record how `registers() -> ArrayView[Int32]`, which currently promises a
-   non-copying view, remains compatible or migrates. Do not silently change its
-   type or turn it into a copying accessor while claiming the old cost.
+1. Record how `registers() -> ArrayView[Int32]`, previously a non-copying live
+   view, migrates. Do not claim the old cost for the new behavior.
    *Decision (implemented):* the signature is kept so existing callers compile,
    but the result is now a snapshot built per call (O(register_count) time and
    space) that no longer tracks later updates. The allocation-free read is the
    new `register(index)`, which returns an error for an out-of-range index.
    Callers that relied on a live view must re-read. This is documented on the
    accessor and in the changelog.
-2. Evaluate byte registers with the same precision, hash, rank, estimator and
-   v1 serialized bytes. Test all precisions and merge/serialization identities.
+2. Byte registers are implemented with the same precision, hash, rank,
+   estimator and v1 serialized bytes. Keep all precisions and
+   merge/serialization identities covered.
 3. Consider sparse-to-dense state only if the many-small-groups measurement
    still warrants it. Define promotion, merge combinations, allocation bounds
    and old-byte compatibility before coding. An exact-small-set state is a
@@ -159,12 +169,21 @@ tests, `harness/check_roaring.py`, `harness/check_roaring_ops.py` and
 `harness/perf`. [CRoaring's public API](https://github.com/RoaringBitmap/CRoaring/blob/master/include/roaring/roaring.h)
 provides an independent reference for count-only and iterator operations.
 
-Today `intersect` materializes a result bitmap and `to_array` expands every ID.
-The first additive APIs to evaluate are `intersection_cardinality`, `intersects`
-and an ordered iterator or `next_batch`. Count-only work should avoid result
-containers; an overlap predicate should stop at the first match, and a batch
-iterator should not first build the full ID array. Name the count width,
-exhaustion, early-stop and mutation/invalidation rules before implementation.
+`intersection_cardinality` and `intersects` now answer the count and overlap
+questions without building the intersection. Counts remain `Int32`, matching
+`cardinality`. `intersects` stops at the first shared ID.
+`ids_after(after, limit)` returns ascending IDs beyond an Int64 cursor,
+starting at `-1L`, and keeps no mutable iterator state. Continue from the last
+returned ID; for a positive limit, a short batch means exhaustion. A zero or
+negative limit returns an empty array. Each call reads the current bitmap,
+and returned arrays do not alias it.
+
+*Outcome:* native release medians of three put bitmap intersection count at
+3.45 us against 14.0 us for materializing the result. The first 4096 IDs of a
+1M-ID bitmap take 4.3 us against 907 us for expanding all IDs. Full batched
+iteration is faster on dense containers but 14% slower on the sparse 1M-ID
+array case, because each batch re-locates its key. Do not assume every iterator
+workload wins. Engine use still needs I0's ownership and selection contract.
 
 **Exit:** compare counts with materialized intersections and an independent set
 oracle, overlap tests with count > 0, and concatenated batches with `to_array`.
@@ -184,14 +203,15 @@ operations and wider IDs remain follow-ups to a demonstrated workload.
 [t-digest contract](SKETCHES.md#t-digest-contract-v1) and
 `harness/check_tdigest.py`.
 
-Profile the sorted `(mean, weight)` list, its split into arrays, the extra arrays
-on reverse passes, and repeated scale evaluation in the inner compression loop.
-Try buffer reuse, merging an already ordered centroid list with the sorted raw
-buffer, and cached scale values before altering k1 or compression 100. Retain
+The original scope was to profile the sorted `(mean, weight)` list, its split
+into arrays, the extra arrays on reverse passes, and repeated scale evaluation
+in the inner compression loop. It called for trying buffer reuse, merging an
+ordered centroid list with the sorted raw buffer, and cached scale values
+before altering k1 or compression 100. Retain
 tie ordering and alternating sweep behavior; array reuse must not mutate merge
 operands or alias the returned digest.
 
-The first additive query API to consider is `quantiles(qs)`: finalize once and
+The query API considered was `quantiles(qs)`: finalize once and
 walk the centroid weights for several ranks. Specify invalid-q behavior, empty
 input, output order and duplicate q values before coding. Compare it with scalar
 queries on the same finalized state. Sharing one digest across SQL aggregates
@@ -204,8 +224,8 @@ perf rig a 1M-value update stream went from 88.5 to 51.9 ms and a merge from
 3.7 to 2.5 us (native release, medians of three). `quantiles(qs)` was not added:
 a scalar query on a finalized digest costs about 23 ns (2.3 us for 99 queries,
 and `compress` returns immediately once the buffer is empty), so a batch call
-would save validation work measured in nanoseconds and cannot change a consumer's
-cost. It stays a follow-up for a consumer that shows a query-bound workload.
+would save validation work measured in nanoseconds, and no query-bound consumer
+has been demonstrated. It stays a follow-up for a consumer that shows that need.
 
 **Exit:** retain structural invariants, exact extremes, serialization checks,
 the named distribution/order/merge-tree matrix and its existing absolute
@@ -219,12 +239,12 @@ case and contract; they are not part of this first task.
 **Entry points:** [fsst.mbt](../encoders/fsst.mbt), its snapshot/property tests,
 `harness/check_fsst.py` and the string variants in `harness/perf`.
 
-`encode_fsst` trains a symbol table on every call. First separate training cost
-from encoding and decoding on repeated small batches. Then evaluate a reusable
-model/encoder whose lifetime spans those batches. Define ownership, table
-identity and export/import before exposing it; preserve existing framing and
-the raw fallback, or explicitly version a new frame. Equality of compressed
-strings requires the same table, not just the same input bytes.
+`encode_fsst` still trains a symbol table on its own batch. The new immutable
+`FsstModel` and `encode_fsst_with` let callers train once and reuse that table
+across batches, retaining the existing frame and raw fallback. Models own their
+table; each output frame carries it, so decoding needs no external model.
+Equality of compressed strings requires the same table, not just the same
+input bytes. Export/import and shared-table frames remain conditional work.
 
 **Exit:** compare one-shot training and reused training on low-cardinality,
 prefix-heavy, high-cardinality text and changing distributions. Include training

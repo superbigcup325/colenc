@@ -10,7 +10,7 @@
 **Integration (P5)**: merged into moonlake's `main` — the Parquet reader routed through colenc, a write path added, and the spill format re-encoded (8.08 → 4.86 MiB on the bake-off workload)
 **Release**: `superbigcup325/colenc@0.1.1` is published on mooncakes. It carries the Roaring index, the bitmap and key-search rewrites, and the `sketches` package (HyperLogLog and t-digest). The archive consumer check exercises the packaged surface — including both sketches — on all three backends before and after a publication
 **Phase two (P6)**: the bitmap index landed — E8 Roaring is byte-identical to CRoaring, container shapes and the run-optimisation rule included, judged by pyroaring
-**Next step (2026-10-26)**: moonlake consumes 0.1.1, implements both SQL sketch functions and has accepted its local 0.6.0 candidate. The bitmap dispatch separation is implemented in local `9fdd252` and awaits release follow-through. The [kernel handoff](OPTIMIZATION-PLAN.md) orders PLAIN word loads, dictionary budget checks and compact HLL state, followed by conditional Roaring query APIs, t-digest work and FSST model reuse. [Next steps](NEXT-STEPS.md) records completed consumer work, release boundaries and the final benchmark reminder
+**Next step (2026-10-26)**: the bitmap dispatch separation and the first K1 to K6 kernel deliveries are implemented on remote `main` at `f0c6454`, with green CI and an updated library scoreboard. The [implementation record](OPTIMIZATION-PLAN.md) retains their scope and results. [Next steps](NEXT-STEPS.md) recommends 0.2.0 for the compatibility changes and orders packaged API coverage, candidate acceptance, publication, then moonlake's registry upgrade and final baseline. Sparse HLL, consumer FSST reuse and the Roaring index experiment are conditional follow-ups. moonlake's locally accepted 0.6.0 candidate still uses 0.1.1 and must be accepted again after that upgrade
 
 ---
 
@@ -138,7 +138,7 @@ Phase two, in progress:
 
 ## Final reminder: update benchmarks
 
-The kernel work in the [optimization handoff](OPTIMIZATION-PLAN.md) is done and
+The kernel work in the [implementation record](OPTIMIZATION-PLAN.md) is done and
 `docs/scoreboard.md` was regenerated after it, with the sketch and bitmap query
 costs recorded in the [final record](NEXT-STEPS.md#final-benchmark-record).
 Updating moonlake's end-to-end baseline against the actual registry dependency

@@ -32,9 +32,14 @@ optimisation, judged by pyroaring instead of parquet-cpp.
 
 Phase two also includes HyperLogLog and t-digest in the dedicated `sketches`
 package, published in 0.1.1. Their properties and statistical/empirical accuracy
-gates are recorded in [the sketch contracts](docs/SKETCHES.md). Consumer
-adoption and conditional library work are planned in
+gates are recorded in [the sketch contracts](docs/SKETCHES.md). Release
+follow-through and conditional library work are planned in
 [the current next steps](docs/NEXT-STEPS.md).
+
+Unreleased `main` also includes the bitmap dispatch separation, PLAIN and
+dictionary optimizations, compact HLL state, bitmap query methods, t-digest
+compression work and reusable FSST models. The [changelog](CHANGELOG.md#unreleased)
+records the migration from 0.1.1; the API below describes this source tree.
 
 Integration with [moonlake](https://github.com/superbigcup325/moonlake) is
 merged on its `main`: Parquet decoding routed through colenc, a new write path,
