@@ -69,6 +69,8 @@ pub fn encode_float(Array[Float], @buffer.Buffer) -> Unit
 
 pub fn encode_fsst(Array[Bytes], @buffer.Buffer) -> Unit
 
+pub fn encode_fsst_with(FsstModel, Array[Bytes], @buffer.Buffer) -> Unit
+
 pub fn encode_int32(Array[Int32], @buffer.Buffer) -> Unit
 
 pub fn encode_int64(Array[Int64], @buffer.Buffer) -> Unit
@@ -84,6 +86,13 @@ pub fn read_u32_le(BytesView, Int32) -> Int32
 // Errors
 
 // Types and methods
+pub struct FsstModel {
+  // private fields
+}
+pub fn FsstModel::symbol_count(Self) -> Int32
+pub fn FsstModel::table_bytes(Self) -> Int32
+pub fn FsstModel::train(Array[Bytes]) -> Self
+
 pub(all) struct RoaringBitmap {
   // private fields
 }

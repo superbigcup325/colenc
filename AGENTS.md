@@ -467,6 +467,25 @@ tracked documents ship in the release archive.
   51.9 ms (-41%), 20k updates 1750 -> 1015 us, merge of two 1M-value digests 3.7
   -> 2.5 us; quantile queries (2.3 us per 99), `to_bytes` and `from_bytes` do not
   move, as the pass is not on their path
+- **FSST trained its symbol table on every call, and training is most of the
+  call** -> `encode_fsst` built the table and then encoded, so a batch of 100
+  short strings spent 36.6 of its 39.5 us on training and 2.8 us on matching.
+  `FsstModel::train` and `encode_fsst_with` split the two; `encode_fsst` is now
+  `train` then `encode_fsst_with`, so a model trained on a batch encodes that
+  batch to exactly the bytes the one-shot encoder wrote (tested). The frame is
+  unchanged: every batch still carries its own copy of the table, so
+  `decode_fsst` needs no model and old frames read as before, and the price of
+  reuse is that table repeated per batch (648 to 1842 bytes on these data). Held-out
+  batches of the same shape, native release, medians of two rounds, reused vs
+  fresh training: low-cardinality labels 28.5 vs 395 ns per value at 100 values
+  and 15.8 vs 84 at 20000, the same bytes; prefix-heavy text 51 vs 1564 ns per
+  value at 100 and 67 vs 416 at 20000; high-cardinality text 787 vs 8670 at 100
+  and 791 vs 2125 at 20000. Size is data-dependent and not always better: on the
+  held-out batch the reused model was 7.0% larger at 100 prefix-heavy values, 2.8%
+  larger at 1000, 3.6% larger at 100 high-cardinality values and equal at 20000,
+  while at 20000 prefix-heavy values it was 14% smaller. The model is immutable
+  and nothing detects that the data drifted away from it; a caller that reuses a
+  model owns that decision
 
 ## Command reference
 

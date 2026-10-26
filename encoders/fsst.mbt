@@ -299,15 +299,70 @@ fn encode_value(
 /// materialised — its size is arithmetic — so the comparison that picks the
 /// smaller mode costs nothing.
 pub fn encode_fsst(values : Array[Bytes], out : @buffer.Buffer) -> Unit {
+  encode_fsst_with(FsstModel::train(values), values, out)
+}
+
+///|
+/// A trained symbol table that can encode any number of batches. `train` pays
+/// the table build once (the dominant cost of `encode_fsst` on small batches);
+/// `encode_fsst_with` then only matches and writes. The model is immutable, so
+/// it can be shared between batches and between calls.
+///
+/// The frame is unchanged: every encoded batch still carries its own copy of
+/// the table, so `decode_fsst` reads it without the model and a batch stays
+/// self-contained. The cost of that choice is the table bytes repeated per
+/// batch (at most 2 KiB), which is why the model pays off on batches large
+/// enough to amortize them. A batch the model compresses worse than storing it
+/// raw falls back to the stored frame exactly as before.
+pub struct FsstModel {
+  priv symbols : Array[Bytes]
+  priv codes : SymbolCodes
+}
+
+///|
+/// Train a model on a sample batch with the same bounded-sample rule
+/// `encode_fsst` uses.
+pub fn FsstModel::train(values : Array[Bytes]) -> FsstModel {
   let symbols = build_symbols(values)
-  let head = Buffer()
-  head.write_byte(symbols.length().to_byte())
   let codes = SymbolCodes::new()
   for index in 0..<symbols.length() {
     let symbol = symbols[index]
+    codes.set(pack_prefix(symbol, 0, symbol.length()), symbol.length(), index)
+  }
+  { symbols, codes, }
+}
+
+///|
+pub fn FsstModel::symbol_count(self : FsstModel) -> Int32 {
+  self.symbols.length()
+}
+
+///|
+/// Bytes the table occupies inside one encoded batch: the count byte, then a
+/// length byte and the bytes of each symbol.
+pub fn FsstModel::table_bytes(self : FsstModel) -> Int32 {
+  let mut total = 1
+  for symbol in self.symbols {
+    total += 1 + symbol.length()
+  }
+  total
+}
+
+///|
+/// Encode `values` with a trained model. Equivalent to `encode_fsst` when the
+/// model was trained on `values` themselves.
+pub fn encode_fsst_with(
+  model : FsstModel,
+  values : Array[Bytes],
+  out : @buffer.Buffer,
+) -> Unit {
+  let symbols = model.symbols
+  let codes = model.codes
+  let head = Buffer()
+  head.write_byte(symbols.length().to_byte())
+  for symbol in symbols {
     head.write_byte(symbol.length().to_byte())
     head.write_bytes(symbol)
-    codes.set(pack_prefix(symbol, 0, symbol.length()), symbol.length(), index)
   }
   head.write_int_le(values.length())
 
