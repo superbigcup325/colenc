@@ -1,9 +1,13 @@
-# Release and consumer follow-through: 0.1.2 is released
+# Release and consumer follow-through: 0.1.3 is the current release
 
-Status: 2026-10-26 (Asia/Shanghai). **Version 0.1.2 is published**, moonlake
-consumes it, and L0 through C2 are complete. What remains is the conditional
-work that waits on a consumer workload, and moonlake's own release, which is that
-project's decision. The [implementation record](OPTIMIZATION-PLAN.md) preserves
+Status: 2026-10-26 (Asia/Shanghai). **Version 0.1.3 carries the sparse
+HyperLogLog state**; `chore(release): 0.1.3` is the commit that names it, and the
+publish step follows it, with the tag, the CI run and the archive hash recorded in
+the final-evidence table once they exist. moonlake consumes 0.1.2, and upgrading
+it is that project's decision, so nothing here implies consumer behavior beyond
+the matrix 0.1.3 was justified by. L0 through C2 are complete. What remains is the
+conditional work that waits on a consumer workload, and moonlake's own release,
+which is that project's decision. The [implementation record](OPTIMIZATION-PLAN.md) preserves
 the completed kernel tasks; the [roadmap](ROADMAP.md) and
 [sketch contracts](SKETCHES.md) retain their acceptance definitions.
 
@@ -92,7 +96,7 @@ deliveries shipped in 0.1.2.
 | K0 | Dedicated Roaring facade; generic dispatch refuses the set encoding | Migration and registry-consumer confirmation are complete; retain the dedicated-entry-point contract |
 | [K1](OPTIMIZATION-PLAN.md#k1-plain-word-loads) | Validated word loads for Int64/Double and Int32/Float, with overflow-safe count checks | The consumer's short Parquet pair is unresolved; no SIMD or unpacker rewrite is implied |
 | [K2](OPTIMIZATION-PLAN.md#k2-dictionary-budget-checked-during-construction) | Stop dictionary construction when its payload would exceed the limit | Accepted bytes and `None` fallback remain unchanged |
-| [K3](OPTIMIZATION-PLAN.md#k3-compact-hll-state) | Dense byte registers, snapshot accessor and allocation-free `register(index)` | Sparse state is delivered in the tree and unreleased; the refreshed SQL crossover stays with H0 |
+| [K3](OPTIMIZATION-PLAN.md#k3-compact-hll-state) | Dense byte registers, snapshot accessor and allocation-free `register(index)` | Sparse state shipped in 0.1.3 (see [the delivery record](#sparse-hll-state-delivery-record)); the refreshed SQL crossover stays with H0 |
 | [K4](OPTIMIZATION-PLAN.md#k4-roaring-query-apis) | Intersection count, overlap predicate and stateless `ids_after` batches | I0 still owns engine integration and selection semantics |
 | [K5](OPTIMIZATION-PLAN.md#k5-t-digest-compression-and-batch-quantiles) | Merge the sorted buffer with ordered centroids and cache lower scale values | Batch quantiles were deferred after measurement; k1 and accuracy ceilings remain unchanged |
 | [K6](OPTIMIZATION-PLAN.md#k6-reusable-fsst-model) | Immutable reusable model; every batch retains the existing self-contained frame | Caller-owned lifetime and drift policy; no shared-table frame or model export format |
@@ -104,7 +108,7 @@ its workload demonstrates the need; no additional kernel blocks L0 to C2.
 
 | Priority | Investigation and owner | Entry evidence | Delivery and stop condition |
 |---|---|---|---|
-| 1 | Sparse HLL state, colenc with a moonlake workload | H0 met it: grouped `approx_count_distinct` over 20,000 ten-value groups peaked at about 400 MB against about 20 MB for the exact count, and the library's dense control reached about 110 MB for 5000 groups of 10 values | **Delivered, unreleased** — see [the delivery record](#sparse-hll-state-delivery-record). Dense state stayed the fallback above the promotion limit; an exact-small-set estimator is still a separate decision |
+| 1 | Sparse HLL state, colenc with a moonlake workload | H0 met it: grouped `approx_count_distinct` over 20,000 ten-value groups peaked at about 400 MB against about 20 MB for the exact count, and the library's dense control reached about 110 MB for 5000 groups of 10 values | **Shipped in 0.1.3** — see [the delivery record](#sparse-hll-state-delivery-record). Dense state stayed the fallback above the promotion limit; an exact-small-set estimator is still a separate decision |
 | 2 | FSST model reuse in a consumer, moonlake | Repeated small string batches with a stable enough distribution and training visible in the profile | One opt-in workload with a bounded model lifetime and held-out/drifting batches. Report training amortization, table bytes per frame, encode/decode time, memory and fallback behavior. Keep one-shot behavior available; defer export/shared-table formats unless this caller needs them |
 | 3 | I0 immutable-table Roaring experiment, moonlake | A repeated-predicate workload with explicit row-ID ownership and immutable source identity | Compare exact results and build/load/query/memory/size costs across selective and unselective cases; state the reuse needed to amortize the index. A negative result closes I0. Reduced decoding requires a separate selection/gather contract before integration |
 
@@ -146,9 +150,11 @@ deserialization and precision-floor tests in `sketches/hll_wbtest.mbt`. The
 end-to-end SQL effect was measured in the consumer through an untracked
 `moon.work`; that record belongs to moonlake.
 
-This is a tree, not a release. 0.1.2 stays the published version, so consuming
-the sparse state needs a release decision rather than a silent dependency swap,
-and no consumer behavior is implied until that decision is made.
+**0.1.3 is that release.** The sparse state is in the published artifact, with the
+byte stream, the interface and the estimator unchanged, so a consumer that pins
+0.1.2 and upgrades gets the memory behavior and nothing else to port. moonlake's
+upgrade is its own decision and its own gate; see the final-evidence table for how
+this version was verified and published.
 
 ## HLL consumer seam and conditional library work
 
@@ -164,7 +170,7 @@ Entry points: `sketches/hll.mbt`, `sketches/pkg.generated.mbti`,
   plus its header. Report memory in addition to serialized size; many small
   groups can still make dense HLL more expensive than an exact set, because
   every group pays the full dense state.
-- Adoption is complete, and the sparse state is in the tree unreleased: a sketch
+- Adoption is complete, and the sparse state ships in 0.1.3: a sketch
   holds either the dense array or a sorted array of live entries and promotes
   above `min(128, m / 8)` live registers, with the estimator, the merge law and
   the v1 bytes unchanged. The public `registers()` accessor still returns a

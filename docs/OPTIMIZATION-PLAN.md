@@ -153,6 +153,9 @@ The delivery decisions and conditional next stage are:
    still warrants it. Define promotion, merge combinations, allocation bounds
    and old-byte compatibility before coding. An exact-small-set state is a
    separate estimator/representation decision, not an incidental optimization.
+   The measurement arrived and did warrant it: moonlake's H0 refresh found the
+   per-group register array, not the sketch's CPU, dominating a grouped
+   aggregate, and the two-state sketch shipped in 0.1.3.
 
 A separate CPU experiment can price numeric hashing without per-value scratch
 buffers, typed batch updates, `UInt64::clz` instead of the manual leading-zero
@@ -165,7 +168,8 @@ moonlake work.
 all three targets retain the promised bytes and merge ownership. Record update,
 estimate, merge, serialized size and RSS separately, using few large groups,
 many small groups, duplicates and promotion-boundary cases if sparse state is
-selected. Refresh the consumer's measured crossover against exact state.
+selected. The consumer's crossover against exact state was refreshed by H0 and
+lives in its own record; the sparse state met that exit in 0.1.3.
 
 ## K4. Roaring query APIs
 

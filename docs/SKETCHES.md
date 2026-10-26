@@ -98,7 +98,7 @@ The sketch lives in its own package and exports:
 
 A sketch is cheap to hold only if the group is large; that is the whole reason the
 consumer entertained a sparse form. Measured with `harness/hll_state.py` against a
-control build of the dense-only 0.1.2, native release, peak RSS of an isolated
+control build of the previously published dense-only 0.1.2, native release, peak RSS of an isolated
 child that builds the sketches, fills each group with distinct `Int64` values and
 estimates every one (`--repeats 2`):
 
@@ -248,7 +248,7 @@ Four groups, all of which must pass before the sketch is called done.
 
 A sketch is cheap to hold only if the group is large; that is the whole reason the
 consumer entertained a sparse form. Measured with `harness/hll_state.py` against a
-control build of the dense-only 0.1.2, native release, peak RSS of an isolated
+control build of the previously published dense-only 0.1.2, native release, peak RSS of an isolated
 child that builds the sketches, fills each group with distinct `Int64` values and
 estimates every one (`--repeats 2`):
 

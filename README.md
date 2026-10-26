@@ -36,15 +36,23 @@ gates are recorded in [the sketch contracts](docs/SKETCHES.md). Release
 follow-through and conditional library work are planned in
 [the current next steps](docs/NEXT-STEPS.md).
 
-Version 0.1.2 adds the bitmap dispatch separation, PLAIN and dictionary
+Version 0.1.3 gives the HyperLogLog sketch a second, sparse state: a sketch
+holds the dense register array or a sorted array of its live entries, and
+promotes once it outgrows the sparse form. Nothing observable moves — the v1
+bytes, the hash, the rank rule, the estimator and the merge law are the same — and
+what changes is what a grouped aggregate keeps resident: 20000 groups of 10
+distinct values drop from 404.9 MB to 12.6 MB of peak RSS. The
+[changelog](CHANGELOG.md#013---2026-10-26) has the matrix and the promotion rule.
+
+Version 0.1.2 added the bitmap dispatch separation, PLAIN and dictionary
 optimizations, compact HLL state, bitmap query methods, t-digest compression
-work and reusable FSST models. The [changelog](CHANGELOG.md#012---2026-10-26)
-records the migration from 0.1.1.
+work and reusable FSST models, with a
+[migration note](CHANGELOG.md#012---2026-10-26) from 0.1.1.
 
 Integration with [moonlake](https://github.com/superbigcup325/moonlake) is
 merged on its `main`: Parquet decoding routed through colenc, a new write path,
 and the spill format re-encoded (40% smaller). The package is published as
-`superbigcup325/colenc@0.1.2` on mooncakes, so a consumer resolves it from the
+`superbigcup325/colenc@0.1.3` on mooncakes, so a consumer resolves it from the
 registry by version.
 
 ## Quick start
