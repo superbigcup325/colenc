@@ -156,16 +156,17 @@ current release is complete.
 
 ## Final reminder: update benchmarks
 
-**Pending, after the final code and dependency changes.** The exploratory K1
-probe is a separate kernel measurement; it does not replace the final scoreboard,
-sketch accuracy rigs or consumer acceptance.
+**colenc part done, moonlake part pending.** The scoreboard and the sketch and
+bitmap costs were recorded after the kernel tasks landed (see the final record
+below). The exploratory K1 probe is a separate kernel measurement; it does not
+replace the final scoreboard, sketch accuracy rigs or consumer acceptance.
 
-- colenc: run `python3 harness/scoreboard.py` to update `docs/scoreboard.md`;
+- colenc (done at `26fb9c0`): run `python3 harness/scoreboard.py` to update `docs/scoreboard.md`;
   retain native/wasm-gc medians, revision/toolchain/data identity and spread.
   Keep Roaring parse, id expansion and combined costs separate, with each
   throughput numerator named. Record HLL/t-digest update, merge, query, memory,
   serialized size and accuracy separately from encoding throughput.
-- moonlake: use `harness/bench_release.py` for the final release candidate,
+- moonlake (pending, needs a colenc release carrying these changes): use `harness/bench_release.py` for the final release candidate,
   compare against a same-session exact control and update
   `docs/bench-baseline.md`. New SQL or index paths need their own end-to-end
   correctness, memory, accuracy or build-amortization evidence.

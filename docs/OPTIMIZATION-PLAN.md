@@ -304,7 +304,9 @@ loads, this probe's `bytewalk` wrapper is no longer an unchanged control.
 
 ## Final reminder: update benchmarks
 
-After the selected implementations and dependency versions are final, regenerate
-the colenc scoreboard and add the affected sketch/bitmap costs. Re-record the
-moonlake end-to-end baseline with the actual registry dependency and same-session
-controls. Keep the exploratory record separate from those acceptance results.
+The colenc scoreboard was regenerated and the affected sketch and bitmap costs
+were recorded after K1 to K6 landed, in the
+[final record](NEXT-STEPS.md#final-benchmark-record). Re-recording the moonlake
+end-to-end baseline with the actual registry dependency and same-session
+controls is still pending and needs a colenc release carrying these changes.
+Keep the exploratory record separate from those acceptance results.
