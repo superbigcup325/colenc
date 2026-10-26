@@ -1311,6 +1311,25 @@ fn bench_dict(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
     }
     sink.val = sink.val + size
   })
+  // High-cardinality columns the default budget refuses: 500000 distinct
+  // Int32 values need 2 MB and 200000 distinct strings about 2.8 MB. Each case
+  // asserts the refusal first, so a swallowed error cannot read as a fast call.
+  let high_ints = @colenc_types.ColBuf::Int32s(Array::makei(count, fn(i) { i }))
+  let refused = dictionary_encode(high_ints) catch { _ => abort("raised") }
+  guard refused is None else { abort("expected the dictionary to be refused") }
+  record(b, label("dict", "int32-highcard-refuse", count * 4, count), fn() {
+    let got = dictionary_encode(high_ints) catch { _ => abort("raised") }
+    sink.val = sink.val + (if got is None { 1 } else { 0 })
+  })
+  let high_strings = @colenc_types.ColBuf::ByteArrays(
+    Array::makei(200000, fn(i) { @utf8.encode("label-\{i.to_string()}") }),
+  )
+  let refused = dictionary_encode(high_strings) catch { _ => abort("raised") }
+  guard refused is None else { abort("expected the dictionary to be refused") }
+  record(b, label("dict", "string-highcard-refuse", 200000 * 15, 200000), fn() {
+    let got = dictionary_encode(high_strings) catch { _ => abort("raised") }
+    sink.val = sink.val + (if got is None { 1 } else { 0 })
+  })
 }
 
 ///|
