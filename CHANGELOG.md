@@ -21,6 +21,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- t-digest compression sorts only the raw buffer and merges it with the already
+  ordered centroids instead of sorting every `(mean, weight)` tuple, and
+  computes each centroid's lower scale value once. The centroid list is the same
+  one the tuple sort produced, so serialized bytes, extremes and accuracy are
+  unchanged. Native release, medians of three: 1M updates 88.5 to 51.9 ms, merge
+  3.7 to 2.5 us.
 - HyperLogLog registers are held as bytes. A precision-14 sketch carries 16 KiB
   of register state instead of 64 KiB; the hash, rank rule, estimator and the v1
   serialized bytes are unchanged. `HllSketch::registers()` keeps its type but

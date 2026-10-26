@@ -91,15 +91,15 @@ fn tdigest_compress_centroids(
   let mut index = 0
   while index < means.length() {
     let q_low = before / total
+    // The lower scale value is the same for every candidate of this centroid.
+    let scale_low = tdigest_scale(compression, q_low)
     let mut weight = 0.0
     let mut weighted = 0.0
     let mut next = index
     while next < means.length() {
       let candidate = weight + weights[next]
       let q_high = (before + candidate) / total
-      if next > index &&
-        tdigest_scale(compression, q_high) - tdigest_scale(compression, q_low) >
-        1.0 {
+      if next > index && tdigest_scale(compression, q_high) - scale_low > 1.0 {
         break
       }
       weight = candidate
@@ -128,6 +128,57 @@ fn tdigest_pairs(digest : TDigest) -> Array[(Double, Double)] {
   }
   pairs.sort()
   pairs
+}
+
+///|
+/// The same sorted `(mean, weight)` list as `tdigest_pairs`, already split into
+/// arrays, without sorting tuples. The centroids are kept in order by every
+/// pass, so only the raw buffer needs sorting, as plain doubles, followed by one
+/// merge. A tie on `(mean, weight)` takes the centroid first, which is where the
+/// stable tuple sort puts it. When the centroids are not in `(mean, weight)`
+/// order (a state read from bytes need not be) the tuple sort is the answer.
+fn tdigest_sorted_parts(digest : TDigest) -> (Array[Double], Array[Double]) {
+  let count = digest.means.length()
+  let mut ordered = true
+  for index in 1..<count {
+    let before = digest.means[index - 1]
+    let mean = digest.means[index]
+    let same_mean = before == mean &&
+      digest.weights[index - 1] <= digest.weights[index]
+    if !(before < mean || same_mean) {
+      ordered = false
+      break
+    }
+  }
+  if !ordered {
+    return tdigest_split(tdigest_pairs(digest))
+  }
+  let raw = digest.buffer.copy()
+  raw.sort()
+  let means : Array[Double] = Array(capacity=count + raw.length())
+  let weights : Array[Double] = Array(capacity=count + raw.length())
+  let mut left = 0
+  let mut right = 0
+  while left < count || right < raw.length() {
+    let take_centroid = if right >= raw.length() {
+      true
+    } else if left >= count {
+      false
+    } else {
+      digest.means[left] < raw[right] ||
+      (digest.means[left] == raw[right] && digest.weights[left] <= 1.0)
+    }
+    if take_centroid {
+      means.push(digest.means[left])
+      weights.push(digest.weights[left])
+      left += 1
+    } else {
+      means.push(raw[right])
+      weights.push(1.0)
+      right += 1
+    }
+  }
+  (means, weights)
 }
 
 ///|
@@ -271,7 +322,7 @@ pub fn TDigest::compress(self : TDigest) -> Unit {
   if self.buffer.length() == 0 {
     return
   }
-  let (means, weights) = tdigest_split(tdigest_pairs(self))
+  let (means, weights) = tdigest_sorted_parts(self)
   let (folded_means, folded_weights) = tdigest_compress_centroids(
     self.compression,
     means,
@@ -300,29 +351,33 @@ pub fn TDigest::merge(
   // Both operands are read through `tdigest_pairs`, which folds a raw buffer into
   // a temporary list: neither digest is compressed in place, so a caller's sketch
   // answers the same before and after the merge.
-  let left_pairs = tdigest_pairs(self)
-  let right_pairs = tdigest_pairs(other)
-  let merged_pairs : Array[(Double, Double)] = []
+  let (left_means, left_weights) = tdigest_sorted_parts(self)
+  let (right_means, right_weights) = tdigest_sorted_parts(other)
+  let means : Array[Double] = []
+  let weights : Array[Double] = []
   let mut left = 0
   let mut right = 0
-  while left < left_pairs.length() && right < right_pairs.length() {
-    if left_pairs[left].0 <= right_pairs[right].0 {
-      merged_pairs.push(left_pairs[left])
+  while left < left_means.length() && right < right_means.length() {
+    if left_means[left] <= right_means[right] {
+      means.push(left_means[left])
+      weights.push(left_weights[left])
       left += 1
     } else {
-      merged_pairs.push(right_pairs[right])
+      means.push(right_means[right])
+      weights.push(right_weights[right])
       right += 1
     }
   }
-  while left < left_pairs.length() {
-    merged_pairs.push(left_pairs[left])
+  while left < left_means.length() {
+    means.push(left_means[left])
+    weights.push(left_weights[left])
     left += 1
   }
-  while right < right_pairs.length() {
-    merged_pairs.push(right_pairs[right])
+  while right < right_means.length() {
+    means.push(right_means[right])
+    weights.push(right_weights[right])
     right += 1
   }
-  let (means, weights) = tdigest_split(merged_pairs)
   let total = self.total + other.total
   let (folded_means, folded_weights) = tdigest_compress_centroids(
     self.compression,

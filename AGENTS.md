@@ -451,6 +451,22 @@ tracked documents ship in the release archive.
   walk is faster than `to_array` on dense containers (bitmap 486 -> 282 us, run
   438 -> 181 us, mixed 17.7 -> 10.4 us) but 14% slower on the sparse 1M-id array
   case (907 -> 1035 us), because each batch re-locates its key by binary search
+- **The compression pass sorted tuples that were already in order** → every
+  `compress` and `merge` built a list of `(mean, weight)` tuples from the
+  centroids and the raw buffer and sorted all of it, although the centroids come
+  out of each pass already ordered and only the buffer is raw. `tdigest_sorted_parts`
+  sorts the buffer as plain doubles and merges it with the centroids into the
+  split arrays directly (a tie takes the centroid first, which is where the
+  stable tuple sort put it); centroids that are not in `(mean, weight)` order,
+  as a state read from bytes need not be, fall back to the tuple sort. The
+  lower scale value of a centroid is also computed once instead of once per
+  candidate. The result is the same list, checked against the tuple sort at
+  every stage of a tied stream in `tdigest_wbtest.mbt`, so serialized bytes,
+  extremes and the `check_tdigest.py` ceilings are unchanged (worst interior
+  0.5%, tail 0.2%). Native release, medians of three rounds: 1M updates 88.5 ->
+  51.9 ms (-41%), 20k updates 1750 -> 1015 us, merge of two 1M-value digests 3.7
+  -> 2.5 us; quantile queries (2.3 us per 99), `to_bytes` and `from_bytes` do not
+  move, as the pass is not on their path
 
 ## Command reference
 
