@@ -1,6 +1,6 @@
 # Next steps after 0.1.1
 
-Planning snapshot: 2026-10-25 (Asia/Shanghai), source revision `c04d7e1`.
+Planning snapshot: 2026-10-26 (Asia/Shanghai), source revision `090548c`.
 The next work is consumer adoption and measured follow-through. Roaring, HLL
 and t-digest are implemented and released; the former A-through-E development
 sequence is complete for the library packages and bitmap rewrites, while its
@@ -12,11 +12,24 @@ acceptance definitions.
 
 | Project | Observed state | Planning implication |
 |---|---|---|
-| colenc | [0.1.1 is published](https://github.com/superbigcup325/colenc/releases/tag/v0.1.1), local and remote `main` are `c04d7e1`, and [CI passed on that revision](https://github.com/superbigcup325/colenc/actions/runs/40205435645) | Retain the released E0-E8 and sketch contracts. Do not schedule their implementation again |
+| colenc | [0.1.1 is published](https://github.com/superbigcup325/colenc/releases/tag/v0.1.1); remote `main` is `c04d7e1`, where [CI passed](https://github.com/superbigcup325/colenc/actions/runs/40205435645), and local `main` is a documentation commit ahead | Retain the released E0-E8 and sketch contracts. Do not schedule their implementation again |
 | Release artifact | Built from `504092a`; the tagged tree adds documentation and sketch coverage to the archive consumer, with identical library code. The release records three-target registry-consumer acceptance | Distinguish the registry artifact from its later documentation. Its older README wording does not mean HLL/t-digest are absent |
-| moonlake | Local `ae6a28c`, unreleased 0.6.0, still imports colenc 0.1.0; the live latest release is 0.5.0. No sibling workspace override was present | The original P5 page/writer/spill integration is complete, while adoption of 0.1.1 and SQL sketches/bitmap indexes are separate work |
+| moonlake | Local `bc1a8f5`+ accepts colenc 0.1.1 (`24d983b`), adds `approx_count_distinct` and `approx_quantile` on the sketch API, and passed its own acceptance again; 0.6.0 is unreleased and the live latest release is 0.5.0. No sibling workspace override | Adoption and the HLL/t-digest SQL seams are done on the consumer side. A Roaring engine workload (I0) is still an investigation, and the bitmap now carries a measured consumer cost (see K0 below) |
 | Consumer acceptance | moonlake's full local pass is on `3ab2634`; its later Parquet reader fix has targeted evidence. Remote `main` remains `750b98c`, whose latest nightly failed on the locally fixed corpus case | Refresh the final consumer candidate. colenc's green CI and small registry probe do not certify an engine revision |
-| Measurements | `docs/scoreboard.md` names `0cb57e9`. The release also records later bitmap A/B measurements | Keep each measurement attached to its revision. No benchmark was rerun for this plan |
+| Measurements | `docs/scoreboard.md` was regenerated on 2026-10-26 at `090548c`. The host measured about 14% below the 2026-10-25 record on identical code (re-running `0cb57e9` today: 1941 MB/s against the recorded 2247.2 for `int64-monotonic`/PLAIN), so the new table sits lower across the board | Compare rows within one table, never across records taken in a different power state. On that same row the 0.1.1 code itself is −1.8% (1907 MB/s) |
+
+**K0 has a measurable case now.** moonlake recorded its 0.6.0 candidate beside
+same-session controls and found wide CSV scans about 10% slower than before the
+upgrade (7–14% by run), where the CSV path never touches colenc. Its bisect puts the cost on
+the dependency artifact (a commit that only changes the manifest is 9.4%
+slower), and a local copy of 0.1.1 with `encoders/roaring.mbt` removed and its
+facade arms refusing is back at the control's speed. The hypothesis to test: the
+1,137 lines of bitmap code linked into `encoders`, the package every Parquet
+consumer imports, move hot loops enough to cost real throughput. The candidate
+change is to give the bitmap its own package and then re-measure the consumer
+workload the way that project measured it (a rotating interleaved A/B, not one
+run). Until that is tried, keeping the bitmap in `encoders` is a hypothesis
+about throughput, not a fact.
 
 This planning pass inspected source, generated APIs, existing verification
 records and live release/CI metadata. It did not rerun library or engine tests,
@@ -34,7 +47,7 @@ That public branch may lag the local planning revision until it is pushed.
 | A0/A1 | moonlake records SQL and state-cost decisions, then adds explicit HLL aggregation; colenc documents the typed-byte seam and supports defects exposed by that use | SQL NULL/type/value equivalence is specified before updates are hashed. Compare canonical inputs exactly and estimates statistically; measure state per group. Keep the existing exact distinct aggregate exact |
 | A2 | moonlake adds explicit approximate quantiles after HLL; colenc retains the t-digest contract and rig | Exact sorted inputs judge empirical rank error. Input conversion, non-finite values, empty input, q validation and merge/order sensitivity have explicit behavior. Keep exact median available |
 | I0 | moonlake investigates one immutable-table Roaring workload; colenc changes APIs only for a demonstrated need | Result equality and query/build/load/memory/size evidence include selective and unselective cases. A useful negative result completes the investigation; automatic or persistent indexes require further engine contracts |
-| K0 | colenc evaluates improvements exposed by actual consumer costs | Record the workload and unchanged or revised contract before implementation. Require correctness/statistical gates and reproducible cost evidence; do not add a new sketch family to fill the queue |
+| K0 | colenc evaluates improvements exposed by actual consumer costs; the first case is the bitmap link cost described below | Record the workload and unchanged or revised contract before implementation. Require correctness/statistical gates and reproducible cost evidence; do not add a new sketch family to fill the queue |
 
 The engine packages are proposals rather than already shipped SQL functions.
 They do not require another colenc release merely to use the current APIs. No
