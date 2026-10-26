@@ -132,7 +132,9 @@ of payload. The current state uses `FixedArray[Byte]`, or 16 KiB, with the same
 precision, hash, rank rule, estimator and v1 bytes. In the library's native
 grouped control, peak RSS fell from 96.7 to 25.0 MB for 1000 groups of 1000
 values and from 428 to 109 MB for 5000 groups of 10. These are dense-state
-results; the consumer's exact-state crossover still needs re-measurement.
+results. The consumer measured the crossover those numbers were extrapolated
+from: at 1,000 groups the dense sketch crosses the exact set near 200 distinct
+values per group, and those figures are in its own record.
 
 The delivery decisions and conditional next stage are:
 

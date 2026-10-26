@@ -47,9 +47,11 @@ consumer adoption and measurement-driven follow-through.
   This was a **dense-only v1** first, on the argument that sparse state doubles the
   state machine for a benefit nobody had measured. The consumer then measured it
   (`H0` in [next steps](NEXT-STEPS.md)): one sketch per group at 16 KiB of
-  registers, 405 MB of peak RSS for a grouped `approx_count_distinct` over 20,000
-  ten-value groups. The cost column below is why the decision changed, and the
-  scope it replaces stays recorded here rather than silently edited away.
+  registers, about 400 MB of peak RSS for a grouped `approx_count_distinct` over
+  20,000 ten-value groups against about 20 MB for the exact count. The cost column
+  below is why the decision changed, and the scope it replaces stays recorded here
+  rather than silently edited away; the consumer's matrix is in its own
+  `docs/sketches.md` and verification §43, which is where those rows are measured.
 - The estimator is the classical HyperLogLog one with the small-range (linear
   counting) and large-range corrections. **No empirically fitted bias tables**:
   those are calibrated against a training corpus, and colenc cannot honestly
