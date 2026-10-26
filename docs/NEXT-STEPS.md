@@ -165,20 +165,25 @@ current release is complete.
 
 ## Final reminder: update benchmarks
 
-**colenc part done, moonlake part pending.** The scoreboard and the sketch and
-bitmap costs were recorded after the kernel tasks landed (see the final record
-below). The exploratory K1 probe is a separate kernel measurement; it does not
-replace the final scoreboard, sketch accuracy rigs or consumer acceptance.
+**Both parts are done.** The scoreboard and the sketch and bitmap costs were
+recorded after the kernel tasks landed (see the final record below), and the
+consumer's baseline was re-recorded against the published dependency. The
+exploratory K1 probe is a separate kernel measurement; it does not replace the
+final scoreboard, sketch accuracy rigs or consumer acceptance.
 
 - colenc (done at `26fb9c0`): run `python3 harness/scoreboard.py` to update `docs/scoreboard.md`;
   retain native/wasm-gc medians, revision/toolchain/data identity and spread.
   Keep Roaring parse, id expansion and combined costs separate, with each
   throughput numerator named. Record HLL/t-digest update, merge, query, memory,
   serialized size and accuracy separately from encoding throughput.
-- moonlake (pending, needs a colenc release carrying these changes): use `harness/bench_release.py` for the final release candidate,
-  compare against a same-session exact control and update
-  `docs/bench-baseline.md`. New SQL or index paths need their own end-to-end
-  correctness, memory, accuracy or build-amortization evidence.
+- moonlake (done at `4de8077`): `harness/bench_release.py` measured the
+  published dependency against a 0.1.1 control built in its own worktree, three
+  alternating pairs on a quiet host, with the oracles green and identical output
+  hashes. The pair is in that project's `docs/bench-baseline.md`; the wide CSV
+  cases came out 6-11% faster in every round, and the two Parquet cases are
+  reported as unresolved rather than resolved in either direction. New SQL or
+  index paths still need their own end-to-end correctness, memory, accuracy or
+  build-amortization evidence.
 
 **Reminder to the maintainer: update both projects' benchmarks last.**
 

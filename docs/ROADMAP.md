@@ -142,6 +142,7 @@ The kernel work in the [implementation record](OPTIMIZATION-PLAN.md) is done and
 `docs/scoreboard.md` was regenerated after it, with the sketch and bitmap query
 costs recorded in the [final record](NEXT-STEPS.md#final-benchmark-record).
 Updating moonlake's end-to-end baseline against the actual registry dependency
-remains a consumer step and is still pending. The separate
+is done: that project recorded the pair at `4de8077`, and the wide CSV cases came
+out 6-11% faster than the 0.1.1 control in every round. The separate
 [PLAIN probe](OPTIMIZATION-PLAN.md#exploratory-plain-record) measured a kernel
 candidate, not a release or consumer acceptance result.

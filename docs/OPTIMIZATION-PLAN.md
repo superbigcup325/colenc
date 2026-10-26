@@ -329,7 +329,9 @@ loads, this probe's `bytewalk` wrapper is no longer an unchanged control.
 
 The colenc scoreboard was regenerated and the affected sketch and bitmap costs
 were recorded after K1 to K6 landed, in the
-[final record](NEXT-STEPS.md#final-benchmark-record). Re-recording the moonlake
-end-to-end baseline with the actual registry dependency and same-session
-controls is still pending and needs a colenc release carrying these changes.
-Keep the exploratory record separate from those acceptance results.
+[final record](NEXT-STEPS.md#final-benchmark-record). The moonlake end-to-end
+baseline is recorded as well: that project re-ran `harness/bench_release.py` on
+the registry dependency against a 0.1.1 control at `4de8077`, three alternating
+pairs on a quiet host, and the wide CSV cases came out 6-11% in 0.1.2's favour
+with the two Parquet cases unresolved. Keep the exploratory record separate from
+those acceptance results.
