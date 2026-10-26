@@ -171,3 +171,36 @@ sketch accuracy rigs or consumer acceptance.
   correctness, memory, accuracy or build-amortization evidence.
 
 **Reminder to the maintainer: update both projects' benchmarks last.**
+
+## Final benchmark record
+
+Recorded on library revision `26fb9c0` after the kernel tasks in the
+[optimization handoff](OPTIMIZATION-PLAN.md) landed (K1 to K6; K0 was already in
+place). The host was quiet (load average 0.3 to 0.7). `docs/scoreboard.md` was
+regenerated at that revision; its worst round-to-round encode swing was 14% on
+native and 23% on wasm-gc, so compare rows within that table only. The numbers
+below are native release medians of three rounds from `harness/perf`, not
+consumer results. The sketch and bitmap costs are kept apart from encoding
+throughput.
+
+| Area | Case | Median |
+|---|---|---|
+| HLL (p14) | update, one group of 1M Int64 | 18.4 ms |
+| HLL | update, 1000 groups of 1000 | 36.0 ms |
+| HLL | estimate / merge | 113 us / 52.8 us |
+| HLL | `to_bytes` / `from_bytes` (16 KiB + header) | 5.9 us / 7.4 us |
+| HLL | peak RSS, 1000 groups of 1000 / 5000 groups of 10 | 25.0 MB / 109 MB |
+| t-digest (k100) | update, 1M values / 20k values | 51.9 ms / 1.02 ms |
+| t-digest | merge of two 1M-value digests | 2.5 us |
+| t-digest | 99 scalar quantile queries | 2.3 us |
+| t-digest | `to_bytes` / `from_bytes` | 0.5 us / 1.2 us |
+| Roaring | intersection count, array partial overlap / bitmap partial overlap | 37 us / 3.45 us |
+| Roaring | intersection count, run containers | 0.02 us |
+| Roaring | first 4096 ids of a 1M-id bitmap, batched / `to_array` of all | 4.3 us / 907 us |
+| Roaring | full batched walk vs `to_array`, dense bitmap / sparse 1M-id array | 282 us vs 486 us / 1035 us vs 907 us |
+| FSST | encode, 100 low-cardinality values, fresh training / reused model | 39.5 us / 2.8 us |
+| PLAIN decode, 500k values | Int64 / Int32 | 236 us / 152 us |
+
+Not recorded here: moonlake's end-to-end baseline. It needs the consumer's own
+`harness/bench_release.py` run against the registry dependency and a
+same-session control, and no colenc release carrying these changes exists yet.

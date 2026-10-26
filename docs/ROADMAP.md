@@ -138,9 +138,10 @@ Phase two, in progress:
 
 ## Final reminder: update benchmarks
 
-After the final kernel and consumer changes, regenerate `docs/scoreboard.md`,
-record sketch and bitmap query costs, and update moonlake's end-to-end baseline.
-These final updates are pending. The separate
-[PLAIN probe](OPTIMIZATION-PLAN.md#exploratory-plain-record) measures a kernel
-candidate, not a release or consumer acceptance result. See the
-[final checklist](NEXT-STEPS.md#final-reminder-update-benchmarks).
+The kernel work in the [optimization handoff](OPTIMIZATION-PLAN.md) is done and
+`docs/scoreboard.md` was regenerated after it, with the sketch and bitmap query
+costs recorded in the [final record](NEXT-STEPS.md#final-benchmark-record).
+Updating moonlake's end-to-end baseline against the actual registry dependency
+remains a consumer step and is still pending. The separate
+[PLAIN probe](OPTIMIZATION-PLAN.md#exploratory-plain-record) measured a kernel
+candidate, not a release or consumer acceptance result.
