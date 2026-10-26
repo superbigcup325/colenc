@@ -8,6 +8,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `FsstModel`, `FsstModel::train` and `encode_fsst_with` separate training the
+  FSST symbol table from encoding with it, so one table can encode many batches.
+  `encode_fsst` output is unchanged: it trains a model on its own batch and
+  encodes with it. The frame is the same and every batch still carries its table,
+  so `decode_fsst` and old frames are unaffected. Training is most of a small
+  batch's cost (36.6 of 39.5 us at 100 low-cardinality values, native release);
+  encoding a held-out batch with a reused model took 28.5 ns per value there
+  against 395 ns, with the same bytes. Across the measured shapes and sizes a
+  reused model encoded 2.7 to 41 times faster per value, while the compressed
+  size of a held-out batch ranged from 14% smaller to 7.0% larger depending on
+  how well the training batch matched it.
 - `RoaringBitmap::intersection_cardinality`, `RoaringBitmap::intersects` and
   `RoaringBitmap::ids_after`. The first two answer how many ids two bitmaps share
   and whether they share any without building the intersection, and `intersects`

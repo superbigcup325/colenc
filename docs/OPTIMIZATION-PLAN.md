@@ -234,6 +234,22 @@ readability on all three targets. FSST remains a colenc-owned format, with no
 claim of Parquet-native or upstream byte compatibility. Selected-value decoding
 can follow if a consumer can use it; stop if reuse does not pay.
 
+*Outcome of the first delivery:* training dominates small batches, so reuse pays.
+On native release, 100 low-cardinality values cost 39.5 us with fresh training,
+of which training is 36.6 us and matching 2.8 us. Held-out batches encoded 2.7 to
+41 times faster per value with a reused model across low-cardinality,
+prefix-heavy and high-cardinality text at 100 to 20000 values (the smallest gain
+is high-cardinality text at 20000 values, 2125 to 791 ns per value; the largest
+is prefix-heavy text at 1000 values, 1515 to 36 ns). The frame is unchanged and
+every batch still carries its table (648 to 1842 bytes here), so `decode_fsst`
+and old frames are unaffected and nothing needed a new version. Compressed size
+on a held-out batch is data dependent: the reused model was 0.7% to 7.0% larger
+at 100 to 1000 prefix-heavy or high-cardinality values, equal on low-cardinality
+and 20000 high-cardinality values, and 14% smaller at 20000 prefix-heavy values.
+An export/import format for the table, a table shared across frames and
+selected-value decoding were not built: they need a consumer that keeps a model
+between batches, and the model's lifetime and drift policy belong to that caller.
+
 ## Exploratory PLAIN record
 
 The [self-contained record](plain64-probe-2026-10-26.json) preserves the exact
