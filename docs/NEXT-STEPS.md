@@ -20,16 +20,21 @@ acceptance definitions.
 
 **K0 has a measurable case now.** moonlake recorded its 0.6.0 candidate beside
 same-session controls and found wide CSV scans about 10% slower than before the
-upgrade (7–14% by run), where the CSV path never touches colenc. Its bisect puts the cost on
-the dependency artifact (a commit that only changes the manifest is 9.4%
-slower), and a local copy of 0.1.1 with `encoders/roaring.mbt` removed and its
-facade arms refusing is back at the control's speed. The hypothesis to test: the
-1,137 lines of bitmap code linked into `encoders`, the package every Parquet
-consumer imports, move hot loops enough to cost real throughput. The candidate
-change is to give the bitmap its own package and then re-measure the consumer
-workload the way that project measured it (a rotating interleaved A/B, not one
-run). Until that is tried, keeping the bitmap in `encoders` is a hypothesis
-about throughput, not a fact.
+upgrade (7–14% by run), where the CSV path never touches colenc. Its bisect puts
+the cost on the dependency artifact (a commit that only changes the manifest is
+9.4% slower), and two local probes say what carries it: one deletes
+`encoders/roaring.mbt` and refuses the facade arms, the other keeps the file and
+only refuses the arms; both build the same 1,632,744-byte consumer binary and
+both return to the control's speed. So the cost is reachability from the generic
+`encode_column` / `decode_column` dispatch that the consumer's spill format
+calls, not the bitmap's package. Moving the file would not have helped; taking
+the `Roaring` arms out of that dispatch into dedicated functions should, and the
+consumer workload is already measurable the way this needs (a rotating
+interleaved A/B, not one run). That change is implemented and measured: the downstream
+consumer built against it is at control speed (157.9 ms against 163.0 ms median
+for the scan, i.e. parity within the run spread) and 8,248 bytes smaller, so the
+remaining step is a release decision plus the consumer's re-record, not another
+experiment.
 
 This planning pass inspected source, generated APIs, existing verification
 records and live release/CI metadata. It did not rerun library or engine tests,

@@ -66,7 +66,7 @@ E0–E6 follow the Parquet spec; **choice bits align with the reference implemen
 
 E7 FSST is not a native Parquet encoding, so its criteria are downgraded (§4)
 
-E8 is the first phase-two family: a bitmap index rather than a page encoding. It keeps the byte layer by aligning to CRoaring through pyroaring — container shape (array while a container holds 4096 ids, bitmap above), the run-optimisation rule (a run form only when strictly smaller) and the offset-table rule. It has no container-interop layer, because a bitmap index is not a Parquet page encoding
+E8 is the first phase-two family: a bitmap index rather than a page encoding. It keeps the byte layer by aligning to CRoaring through pyroaring — container shape (array while a container holds 4096 ids, bitmap above), the run-optimisation rule (a run form only when strictly smaller) and the offset-table rule. It has no container-interop layer, because a bitmap index is not a Parquet page encoding, and no slot in the generic `encode_column` / `decode_column` dispatch: its own `encode_roaring_column` / `decode_roaring_column` entry points keep the bitmap out of the call graph of a consumer that only decodes page families
 
 ## 3. Stage plan
 

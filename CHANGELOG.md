@@ -6,6 +6,24 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The set encoding left the generic dispatch. `encode_column` and
+  `decode_column` now refuse `Encoding::Roaring` with `Unsupported` instead of
+  routing to the bitmap; `encode_roaring_column` and `decode_roaring_column`
+  carry that path, with the same payload, the same errors and the same
+  cardinality check. Keeping the bitmap out of the shared entry points costs one
+  branch and buys the call graph: a consumer that only ever passes PLAIN, RLE,
+  DELTA, the length family, dictionary, BSS or FSST no longer links the 1,137
+  lines behind Roaring, so dead-code elimination can drop them. Measured
+  downstream, where a spill format calls `encode_column` / `decode_column` for
+  page families: wide CSV scans returned from about 10% slower than before the
+  bitmap existed to parity (rotating interleaved A/B, ten pairs a side) and the
+  consumer binary shrank by 8,248 bytes. Migration: replace
+  `encode_column(column, Roaring, out)` with `encode_roaring_column(column, out)`
+  and `decode_column(data, Int32, Roaring, count)` with
+  `decode_roaring_column(data, Int32, count)`
+
 ## [0.1.1] - 2026-10-25
 
 ### Added

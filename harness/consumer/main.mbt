@@ -173,17 +173,12 @@ fn roaring(values : Array[Int32]) -> Unit raise {
     "roaring round trip",
   )
   let encoded = Buffer()
-  let _ = @colenc.encode_column(
-    @types.ColBuf::Int32s(values),
-    @types.Roaring,
-    encoded,
-  )
+  let _ = @colenc.encode_roaring_column(@types.ColBuf::Int32s(values), encoded)
   ensure(
     same(
-      @colenc.decode_column(
+      @colenc.decode_roaring_column(
         encoded.to_bytes(),
         @types.Int32,
-        @types.Roaring,
         sorted.length(),
       ),
       @types.ColBuf::Int32s(sorted),
@@ -238,6 +233,35 @@ fn sketches() -> Unit raise {
   println(
     "sketches|\{hll.estimate()}|\{hll_back.precision()}|\{median}|\{digest_back.compression()}",
   )
+}
+
+///|
+
+///|
+fn roaring_is_outside_the_dispatch() -> Unit {
+  // The separation is part of the contract: the generic entry points refuse the
+  // set encoding so that consumers of a page family do not link the bitmap.
+  let out = Buffer()
+  let refused = try {
+    let _ = @colenc.encode_column(
+      @types.ColBuf::Int32s([1, 2, 3]),
+      @types.Roaring,
+      out,
+    )
+    false
+  } catch {
+    @types.EncodingError::Unsupported(@types.Roaring) => true
+    _ => false
+  }
+  ensure(refused, "encode_column must refuse Roaring")
+  let refused = try {
+    let _ = @colenc.decode_column(b"\x00"[:], @types.Int32, @types.Roaring, 0)
+    false
+  } catch {
+    @types.EncodingError::Unsupported(@types.Roaring) => true
+    _ => false
+  }
+  ensure(refused, "decode_column must refuse Roaring")
 }
 
 ///|
@@ -315,6 +339,7 @@ fn main raise {
   fsst(strings)
   dictionary([7, 7, 9, 7, 11, 9, 7, 11, 11])
   roaring([1, 5, 9, 13, 65536, 65537, 131072])
+  roaring_is_outside_the_dispatch()
   sketches()
   names()
   errors()

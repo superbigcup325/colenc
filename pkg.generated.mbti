@@ -11,9 +11,13 @@ pub fn decode_column(BytesView, @types.PhysicalType, @types.Encoding, Int32) -> 
 
 pub fn decode_dictionary(BytesView, BytesView, @types.PhysicalType, Int32, Int32) -> @types.ColBuf raise @types.EncodingError
 
+pub fn decode_roaring_column(BytesView, @types.PhysicalType, Int32) -> @types.ColBuf raise @types.EncodingError
+
 pub fn encode_column(@types.ColBuf, @types.Encoding, @buffer.Buffer) -> @types.EncodingStats raise @types.EncodingError
 
 pub fn encode_dictionary(@types.ColBuf, max_dictionary_bytes? : Int32) -> @types.DictionaryEncoding? raise @types.EncodingError
+
+pub fn encode_roaring_column(@types.ColBuf, @buffer.Buffer) -> @types.EncodingStats raise @types.EncodingError
 
 // Errors
 

@@ -322,8 +322,10 @@ resolution instead of silently testing the checkout.
 The consumer walks the published surface on native, wasm-gc and JS: PLAIN int32,
 DELTA over a monotonic INT64 column, boolean RLE, BYTE_STREAM_SPLIT doubles, the
 two byte-array delta families, FSST, dictionary (three entries, two-bit indices),
-the Roaring set operations through both `RoaringBitmap` and the facade, the
-`Encoding` / `PhysicalType` names, and the two typed error paths. It checks its
+the Roaring set operations through `RoaringBitmap`, the facade's dedicated
+`encode_roaring_column` / `decode_roaring_column`, the generic dispatch refusing
+the set encoding, the `Encoding` / `PhysicalType` names, and the two typed error
+paths. It checks its
 own round trips and aborts on mismatch; the script asserts the facts it prints.
 Sizes the format fixes are compared exactly (PLAIN int32, byte-stream-split);
 sizes a future encoder may legitimately change are compared as relations against

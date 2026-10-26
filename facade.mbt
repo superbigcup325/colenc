@@ -77,16 +77,33 @@ pub fn encode_column(
         _ =>
           raise @types.EncodingError::TypeMismatch(column.physical_type(), Fsst)
       }
-    Roaring =>
-      match column {
-        Int32s(values) => @encoders.encode_roaring(values, out)
-        _ =>
-          raise @types.EncodingError::TypeMismatch(
-            column.physical_type(),
-            Roaring,
-          )
-      }
+    // The bitmap is deliberately outside this dispatch. It is a set encoding
+    // rather than a page encoding, and keeping it here would make every
+    // consumer that passes `Plain` link its 1,137 lines: refusing it costs one
+    // error variant and lets dead-code elimination drop the bitmap. Call
+    // `encode_roaring_column` when you want it.
+    Roaring => raise @types.EncodingError::Unsupported(Roaring)
     other => raise @types.EncodingError::Unsupported(other)
+  }
+  { value_count: column.value_count(), encoded_bytes: out.length() - start, }
+}
+
+///|
+/// Encode non-negative INT32 ids as a Roaring bitmap, appending to `out`.
+///
+/// This is the set encoding, not a page encoding, so it has its own entry
+/// point instead of a `Roaring` case inside `encode_column`. The separation is
+/// load-bearing: a consumer of `encode_column` that only ever passes a page
+/// family never links this.
+pub fn encode_roaring_column(
+  column : @types.ColBuf,
+  out : @buffer.Buffer,
+) -> @types.EncodingStats raise @types.EncodingError {
+  let start = out.length()
+  match column {
+    Int32s(values) => @encoders.encode_roaring(values, out)
+    _ =>
+      raise @types.EncodingError::TypeMismatch(column.physical_type(), Roaring)
   }
   { value_count: column.value_count(), encoded_bytes: out.length() - start, }
 }
@@ -158,20 +175,31 @@ pub fn decode_column(
           @types.ColBuf::ByteArrays(@encoders.decode_fsst(data, count).0)
         _ => raise @types.EncodingError::TypeMismatch(ty, Fsst)
       }
-    Roaring =>
-      // A bitmap is a set, so it carries its own cardinality: a `count` that
-      // disagrees with the stream is a caller error, not a short read.
-      match ty {
-        Int32 => {
-          let values = @encoders.decode_roaring(data)
-          if count >= 0 && count != values.length() {
-            raise @types.EncodingError::Incomplete(values.length(), count)
-          }
-          @types.ColBuf::Int32s(values)
-        }
-        _ => raise @types.EncodingError::TypeMismatch(ty, Roaring)
-      }
+    // See the note in `encode_column`: the bitmap stays out of the generic
+    // dispatch so that consumers which never request it do not link it.
+    Roaring => raise @types.EncodingError::Unsupported(Roaring)
     other => raise @types.EncodingError::Unsupported(other)
+  }
+}
+
+///|
+/// Decode a Roaring bitmap into its ids. `count` is the expected cardinality;
+/// a disagreement is a caller error, not a short read, because a set carries
+/// its own size.
+pub fn decode_roaring_column(
+  data : BytesView,
+  ty : @types.PhysicalType,
+  count : Int32,
+) -> @types.ColBuf raise @types.EncodingError {
+  match ty {
+    Int32 => {
+      let values = @encoders.decode_roaring(data)
+      if count >= 0 && count != values.length() {
+        raise @types.EncodingError::Incomplete(values.length(), count)
+      }
+      @types.ColBuf::Int32s(values)
+    }
+    _ => raise @types.EncodingError::TypeMismatch(ty, Roaring)
   }
 }
 

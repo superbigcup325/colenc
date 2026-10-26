@@ -97,8 +97,11 @@ let bytes = left.to_bytes()               // portable Roaring
 let back = @colenc_encoders.RoaringBitmap::from_bytes(bytes)
 ```
 
-`encode_column` / `decode_column` reach it through `Encoding::Roaring` for the
-column-shaped path; `run_optimize` turns few-run containers into runs first.
+`encode_roaring_column` / `decode_roaring_column` are the column-shaped path.
+They are deliberately not cases inside `encode_column` / `decode_column`: those
+entry points refuse `Encoding::Roaring`, so a consumer that only ever passes a
+page family never links the bitmap. `run_optimize` turns few-run containers into
+runs first.
 
 ## Encodings
 
