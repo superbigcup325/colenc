@@ -12,13 +12,21 @@ pub fn read_u32_le(data : BytesView, offset : Int32) -> Int32 {
 }
 
 ///|
-/// Read a 64-bit little-endian bit pattern. Callers check the bounds first.
-fn read_u64_le(data : BytesView, offset : Int32) -> UInt64 {
-  let mut value = 0UL
-  for index in 0..<8 {
-    value = value | (data[offset + index].to_int().to_uint64() << (index * 8))
+/// Validate that `count` eight-byte values fit in `data`, without letting
+/// `count * 8` wrap. When the product does not fit in an `Int32` the reported
+/// requirement saturates at `Int32::max_value`; the check itself compares
+/// against `data.length() / 8`, so no multiplication happens before it.
+fn check_wide_values(
+  data : BytesView,
+  count : Int32,
+) -> Unit raise @types.EncodingError {
+  if count < 0 {
+    raise @types.EncodingError::InvalidCount(count)
   }
-  value
+  if count > data.length() / 8 {
+    let need = if count > 268435455 { 2147483647 } else { count * 8 }
+    raise @types.EncodingError::Truncated(0, need, data.length())
+  }
 }
 
 ///|
@@ -105,16 +113,10 @@ pub fn decode_int64(
   data : BytesView,
   count : Int32,
 ) -> Array[Int64] raise @types.EncodingError {
-  if count < 0 {
-    raise @types.EncodingError::InvalidCount(count)
-  }
-  let need = count * 8
-  if need > data.length() {
-    raise @types.EncodingError::Truncated(0, need, data.length())
-  }
+  check_wide_values(data, count)
   let out = Array::make(count, 0L)
   for index in 0..<count {
-    out[index] = read_u64_le(data, index * 8).reinterpret_as_int64()
+    out[index] = data.unsafe_read_uint64_le(index * 8).reinterpret_as_int64()
   }
   out
 }
@@ -143,16 +145,10 @@ pub fn decode_double(
   data : BytesView,
   count : Int32,
 ) -> Array[Double] raise @types.EncodingError {
-  if count < 0 {
-    raise @types.EncodingError::InvalidCount(count)
-  }
-  let need = count * 8
-  if need > data.length() {
-    raise @types.EncodingError::Truncated(0, need, data.length())
-  }
+  check_wide_values(data, count)
   let out = Array::make(count, 0.0)
   for index in 0..<count {
-    out[index] = read_u64_le(data, index * 8).reinterpret_as_double()
+    out[index] = data.unsafe_read_uint64_le(index * 8).reinterpret_as_double()
   }
   out
 }

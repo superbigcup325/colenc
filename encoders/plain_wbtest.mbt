@@ -161,6 +161,87 @@ test "plain byte array decode points at the bad length or body" {
 }
 
 ///|
+test "plain wide decode keeps extremes, specials and trailing bytes" {
+  let longs : Array[Int64] = [
+    0L,
+    1L,
+    -1L,
+    0x0102030405060708L,
+    9223372036854775807L,
+    -9223372036854775807L - 1L,
+  ]
+  let out = @buffer.Buffer()
+  encode_int64(longs, out)
+  out.write_bytes(b"\xaa\xbb\xcc")
+  let bytes = out.to_bytes()
+  assert_eq(decode_int64(bytes, longs.length()) catch { _ => [] }, longs)
+  assert_eq(decode_int64(bytes, 0) catch { _ => [1L] }, [])
+  assert_eq(decode_int64(bytes, 1) catch { _ => [] }, [0L])
+
+  let doubles : Array[Double] = [
+    0.0,
+    -0.0,
+    1.5,
+    0x7fefffffffffffffUL.reinterpret_as_double(),
+    0x0000000000000001UL.reinterpret_as_double(),
+    0x7ff0000000000000UL.reinterpret_as_double(),
+    0xfff0000000000000UL.reinterpret_as_double(),
+  ]
+  let out = @buffer.Buffer()
+  encode_double(doubles, out)
+  let back = decode_double(out.to_bytes(), doubles.length()) catch { _ => [] }
+  assert_eq(back.length(), doubles.length())
+  for index in 0..<doubles.length() {
+    assert_eq(
+      back[index].reinterpret_as_uint64(),
+      doubles[index].reinterpret_as_uint64(),
+    )
+  }
+  // A NaN stays a NaN. The payload is not asserted: the js backend
+  // canonicalizes NaN, so only the class is common to all three targets.
+  let nan_bytes = b"\x01\x00\x00\x00\x00\x00\xf8\x7f"
+  let nan = decode_double(nan_bytes, 1) catch { _ => [] }
+  assert_eq(nan.length(), 1)
+  assert_eq(nan[0] != nan[0], true)
+}
+
+///|
+test "plain wide decode reads from an unaligned view" {
+  let out = @buffer.Buffer()
+  out.write_byte(b'\x7f')
+  encode_int64([0x1122334455667788L, -2L], out)
+  let view = out.to_bytes()[1:]
+  assert_eq(decode_int64(view, 2) catch { _ => [] }, [0x1122334455667788L, -2L])
+  let short = out.to_bytes()[1:16]
+  let error = capture_error(() => ignore(decode_int64(short, 2)))
+  match error {
+    @types.EncodingError::Truncated(0, 16, 15) => ()
+    _ => abort("expected Truncated(0, 16, 15)")
+  }
+}
+
+///|
+test "plain wide decode rejects counts whose byte size overflows" {
+  // 2^29 values of eight bytes wrap to zero in 32-bit arithmetic
+  let error = capture_error(() => ignore(decode_int64(b"", 536870912)))
+  match error {
+    @types.EncodingError::Truncated(0, 2147483647, 0) => ()
+    _ => abort("expected a saturated Truncated")
+  }
+  let error = capture_error(() => ignore(decode_double(b"\x00", 2147483647)))
+  match error {
+    @types.EncodingError::Truncated(0, 2147483647, 1) => ()
+    _ => abort("expected a saturated Truncated")
+  }
+  // the largest count that still fits keeps its exact requirement
+  let error = capture_error(() => ignore(decode_int64(b"", 268435455)))
+  match error {
+    @types.EncodingError::Truncated(0, 2147483640, 0) => ()
+    _ => abort("expected Truncated(0, 2147483640, 0)")
+  }
+}
+
+///|
 test "plain decode rejects negative counts" {
   let error = capture_error(() => ignore(decode_int64(b"", -1)))
   match error {
