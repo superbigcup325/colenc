@@ -265,6 +265,142 @@ fn roaring_is_outside_the_dispatch() -> Unit {
 }
 
 ///|
+/// A model trained on one batch encodes that batch to the bytes the one-shot
+/// encoder writes, and encodes a held-out batch that the frame decodes without
+/// the model.
+fn fsst_model(train : Array[Bytes], held : Array[Bytes]) -> Unit raise {
+  let model = @encoders.FsstModel::train(train)
+  let own = Buffer()
+  @encoders.encode_fsst_with(model, train, own)
+  let one_shot = Buffer()
+  @encoders.encode_fsst(train, one_shot)
+  ensure(
+    own.to_bytes() == one_shot.to_bytes(),
+    "fsst model on its training batch matches the one-shot encoder",
+  )
+  let reused = Buffer()
+  @encoders.encode_fsst_with(model, held, reused)
+  let (back, consumed) = @encoders.decode_fsst(
+    reused.to_bytes()[:],
+    held.length(),
+  )
+  ensure(consumed == reused.length(), "fsst model frame consumed in full")
+  ensure(back.length() == held.length(), "fsst model held-out count")
+  for index in 0..<held.length() {
+    ensure(back[index] == held[index], "fsst model held-out value \{index}")
+  }
+  ensure(
+    same(
+      @colenc.decode_column(
+        reused.to_bytes(),
+        @types.ByteArray,
+        @types.Fsst,
+        held.length(),
+      ),
+      @types.ColBuf::ByteArrays(held),
+    ),
+    "fsst model frame through decode_column",
+  )
+  println(
+    "fsst-model|\{model.table_bytes()}|\{own.length()}|\{reused.length()}",
+  )
+}
+
+///|
+/// `registers()` is a snapshot and `register(index)` reads the live state; an
+/// index outside the table is a typed error.
+fn hll_register() -> Unit raise {
+  let hll = @sketches.HllSketch::new_default()
+  for index in 0..<200 {
+    hll.add_int32(index)
+  }
+  let before = hll.registers()
+  let mut before_sum = 0
+  for rank in before {
+    before_sum += rank
+  }
+  for index in 200..<5000 {
+    hll.add_int32(index)
+  }
+  let mut still_sum = 0
+  for rank in before {
+    still_sum += rank
+  }
+  ensure(
+    still_sum == before_sum,
+    "hll registers() snapshot tracked a later update",
+  )
+  let after = hll.registers()
+  ensure(after.length() == hll.register_count(), "hll snapshot length")
+  let mut changed = 0
+  for index in 0..<after.length() {
+    ensure(hll.register(index) == after[index], "hll register(index) disagrees")
+    if after[index] != before[index] {
+      changed += 1
+    }
+  }
+  ensure(changed > 0, "hll updates changed no register")
+  let low = try {
+    let _ = hll.register(-1)
+    false
+  } catch {
+    @types.EncodingError::OutOfRange(_, _) => true
+    _ => false
+  }
+  let high = try {
+    let _ = hll.register(hll.register_count())
+    false
+  } catch {
+    @types.EncodingError::OutOfRange(_, _) => true
+    _ => false
+  }
+  ensure(low && high, "hll register out of range must be OutOfRange")
+  println("hll-register|\{after.length()}|\{changed}")
+}
+
+///|
+/// Count-only intersection, overlap and ordered batches, each checked against
+/// the materialized operation or an expected set computed independently.
+fn roaring_query() -> Unit raise {
+  let left_ids = Array::makei(30000, fn(i) { i * 3 })
+  let right_ids = Array::makei(18000, fn(i) { i * 5 })
+  let left = @encoders.RoaringBitmap::from_ids(left_ids)
+  let right = @encoders.RoaringBitmap::from_ids(right_ids)
+  let count = left.intersection_cardinality(right)
+  ensure(
+    count == left.intersect(right).cardinality(),
+    "intersection_cardinality disagrees with intersect",
+  )
+  // common multiples of 3 and 5 below 89996: 0, 15, ..., 89985
+  ensure(count == 6000, "intersection_cardinality against the arithmetic count")
+  ensure(left.intersects(right), "intersects on overlapping sets")
+  let small = @encoders.RoaringBitmap::from_ids([1, 5, 70000]).intersection_cardinality(
+    @encoders.RoaringBitmap::from_ids([5, 70000, 70001]),
+  )
+  ensure(small == 2, "intersection_cardinality across two keys")
+  let disjoint = @encoders.RoaringBitmap::from_ids([1, 2, 3]).intersects(
+    @encoders.RoaringBitmap::from_ids([4, 5, 65536]),
+  )
+  ensure(!disjoint, "intersects on disjoint sets")
+  let all : Array[Int32] = []
+  let mut after = -1L
+  while true {
+    let batch = left.ids_after(after, 1000)
+    for id in batch {
+      all.push(id)
+    }
+    if batch.length() < 1000 {
+      break
+    }
+    after = batch[batch.length() - 1].to_int64()
+  }
+  ensure(same_ids(all, left.to_array()), "ids_after batches against to_array")
+  ensure(same_ids(all, left_ids), "ids_after batches against the input ids")
+  ensure(left.cardinality() == 30000, "operands untouched by the queries")
+  println("roaring-query|\{count}|\{small}|\{all.length()}")
+}
+
+///|
 fn names() -> Unit {
   // The neutral model is public surface too: a consumer switches on these.
   println(
@@ -337,9 +473,16 @@ fn main raise {
   ]
   delta_byte_array(strings)
   fsst(strings)
+  let held_out : Array[Bytes] = [
+    b"region-3-bucket-56-suffix", b"region-0-bucket-63-suffix", b"", b"\xff\x00\xff",
+    b"region-1-bucket-70-suffix", b"unrelated",
+  ]
+  fsst_model(strings, held_out)
   dictionary([7, 7, 9, 7, 11, 9, 7, 11, 11])
   roaring([1, 5, 9, 13, 65536, 65537, 131072])
   roaring_is_outside_the_dispatch()
+  roaring_query()
+  hll_register()
   sketches()
   names()
   errors()

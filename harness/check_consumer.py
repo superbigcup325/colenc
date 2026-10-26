@@ -139,8 +139,11 @@ def check_output(output: str, version: str, expected_version: str | None) -> Non
         "bss-double",
         "delta-byte-array",
         "fsst",
+        "fsst-model",
         "dictionary",
         "roaring",
+        "roaring-query",
+        "hll-register",
         "sketches",
         "names",
         "errors",
@@ -189,6 +192,21 @@ def check_output(output: str, version: str, expected_version: str | None) -> Non
     median = sketches[2]
     if not 200.0 < median < 300.0:
         raise ValueError(f"sketches: t-digest median {median} for 0..499")
+
+    # The reusable FSST model: the consumer already asserted the bytes and the
+    # held-out round trip, so the checker only needs the table to be non-empty.
+    model_table, model_own, model_held = numbers(rows, "fsst-model", 3)
+    if model_table <= 1 or model_own <= 0 or model_held <= 0:
+        raise ValueError(f"fsst-model: {rows['fsst-model']}")
+
+    # 6000 common multiples of 3 and 5, a two-key count, and 30000 ids returned
+    # by concatenated batches.
+    expect(rows, "roaring-query", ["6000", "2", "30000"])
+
+    # A 16384-entry snapshot and at least one register that moved after it.
+    snapshot, changed = numbers(rows, "hll-register", 2)
+    if snapshot != 16384 or changed <= 0:
+        raise ValueError(f"hll-register: {rows['hll-register']}")
 
     roaring = numbers(rows, "roaring", 3)
     if roaring[0] != 7 or roaring[2] != 6:
@@ -258,7 +276,8 @@ def check_consumer(
             record["targets"][target] = "passed"
             print(
                 f"ok: consumer {target} — PLAIN, RLE, dictionary, delta family, "
-                "BSS, FSST, Roaring set ops, both sketches and the typed error paths",
+                "BSS, FSST and its reusable model, Roaring set ops and queries, "
+                "both sketches, the HLL register accessors and the typed error paths",
                 flush=True,
             )
     return record
