@@ -6,6 +6,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Migration from 0.1.1
+
+Two changes are observable to code written against 0.1.1; serialized formats
+(page encodings, Roaring, HLL, t-digest and FSST frames) are unchanged.
+
+- `encode_column` and `decode_column` refuse `Encoding::Roaring` with
+  `Unsupported`. Use `encode_roaring_column` and `decode_roaring_column`, which
+  take the same arguments and produce the same payload.
+- `HllSketch::registers()` returns a snapshot taken at the call, not a live view
+  of the sketch, and costs O(register_count) per call. Re-read it after updates,
+  or use `HllSketch::register(index)` to read one rank without copying.
+
+Everything else listed below is additive or an internal speedup with identical
+output.
+
 ### Added
 
 - `FsstModel`, `FsstModel::train` and `encode_fsst_with` separate training the
