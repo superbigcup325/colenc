@@ -242,6 +242,65 @@ test "plain wide decode rejects counts whose byte size overflows" {
 }
 
 ///|
+test "plain narrow decode keeps extremes, specials and unaligned views" {
+  let ints : Array[Int32] = [0, 1, -1, 0x01020304, 2147483647, -2147483648]
+  let out = @buffer.Buffer()
+  out.write_byte(b'\x7f')
+  encode_int32(ints, out)
+  out.write_bytes(b"\xaa\xbb")
+  let view = out.to_bytes()[1:]
+  assert_eq(decode_int32(view, ints.length()) catch { _ => [] }, ints)
+  assert_eq(decode_int32(view, 1) catch { _ => [] }, [0])
+
+  let floats : Array[Float] = [
+    Float::reinterpret_from_int(0),
+    Float::reinterpret_from_int(-2147483648),
+    Float::reinterpret_from_int(0x7f800000),
+    Float::reinterpret_from_int(-8388608),
+    Float::reinterpret_from_int(1),
+    Float(1.5),
+  ]
+  let out = @buffer.Buffer()
+  encode_float(floats, out)
+  let back = decode_float(out.to_bytes(), floats.length()) catch { _ => [] }
+  assert_eq(back.length(), floats.length())
+  for index in 0..<floats.length() {
+    assert_eq(
+      back[index].reinterpret_as_int(),
+      floats[index].reinterpret_as_int(),
+    )
+  }
+  let nan = decode_float(b"\x01\x00\xc0\x7f", 1) catch { _ => [] }
+  assert_eq(nan.length(), 1)
+  assert_eq(nan[0] != nan[0], true)
+}
+
+///|
+test "plain narrow decode rejects counts whose byte size overflows" {
+  // 2^29 four-byte values wrap to a negative size in 32-bit arithmetic
+  let error = capture_error(() => ignore(decode_int32(b"", 536870912)))
+  match error {
+    @types.EncodingError::Truncated(0, 2147483647, 0) => ()
+    _ => abort("expected a saturated Truncated")
+  }
+  let error = capture_error(() => ignore(decode_float(b"\x00", 2147483647)))
+  match error {
+    @types.EncodingError::Truncated(0, 2147483647, 1) => ()
+    _ => abort("expected a saturated Truncated")
+  }
+  let error = capture_error(() => ignore(decode_int32(b"", 536870911)))
+  match error {
+    @types.EncodingError::Truncated(0, 2147483644, 0) => ()
+    _ => abort("expected Truncated(0, 2147483644, 0)")
+  }
+  let error = capture_error(() => ignore(decode_int32(b"\x01\x00\x00", 1)))
+  match error {
+    @types.EncodingError::Truncated(0, 4, 3) => ()
+    _ => abort("expected Truncated(0, 4, 3)")
+  }
+}
+
+///|
 test "plain decode rejects negative counts" {
   let error = capture_error(() => ignore(decode_int64(b"", -1)))
   match error {

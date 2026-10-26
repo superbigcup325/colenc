@@ -12,6 +12,22 @@ pub fn read_u32_le(data : BytesView, offset : Int32) -> Int32 {
 }
 
 ///|
+/// The four-byte counterpart of `check_wide_values`: `count * 4` wraps once
+/// `count` passes 2^29 - 1, so the comparison divides the view length instead.
+fn check_narrow_values(
+  data : BytesView,
+  count : Int32,
+) -> Unit raise @types.EncodingError {
+  if count < 0 {
+    raise @types.EncodingError::InvalidCount(count)
+  }
+  if count > data.length() / 4 {
+    let need = if count > 536870911 { 2147483647 } else { count * 4 }
+    raise @types.EncodingError::Truncated(0, need, data.length())
+  }
+}
+
+///|
 /// Validate that `count` eight-byte values fit in `data`, without letting
 /// `count * 8` wrap. When the product does not fit in an `Int32` the reported
 /// requirement saturates at `Int32::max_value`; the check itself compares
@@ -94,16 +110,10 @@ pub fn decode_int32(
   data : BytesView,
   count : Int32,
 ) -> Array[Int32] raise @types.EncodingError {
-  if count < 0 {
-    raise @types.EncodingError::InvalidCount(count)
-  }
-  let need = count * 4
-  if need > data.length() {
-    raise @types.EncodingError::Truncated(0, need, data.length())
-  }
+  check_narrow_values(data, count)
   let out = Array::make(count, 0)
   for index in 0..<count {
-    out[index] = read_u32_le(data, index * 4)
+    out[index] = data.unsafe_read_uint32_le(index * 4).reinterpret_as_int()
   }
   out
 }
@@ -126,16 +136,12 @@ pub fn decode_float(
   data : BytesView,
   count : Int32,
 ) -> Array[Float] raise @types.EncodingError {
-  if count < 0 {
-    raise @types.EncodingError::InvalidCount(count)
-  }
-  let need = count * 4
-  if need > data.length() {
-    raise @types.EncodingError::Truncated(0, need, data.length())
-  }
+  check_narrow_values(data, count)
   let out = Array::make(count, Float(0.0))
   for index in 0..<count {
-    out[index] = Float::reinterpret_from_int(read_u32_le(data, index * 4))
+    out[index] = Float::reinterpret_from_int(
+      data.unsafe_read_uint32_le(index * 4).reinterpret_as_int(),
+    )
   }
   out
 }
