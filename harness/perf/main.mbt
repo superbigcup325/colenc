@@ -1285,6 +1285,111 @@ fn bench_candidates(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
 }
 
 ///|
+/// A value stream with `n` distinct Int64 values, spread so the hash sees
+/// unrelated inputs; `salt` makes the groups disjoint.
+fn hll_value(index : Int32, salt : Int32) -> Int64 {
+  (index.to_int64() + salt.to_int64() * 1000003L) * 7919L
+}
+
+///|
+/// Abort unless an estimate is within three percent of the true cardinality, so
+/// a broken update path cannot read as a fast one.
+fn hll_guard(estimate : Double, truth : Int32) -> Unit {
+  let error = (estimate - truth.to_double()) / truth.to_double()
+  if error > 0.03 || error < -0.03 {
+    abort("hll estimate off: \{estimate} for \{truth}")
+  }
+}
+
+///|
+/// Fill `groups` independent sketches with `per_group` distinct values each and
+/// return the sum of their estimates. This is the shape the consumer's grouped
+/// aggregation has, and the one whose resident size the K3 work targets.
+fn hll_many_groups(groups : Int32, per_group : Int32) -> Double {
+  let sketches : Array[@sketches.HllSketch] = []
+  for group in 0..<groups {
+    let sketch = @sketches.HllSketch::new_default()
+    for index in 0..<per_group {
+      sketch.add_int64(hll_value(index, group))
+    }
+    sketches.push(sketch)
+  }
+  let mut total = 0.0
+  for sketch in sketches {
+    total = total + sketch.estimate()
+  }
+  total
+}
+
+///|
+/// Parse a non-negative decimal argument; anything else aborts.
+fn parse_count(text : String) -> Int32 {
+  let mut value = 0
+  for ch in text {
+    let digit = ch.to_int() - 48
+    if digit < 0 || digit > 9 {
+      abort("not a number: \{text}")
+    }
+    value = value * 10 + digit
+  }
+  value
+}
+
+///|
+fn bench_hll(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
+  let n = 1000000
+  record(b, label("hll", "update-int64-one-group", n * 8, n), fn() {
+    let sketch = @sketches.HllSketch::new_default()
+    for index in 0..<n {
+      sketch.add_int64(hll_value(index, 0))
+    }
+    let estimate = sketch.estimate()
+    hll_guard(estimate, n)
+    sink.val = sink.val + estimate.to_int()
+  })
+  let groups = 1000
+  let per_group = 1000
+  record(
+    b,
+    label(
+      "hll",
+      "update-int64-1000-groups",
+      groups * per_group * 8,
+      groups * per_group,
+    ),
+    fn() {
+      let total = hll_many_groups(groups, per_group)
+      hll_guard(total, groups * per_group)
+      sink.val = sink.val + total.to_int()
+    },
+  )
+  let filled = @sketches.HllSketch::new_default()
+  let other = @sketches.HllSketch::new_default()
+  for index in 0..<n {
+    filled.add_int64(hll_value(index, 0))
+    other.add_int64(hll_value(index, 1))
+  }
+  hll_guard(filled.estimate(), n)
+  record(b, label("hll", "estimate", 16384, 16384), fn() {
+    sink.val = sink.val + filled.estimate().to_int()
+  })
+  record(b, label("hll", "merge", 16384 * 2, 16384), fn() {
+    let merged = filled.merge(other) catch { _ => abort("merge raised") }
+    sink.val = sink.val + merged.register_count()
+  })
+  let bytes = filled.to_bytes()
+  record(b, label("hll", "to_bytes", 16384, 16384), fn() {
+    sink.val = sink.val + filled.to_bytes().length()
+  })
+  record(b, label("hll", "from_bytes", 16384, 16384), fn() {
+    let back = @sketches.HllSketch::from_bytes(bytes[:]) catch {
+      _ => abort("from_bytes raised")
+    }
+    sink.val = sink.val + back.register_count()
+  })
+}
+
+///|
 /// The dictionary path on its own: the planner plus the index stream, which the
 /// `rle` section prices separately.
 fn bench_dict(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
@@ -1384,6 +1489,21 @@ fn main {
   let bencher = @bench.Bench()
   let sink = @ref.Ref(0)
   let argv = @env.args()
+  if argv.length() > 1 && argv[1] == "hll" {
+    bench_hll(bencher, sink)
+    println(bencher.dump_summaries())
+    println("sink=\{sink.val}")
+    return
+  }
+  if argv.length() > 2 && argv[1] == "hll-groups" {
+    // one pass for a resident-size measurement: `hll-groups <groups> <per_group>`
+    let groups = parse_count(argv[2])
+    let per_group = if argv.length() > 3 { parse_count(argv[3]) } else { 1000 }
+    let total = hll_many_groups(groups, per_group)
+    hll_guard(total, groups * per_group)
+    println("groups=\{groups} per_group=\{per_group} estimate=\{total}")
+    return
+  }
   if argv.length() > 1 && argv[1] == "dict" {
     bench_dict(bencher, sink)
     println(bencher.dump_summaries())

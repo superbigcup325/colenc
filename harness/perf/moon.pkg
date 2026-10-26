@@ -3,6 +3,7 @@ import {
   "superbigcup325/colenc/types" @colenc_types,
   "superbigcup325/colenc/primitives",
   "superbigcup325/colenc/encoders",
+  "superbigcup325/colenc/sketches",
   "moonbitlang/core/bench",
   "moonbitlang/core/env",
   "moonbitlang/core/ref",
