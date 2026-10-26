@@ -1375,6 +1375,12 @@ fn main {
     println(bencher.dump_summaries())
     return
   }
+  if argv.length() > 1 && argv[1] == "plain" {
+    bench_plain(bencher, sink)
+    println(bencher.dump_summaries())
+    println("sink=\{sink.val}")
+    return
+  }
   if argv.length() > 1 && argv[1] == "search" {
     bench_search(bencher, sink)
     println(bencher.dump_summaries())
