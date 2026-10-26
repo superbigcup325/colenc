@@ -197,6 +197,16 @@ input, output order and duplicate q values before coding. Compare it with scalar
 queries on the same finalized state. Sharing one digest across SQL aggregates
 is a separate moonlake change.
 
+*Outcome of the first delivery:* the compression pass now sorts only the raw
+buffer and merges it with the ordered centroids, and computes each centroid's
+lower scale value once; the centroid list is identical to the old one. On the
+perf rig a 1M-value update stream went from 88.5 to 51.9 ms and a merge from
+3.7 to 2.5 us (native release, medians of three). `quantiles(qs)` was not added:
+a scalar query on a finalized digest costs about 23 ns (2.3 us for 99 queries,
+and `compress` returns immediately once the buffer is empty), so a batch call
+would save validation work measured in nanoseconds and cannot change a consumer's
+cost. It stays a follow-up for a consumer that shows a query-bound workload.
+
 **Exit:** retain structural invariants, exact extremes, serialization checks,
 the named distribution/order/merge-tree matrix and its existing absolute
 rank-error ceilings. Report update, compression, merge, scalar/batch query time,
