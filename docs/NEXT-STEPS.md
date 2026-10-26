@@ -1,48 +1,32 @@
-# Release and consumer follow-through after 0.1.1
+# Release and consumer follow-through: 0.1.2 is released
 
-Planning snapshot: 2026-10-26 (Asia/Shanghai), source revision `f0c6454`.
-K0 and the first deliveries of K1 to K6 are implemented on remote `main` and
-unreleased. The library scoreboard is updated. The next work is release
-preparation, registry verification and moonlake acceptance against that release.
-The [implementation record](OPTIMIZATION-PLAN.md) preserves the completed kernel
-tasks; do not start them again. The [roadmap](ROADMAP.md) and
+Status: 2026-10-26 (Asia/Shanghai). **Version 0.1.2 is published**, moonlake
+consumes it, and L0 through C2 are complete. What remains is the conditional
+work that waits on a consumer workload, and moonlake's own release, which is that
+project's decision. The [implementation record](OPTIMIZATION-PLAN.md) preserves
+the completed kernel tasks; the [roadmap](ROADMAP.md) and
 [sketch contracts](SKETCHES.md) retain their acceptance definitions.
 
-## Current evidence
+## Final evidence
 
-| Project | Observed state | Planning implication |
-|---|---|---|
-| colenc | [0.1.1 is published](https://github.com/superbigcup325/colenc/releases/tag/v0.1.1). Local and remote `main` were both `f0c6454`, 23 commits after that tag, with a clean working tree at inspection. [CI passed on that source](https://github.com/superbigcup325/colenc/actions/runs/40286538784), including the three targets and the full harness; the local recheck also passed 165 tests per target, format and `check --deny-warn` | The kernel changes are implemented and checked, but no registry artifact carries them. A versioned candidate still needs the migration and packaged-surface work below |
-| Release artifact | Built from `504092a`; the tagged tree adds documentation and sketch coverage to the archive consumer, with identical library code. The release records three-target registry-consumer acceptance | Distinguish the registry artifact from its later documentation. Its older README wording does not mean HLL/t-digest are absent |
-| moonlake | Local `6963e3b` still declares colenc 0.1.1 and module version 0.6.0, without a sibling override. It carries `approx_count_distinct` and `approx_quantile`. Remote `main` is `750b98c`; the latest [release is 0.5.0](https://github.com/superbigcup325/moonlake/releases/tag/v0.5.0) | The completed SQL adoption is not new kernel work. The upstream improvements need a published dependency and a fresh consumer candidate |
-| Prior consumer acceptance | R2 accepted `bc1a8f5` with colenc 0.1.1: 361 native / 348 wasm-gc / 348 js tests, golden and differential gates, corpus 17 decoded / 51 refused / 0 failing, the 2.41 GB write, Chromium 16/16 and fresh-cache archive consumers. These are the recorded results, not a new consumer run in this planning update | Changing the dependency requires acceptance again. The older accepted source and the remote branch do not certify the resulting candidate |
-| Measurements | The final [scoreboard](scoreboard.md) was regenerated at `26fb9c0`, after K1 to K6. The sketch and bitmap costs are in the [final record](#final-benchmark-record). Worst encode swing was 14% native and 23% wasm-gc | The library benchmark step is complete. The end-to-end registry-consumer baseline is pending; compare candidates with same-session controls |
+| Item | State |
+|---|---|
+| colenc 0.1.2 | [Published](https://github.com/superbigcup325/colenc/releases/tag/v0.1.2) from `b1b2b7f` on 2026-10-26, tagged `v0.1.2`, [CI green on that source](https://github.com/superbigcup325/colenc/actions/runs/40302072598). Archive SHA-256 `ad0d5fb0b49c2a729257c0f3afacdb4e93c9b964c3854df26999d00f3ed1ea1e`, built with moon 0.1.20261016 (1af328f 2026-10-16) |
+| Gate before publication | `moon info`, `moon fmt --check` and `moon check --deny-warn` clean; 165 tests per target on native, wasm-gc and js; every fixture regenerator in `--check` mode; all byte-diff, round-trip and property harnesses; the container check; and the archive consumer on three targets |
+| Registry copy | `moon view superbigcup325/colenc` reports 0.1.2 as latest, and `python3 harness/check_consumer.py --registry-version 0.1.2` passes on native, wasm-gc and js with a fresh registry and dependency cache |
+| moonlake | `95c42c6` consumes 0.1.2 with no workspace override, with the acceptance record and the performance pair in `4de8077` and the closing note in `a0c7628`; `main` is pushed, its CI is green and a dispatched nightly passed. It needed no source change: the engine reaches the bitmap through the dedicated entry points and reads HLL registers through `register(index)` |
+| The cost K0 was measured on | **Closed.** The 0.1.1 artifact cost about 10% on moonlake's wide CSV scans because the generic dispatch kept the bitmap reachable. Against a 0.1.1 control built in its own worktree, three alternating pairs on a quiet host put the CSV cases 6-11% in 0.1.2's favour in every round: `count(*)` 171.3 to 153.0 ms, the filtered count 188.5 to 170.0, the two-table join 235.4 to 214.8, Q3 266.7 to 249.6 and the fanout join 383.2 to 348.4. The two Parquet cases stay unresolved at 4 ms and 11 ms with in-record spreads up to 73% |
+| Library measurements | The final [scoreboard](scoreboard.md) from `26fb9c0` is unchanged by the release; the release carries the same library code it recorded. Worst encode swing was 14% native and 23% wasm-gc |
 
-**K0 has a measurable case now.** moonlake recorded its 0.6.0 candidate beside
-same-session controls and found wide CSV scans about 10% slower than before the
-upgrade (7–14% by run), where the CSV path never touches colenc. Its bisect puts
-the cost on the dependency artifact (a commit that only changes the manifest is
-9.4% slower), and two local probes say what carries it: one deletes
-`encoders/roaring.mbt` and refuses the facade arms, the other keeps the file and
-only refuses the arms; both build the same 1,632,744-byte consumer binary and
-both return to the control's speed. So the cost is reachability from the generic
-`encode_column` / `decode_column` dispatch that the consumer's spill format
-calls, not the bitmap's package. Moving the file would not have helped; taking
-the `Roaring` arms out of that dispatch into dedicated functions should, and the
-consumer workload is already measurable the way this needs (a rotating
-interleaved A/B, not one run). That change is implemented and measured: the downstream
-consumer built against it is at control speed (157.9 ms against 163.0 ms median
-for the scan, i.e. parity within the run spread) and 8,248 bytes smaller, so the
-remaining step is a release decision plus the consumer's re-record, not another
-experiment.
-
-The separate Int64 load experiment remains in its
-[source and timing record](plain64-probe-2026-10-26.json), with
-[reproduction instructions](OPTIMIZATION-PLAN.md#exploratory-plain-record).
-It is historical kernel evidence, not registry-consumer acceptance. The engine
-work order and its exit criteria are maintained in
-[moonlake's roadmap](https://github.com/superbigcup325/moonlake/blob/main/docs/ROADMAP.md).
-That public branch may lag the local planning revision until it is pushed.
+**K0 has its answer.** The 0.1.1 artifact moved the consumer's hot CSV loops
+because `encode_column` / `decode_column` reached `encoders/roaring.mbt` from
+every Parquet caller, so dead-code elimination could not drop it. Two probes had
+already bracketed the cause — deleting the file and refusing the facade arms both
+returned the consumer to control speed at 8,248 fewer bytes — and the shipped fix
+is the narrower one: the `Roaring` arms left the generic dispatch for
+`encode_roaring_column` / `decode_roaring_column`, so a caller that only passes
+PLAIN, DELTA, the length family, dictionary or FSST never links a bitmap. The
+consumer re-record above is the confirmation the probe could not give.
 
 ## Release order and ownership
 
@@ -53,49 +37,29 @@ the serialized formats stay the same; semantic versioning would call them a
 minor bump, so the changelog carries a migration section at the top of the
 release. The release is authorized.
 
-Follow L0, L1, L2, C1 and C2 in order. Prepare the source and evidence before
-the external release actions. The maintainer authorized push, tag and publish of 0.1.2 and the
-moonlake upgrade; a moonlake release stays separate. Keep conditional
-investigations out of this candidate.
+L0, L1, L2, C1 and C2 ran in order and are done. A moonlake release of 0.6.0
+stays separate and needs its own authorization; conditional investigations stay
+out of this candidate.
 
-| Package | Owner and delivery | Exit |
+| Task | Delivery | State |
 |---|---|---|
-| L0 | colenc: complete migration notes and the packaged API coverage | Cover the dedicated Roaring facade and its generic refusal, the new bitmap query methods, HLL `register` and snapshot behavior, and FSST model training/reuse through public imports. The archive consumer passes on native, wasm-gc and JS |
-| L1 | colenc: prepare the versioned candidate and its artifact | Set the agreed version in the manifest/changelog, refresh interfaces and format, run the full library and harness gates, inspect `moon package --list`, and run the consumer against the retained archive. Record source, archive SHA-256 and toolchain together |
-| L2 | colenc: publish and verify the registry copy after release authorization | The pushed candidate has green CI; tag, release notes and the published package identify the same final source. `python3 harness/check_consumer.py --registry-version <version>` passes with fresh caches on all three targets |
-| C1 | moonlake: consume that registry version and repeat candidate acceptance | Fresh dependency resolution without a workspace override; all current release gates pass on the resulting source, including encoding/writer/spill, sketches, corpus, large-file, browser and archive checks. Record the new revision and actual counts |
-| C2 | moonlake: record the final consumer baseline and release evidence | Re-record `harness/bench_release.py` and the wide-CSV/fanout interleaved comparison, retain the exact-answer checks and same-session controls, and update `docs/bench-baseline.md`. Re-measure grouped HLL memory and the exact-state crossover. Remote CI/nightly must certify the pushed candidate before its separately authorized release |
+| L0 | colenc: migration notes and packaged API coverage | **Done** at `8a843ff` and `70b267d`. The archive consumer now trains a model and encodes a held-out batch with it, checks that a retained HLL snapshot does not follow later updates, concatenates bitmap id batches and compares them with an independent expected set, and exercises the generic dispatch's refusal. The migration section heads the changelog |
+| L1 | colenc: versioned candidate and artifact | **Done** at `b1b2b7f`. Manifest, changelog, README, AGENTS.md, roadmap and this document name 0.1.2; the quartet, three targets, every harness and the archive consumer passed; `moon package --list` carries no local-only path; source, archive SHA-256 and toolchain are in the table above |
+| L2 | colenc: publish and verify the registry copy | **Done**. CI green before the tag, `moon publish --dry-run` returned `202 Accepted`, the publish returned `Server status: 200 OK`, tag `v0.1.2` and its release notes identify `b1b2b7f`, and the registry consumer passed on three targets with fresh caches |
+| C1 | moonlake: consume the registry version, repeat acceptance | **Done** at `95c42c6`, verification §41 there. Registry resolution without an override; 348 wasm-gc / 361 native / 348 js tests, the 33 goldens on three paths, the window and correlation differentials, the pushdown fuzz, page fixtures, CLI, spill, writer interop, corpus 17 decoded / 51 refused / 0 failing, 75 unit tests, the 2.41 GB write, Chromium 16/16 and the archive consumer |
+| C2 | moonlake: final consumer baseline and release evidence | **Done** at `4de8077`, verification §41 there. Three alternating candidate/control pairs with the oracles green and identical output hashes, both records committed under `harness/baseline/`, the table in `docs/bench-baseline.md`, and the unresolved Parquet cases reported as unresolved rather than picked. Grouped HLL memory and the exact-state crossover stay as measured in the sketch contract |
 
-L0 has a specific gap to close. The current archive consumer exercises the
-dedicated bitmap facade, its generic-dispatch refusal and basic sketch round
-trips. It does not call `FsstModel`, `encode_fsst_with`, `HllSketch::register`,
-`intersection_cardinality`, `intersects` or `ids_after`. Extend
-`harness/consumer/main.mbt` and its checker together. Check a model on its
-training batch and a held-out batch, a retained HLL snapshot after later
-updates, and concatenated bitmap batches against an independent expected set.
-Keep old-format and one-shot byte compatibility under the existing library
-tests and judges; the smoke consumer does not replace those gates.
-
-L1 keeps the existing acceptance definitions. Run
-`moon info && moon fmt && moon check --deny-warn`, then `moon test` on native,
-wasm-gc and JS, plus every harness step in the CI workflow. Preserve the actual
-archive used for `python3 harness/check_consumer.py --archive <path>` and
-inspect its contents before publication. A changed source or artifact needs
-the affected verification again. Do not repeat the 0.1.1 split between the
-registry artifact and a later tagged documentation tree.
-
-C2 must show whether the registry build removes the measured CSV cost; the
-earlier local workspace probe does not establish that result. Carry forward
-the scan, join, gather and spill controls, binary/data identities, output
-oracles, RSS and run spread. Report an unresolved regression as such rather
-than replacing the control with a more convenient historical record.
+The acceptance definitions L1 carried are unchanged: `moon info`, `moon fmt`,
+`moon check --deny-warn`, `moon test` on native, wasm-gc and js, every harness
+step in the CI workflow, and the archive consumer before publication. The 0.1.1
+split between the registry artifact and a later tagged documentation tree was
+not repeated: the tagged source and the published archive are the same revision.
 
 ## Completed kernel deliveries
 
 The [implementation record](OPTIMIZATION-PLAN.md) retains the original task
 scope, compatibility decisions, acceptance rules and exploratory probe. These
-deliveries are complete on `main`; publication and consumer evidence follow the
-sequence above.
+deliveries shipped in 0.1.2.
 
 | Task | Implemented delivery | Remaining boundary |
 |---|---|---|

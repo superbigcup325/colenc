@@ -1,13 +1,16 @@
 # Kernel implementation record after 0.1.1
 
-Updated 2026-10-26 (Asia/Shanghai), source revision `f0c6454`. K0 and the first
-deliveries of K1 through K6 are implemented and unreleased. The original task
-scope and acceptance rules below are retained, with the outcomes identified.
-The original handoff and PLAIN experiment used `9fdd252` as their baseline.
+Updated 2026-10-26 (Asia/Shanghai), source revision `f0c6454`, released as
+0.1.2 from `b1b2b7f`. K0 and the first deliveries of K1 through K6 are
+implemented and published, so this record describes shipped code rather than a
+candidate. The original task scope and acceptance rules below are retained, with
+the outcomes identified. The original handoff and PLAIN experiment used
+`9fdd252` as their baseline.
 
-Start with [Next steps](NEXT-STEPS.md) for the release and consumer state, and
-retain the [roadmap's acceptance rules](ROADMAP.md#4-the-acceptance-system)
-and [sketch contracts](SKETCHES.md).
+Start with [the follow-through record](NEXT-STEPS.md) for the release, consumer
+and measurement state, and retain the
+[roadmap's acceptance rules](ROADMAP.md#4-the-acceptance-system) and
+[sketch contracts](SKETCHES.md).
 
 ## Completed deliveries
 
