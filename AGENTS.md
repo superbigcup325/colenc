@@ -384,6 +384,33 @@ tracked documents ship in the release archive.
 - **Prefer prelude and non-deprecated core APIs** → `Buffer()` replaces
   `@buffer.new()`, and `String::to_bytes` is deprecated in favour of
   `@utf8.encode`; `--deny-warn` turns both into build failures
+- **`count * width` wraps in `Int32` before the length check sees it** → the
+  fixed-width PLAIN decoders computed `need = count * 8` and compared it with the
+  view length, so a count of 2^29 wrapped to zero (and 2^29 at width 4 to a
+  negative size) and passed the check before an out-of-bounds read. The check
+  now compares `count` with `data.length() / width` and reports a saturated
+  requirement, so no multiplication happens first; with that in place the
+  values are read with `unsafe_read_uint64_le` / `_uint32_le`. Interleaved A/B
+  on native release, 500k values, medians of three rounds: Int64 1991 -> 236
+  us, Double 1992 -> 236 us, Int32 666 -> 152 us, Float 678 -> 152 us; wasm-gc
+  (two rounds) Int64 4600 -> 1955 us and Int32 2045 -> 1370 us. Encode is
+  unchanged. The js backend does not preserve a NaN payload, so tests assert
+  the NaN class and compare other doubles and floats by bit pattern
+- **A dictionary was built in full before its size was looked at** → the
+  planners deduplicated the whole column and the writer then compared the PLAIN
+  payload with `max_dictionary_bytes`, so a high-cardinality column paid for the
+  complete dictionary and index array it was about to discard. The planners now
+  take the limit and return `None` as soon as the next new value would pass it
+  (entries times width for fixed-width types, a running `4 + length` total in 64
+  bits for byte arrays). The payload only grows, so the early exit decides what
+  the final comparison decided and the accepted bytes are unchanged
+  (`check_dict.py` and the container check still match). Native release,
+  refused columns: 500k distinct Int32 values 59.8 -> 24.7 ms (-59%), 200k
+  distinct strings 22.3 -> 6.9 ms (-69%); wasm-gc -65% and -78%. The accepted
+  low-cardinality cases get no added per-value work, but the candidate binary
+  measured bimodally on the Int32 one over eight rounds (about 2.7 to 2.9 ms in
+  some, 3.1 in others, against a steady 2.7 for the baseline), so treat a
+  difference under 15% there as unresolved layout noise, not as a result
 
 ## Command reference
 

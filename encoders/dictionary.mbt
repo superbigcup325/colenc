@@ -34,7 +34,16 @@ fn dictionary_bit_width(size : Int32) -> Int32 {
 }
 
 ///|
-fn plan_int32(values : Array[Int32]) -> (Array[Int32], Array[Int64]) {
+///
+/// Every planner takes the dictionary byte limit and returns `None` the moment
+/// the PLAIN dictionary payload would pass it. The payload only grows, so the
+/// early exit decides exactly what the full build followed by a size check
+/// decided, without building the rest of the dictionary and the indices.
+fn plan_int32(
+  values : Array[Int32],
+  limit : Int32,
+) -> (Array[Int32], Array[Int64])? {
+  let max_entries = limit.to_int64() / 4L
   let seen : Map[Int32, Int32] = Map([])
   let distinct : Array[Int32] = []
   let indices : Array[Int64] = []
@@ -43,17 +52,24 @@ fn plan_int32(values : Array[Int32]) -> (Array[Int32], Array[Int64]) {
       Some(index) => indices.push(index.to_int64())
       None => {
         let index = distinct.length()
+        if index.to_int64() >= max_entries {
+          return None
+        }
         seen.set(value, index)
         distinct.push(value)
         indices.push(index.to_int64())
       }
     }
   }
-  (distinct, indices)
+  Some((distinct, indices))
 }
 
 ///|
-fn plan_int64(values : Array[Int64]) -> (Array[Int64], Array[Int64]) {
+fn plan_int64(
+  values : Array[Int64],
+  limit : Int32,
+) -> (Array[Int64], Array[Int64])? {
+  let max_entries = limit.to_int64() / 8L
   let seen : Map[Int64, Int32] = Map([])
   let distinct : Array[Int64] = []
   let indices : Array[Int64] = []
@@ -62,19 +78,26 @@ fn plan_int64(values : Array[Int64]) -> (Array[Int64], Array[Int64]) {
       Some(index) => indices.push(index.to_int64())
       None => {
         let index = distinct.length()
+        if index.to_int64() >= max_entries {
+          return None
+        }
         seen.set(value, index)
         distinct.push(value)
         indices.push(index.to_int64())
       }
     }
   }
-  (distinct, indices)
+  Some((distinct, indices))
 }
 
 ///|
 /// Floats are deduplicated by bit pattern, so `0.0` and `-0.0` are distinct
 /// dictionary entries and NaN values deduplicate to one entry per pattern.
-fn plan_float(values : Array[Float]) -> (Array[Float], Array[Int64]) {
+fn plan_float(
+  values : Array[Float],
+  limit : Int32,
+) -> (Array[Float], Array[Int64])? {
+  let max_entries = limit.to_int64() / 4L
   let seen : Map[Int32, Int32] = Map([])
   let distinct : Array[Float] = []
   let indices : Array[Int64] = []
@@ -84,17 +107,24 @@ fn plan_float(values : Array[Float]) -> (Array[Float], Array[Int64]) {
       Some(index) => indices.push(index.to_int64())
       None => {
         let index = distinct.length()
+        if index.to_int64() >= max_entries {
+          return None
+        }
         seen.set(key, index)
         distinct.push(value)
         indices.push(index.to_int64())
       }
     }
   }
-  (distinct, indices)
+  Some((distinct, indices))
 }
 
 ///|
-fn plan_double(values : Array[Double]) -> (Array[Double], Array[Int64]) {
+fn plan_double(
+  values : Array[Double],
+  limit : Int32,
+) -> (Array[Double], Array[Int64])? {
+  let max_entries = limit.to_int64() / 8L
   let seen : Map[Int64, Int32] = Map([])
   let distinct : Array[Double] = []
   let indices : Array[Int64] = []
@@ -104,17 +134,27 @@ fn plan_double(values : Array[Double]) -> (Array[Double], Array[Int64]) {
       Some(index) => indices.push(index.to_int64())
       None => {
         let index = distinct.length()
+        if index.to_int64() >= max_entries {
+          return None
+        }
         seen.set(key, index)
         distinct.push(value)
         indices.push(index.to_int64())
       }
     }
   }
-  (distinct, indices)
+  Some((distinct, indices))
 }
 
 ///|
-fn plan_byte_arrays(values : Array[Bytes]) -> (Array[Bytes], Array[Int64]) {
+/// A byte array costs its four-byte length plus its bytes; the running total is
+/// kept in 64 bits so a large dictionary cannot wrap before the comparison.
+fn plan_byte_arrays(
+  values : Array[Bytes],
+  limit : Int32,
+) -> (Array[Bytes], Array[Int64])? {
+  let max_bytes = limit.to_int64()
+  let mut used = 0L
   let seen : Map[Bytes, Int32] = Map([])
   let distinct : Array[Bytes] = []
   let indices : Array[Int64] = []
@@ -122,6 +162,10 @@ fn plan_byte_arrays(values : Array[Bytes]) -> (Array[Bytes], Array[Int64]) {
     match seen.get(value) {
       Some(index) => indices.push(index.to_int64())
       None => {
+        used = used + 4L + value.length().to_int64()
+        if used > max_bytes {
+          return None
+        }
         let index = distinct.length()
         seen.set(value, index)
         distinct.push(value)
@@ -129,7 +173,7 @@ fn plan_byte_arrays(values : Array[Bytes]) -> (Array[Bytes], Array[Int64]) {
       }
     }
   }
-  (distinct, indices)
+  Some((distinct, indices))
 }
 
 ///|
@@ -156,36 +200,40 @@ pub fn encode_dictionary(
     raise @types.EncodingError::InvalidCount(max_dictionary_bytes)
   }
   let (distinct, indices) = match column {
-    Int32s(values) => {
-      let (distinct, indices) = plan_int32(values)
-      (@types.ColBuf::Int32s(distinct), indices)
-    }
-    Int64s(values) => {
-      let (distinct, indices) = plan_int64(values)
-      (@types.ColBuf::Int64s(distinct), indices)
-    }
-    Floats(values) => {
-      let (distinct, indices) = plan_float(values)
-      (@types.ColBuf::Floats(distinct), indices)
-    }
-    Doubles(values) => {
-      let (distinct, indices) = plan_double(values)
-      (@types.ColBuf::Doubles(distinct), indices)
-    }
-    ByteArrays(values) => {
-      let (distinct, indices) = plan_byte_arrays(values)
-      (@types.ColBuf::ByteArrays(distinct), indices)
-    }
+    Int32s(values) =>
+      match plan_int32(values, max_dictionary_bytes) {
+        Some((distinct, indices)) => (@types.ColBuf::Int32s(distinct), indices)
+        None => return None
+      }
+    Int64s(values) =>
+      match plan_int64(values, max_dictionary_bytes) {
+        Some((distinct, indices)) => (@types.ColBuf::Int64s(distinct), indices)
+        None => return None
+      }
+    Floats(values) =>
+      match plan_float(values, max_dictionary_bytes) {
+        Some((distinct, indices)) => (@types.ColBuf::Floats(distinct), indices)
+        None => return None
+      }
+    Doubles(values) =>
+      match plan_double(values, max_dictionary_bytes) {
+        Some((distinct, indices)) => (@types.ColBuf::Doubles(distinct), indices)
+        None => return None
+      }
+    ByteArrays(values) =>
+      match plan_byte_arrays(values, max_dictionary_bytes) {
+        Some((distinct, indices)) =>
+          (@types.ColBuf::ByteArrays(distinct), indices)
+        None => return None
+      }
     Bools(_) => raise @types.EncodingError::TypeMismatch(Bool, Dictionary)
   }
   let width = dictionary_bit_width(distinct.value_count())
 
+  // The planners already refused any dictionary over the limit.
   let dictionary = Buffer()
   write_plain_values(distinct, dictionary)
   let dictionary_bytes = dictionary.to_bytes()
-  if dictionary_bytes.length() > max_dictionary_bytes {
-    return None
-  }
 
   let indices_buffer = Buffer()
   indices_buffer.write_byte(width.to_byte())

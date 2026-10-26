@@ -186,7 +186,95 @@ test "dictionary: an empty column owns an empty dictionary" {
 ///|
 test "planner keeps the first appearance of an extreme value" {
   let values = [-2147483648, 2147483647, 0, -1, -2147483648, 2147483647, 0, -1]
-  let (distinct, indices) = plan_int32(values)
+  let (distinct, indices) = plan_int32(values, 1048576).unwrap()
   assert_eq(distinct, [-2147483648, 2147483647, 0, -1])
   assert_eq(indices, [0L, 1L, 2L, 3L, 0L, 1L, 2L, 3L])
+}
+
+///|
+/// Whether the column keeps its dictionary under `limit` bytes.
+fn dictionary_fits(column : @types.ColBuf, limit : Int32) -> Bool {
+  let result = encode_dictionary(column, max_dictionary_bytes=limit) catch {
+    error => abort(@types.EncodingError::message(error))
+  }
+  match result {
+    Some(_) => true
+    None => false
+  }
+}
+
+///|
+test "dictionary budget is exact at the byte for every fixed-width type" {
+  // three distinct values: 12 bytes at four-byte width, 24 at eight
+  let ints = @types.ColBuf::Int32s([5, 6, 7, 5, 6, 7])
+  assert_eq(dictionary_fits(ints, 12), true)
+  assert_eq(dictionary_fits(ints, 11), false)
+  let longs = @types.ColBuf::Int64s([5L, 6L, 7L, 5L])
+  assert_eq(dictionary_fits(longs, 24), true)
+  assert_eq(dictionary_fits(longs, 23), false)
+  let floats = @types.ColBuf::Floats([Float(1.0), Float(2.0), Float(3.0)])
+  assert_eq(dictionary_fits(floats, 12), true)
+  assert_eq(dictionary_fits(floats, 11), false)
+  let doubles = @types.ColBuf::Doubles([1.0, 2.0, 3.0, 1.0])
+  assert_eq(dictionary_fits(doubles, 24), true)
+  assert_eq(dictionary_fits(doubles, 23), false)
+}
+
+///|
+test "dictionary budget rounds a limit that is not a whole number of values" {
+  let ints = @types.ColBuf::Int32s([1, 2])
+  // room for one four-byte entry only
+  assert_eq(dictionary_fits(ints, 7), false)
+  assert_eq(dictionary_fits(@types.ColBuf::Int32s([1, 1, 1]), 7), true)
+  assert_eq(dictionary_fits(@types.ColBuf::Int64s([1L, 2L]), 15), false)
+  assert_eq(dictionary_fits(@types.ColBuf::Int64s([1L, 2L]), 16), true)
+}
+
+///|
+test "dictionary budget counts the length prefix of byte arrays" {
+  // "ab" and "c" cost (4 + 2) + (4 + 1) = 11 bytes
+  let strings = @types.ColBuf::ByteArrays([b"ab", b"c", b"ab", b"c"])
+  assert_eq(dictionary_fits(strings, 11), true)
+  assert_eq(dictionary_fits(strings, 10), false)
+  // a duplicate costs nothing, an empty value costs its prefix
+  let empties = @types.ColBuf::ByteArrays([b"", b"", b"x"])
+  assert_eq(dictionary_fits(empties, 9), true)
+  assert_eq(dictionary_fits(empties, 8), false)
+}
+
+///|
+test "dictionary budget edge cases: empty column and zero limit" {
+  assert_eq(dictionary_fits(@types.ColBuf::Int32s([]), 0), true)
+  assert_eq(dictionary_fits(@types.ColBuf::ByteArrays([]), 0), true)
+  assert_eq(dictionary_fits(@types.ColBuf::Int32s([1]), 0), false)
+  assert_eq(dictionary_fits(@types.ColBuf::ByteArrays([b""]), 0), false)
+  assert_eq(dictionary_fits(@types.ColBuf::ByteArrays([b""]), 4), true)
+}
+
+///|
+test "dictionary budget stops a high-cardinality column early" {
+  let values : Array[Int32] = Array::makei(20000, fn(i) { i })
+  // 20000 distinct values need 80000 bytes; a 1000-byte budget refuses them
+  assert_eq(dictionary_fits(@types.ColBuf::Int32s(values), 1000), false)
+  assert_eq(dictionary_fits(@types.ColBuf::Int32s(values), 80000), true)
+  assert_eq(dictionary_fits(@types.ColBuf::Int32s(values), 79999), false)
+}
+
+///|
+test "dictionary under budget is unchanged by the early exit" {
+  let column = @types.ColBuf::Int32s([3, 1, 3, 2, 1, 3])
+  let result = encode_dictionary(column) catch {
+    error => abort(@types.EncodingError::message(error))
+  }
+  match result {
+    Some(encoding) => {
+      assert_eq(encoding.dictionary_size, 3)
+      assert_eq(encoding.bit_width, 2)
+      assert_eq(
+        encoding.dictionary,
+        b"\x03\x00\x00\x00\x01\x00\x00\x00\x02\x00\x00\x00",
+      )
+    }
+    None => abort("expected a dictionary")
+  }
 }
