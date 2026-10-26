@@ -35,7 +35,7 @@ consumer adoption and measurement-driven follow-through.
   `4 <= p <= 16`. The default is `p = 14`, which is `m = 16384` registers and a
   standard error of about 0.81%.
 - **Dense registers only.** One register per bucket, six bits of rank, held as
-  a machine word in memory and written as one byte each; the serialized sketch
+  one byte in memory and written as one byte each; the serialized sketch
   is exactly `m` register bytes plus the two header bytes. The sparse
   representation a production HLL++ carries is not in v1: it exists to make small
   cardinalities cheap, and it doubles the state machine. That is a scope

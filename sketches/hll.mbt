@@ -167,10 +167,12 @@ fn hll_alpha(precision : Int32) -> Double {
 
 ///|
 /// A dense HyperLogLog sketch: `m = 2^precision` registers of six bits, each
-/// holding the largest rank its bucket has seen.
+/// holding the largest rank its bucket has seen. A register lives in memory as
+/// one byte, the width the serialized form uses, so the state is `m` bytes
+/// rather than `m` machine words.
 pub struct HllSketch {
   priv precision : Int32
-  priv registers : Array[Int32]
+  priv registers : FixedArray[Byte]
 }
 
 ///|
@@ -183,13 +185,16 @@ pub fn HllSketch::new(
     raise @types.EncodingError::OutOfRange(precision.to_int64(), -1)
   }
   let count = 1 << precision
-  { precision, registers: Array::make(count, 0), }
+  { precision, registers: FixedArray::make(count, b'\x00'), }
 }
 
 ///|
 pub fn HllSketch::new_default() -> HllSketch {
   let count = 1 << HLL_DEFAULT_PRECISION
-  { precision: HLL_DEFAULT_PRECISION, registers: Array::make(count, 0), }
+  {
+    precision: HLL_DEFAULT_PRECISION,
+    registers: FixedArray::make(count, b'\x00'),
+  }
 }
 
 ///|
@@ -203,10 +208,35 @@ pub fn HllSketch::register_count(self : HllSketch) -> Int32 {
 }
 
 ///|
-/// The register array, for a rig that wants to look at the state rather than
-/// only at the estimate. Reading it does not copy.
+/// One register's rank, for a rig that wants to look at the state rather than
+/// only at the estimate. Reading it does not copy. An index outside
+/// `0 <= index < register_count()` is an error, not a panic.
+pub fn HllSketch::register(
+  self : HllSketch,
+  index : Int32,
+) -> Int32 raise @types.EncodingError {
+  if index < 0 || index >= self.registers.length() {
+    raise @types.EncodingError::OutOfRange(
+      index.to_int64(),
+      self.registers.length().to_int64().to_int(),
+    )
+  }
+  self.registers[index].to_int()
+}
+
+///|
+/// Every register's rank as a fresh `Int32` array. Until 0.1.1 this was a
+/// non-copying view of the state; registers are bytes now, so the accessor
+/// builds an array of the old element type (O(register_count) time and space
+/// per call) and its result no longer tracks later updates. Use `register` to
+/// read single ranks without that cost.
 pub fn HllSketch::registers(self : HllSketch) -> ArrayView[Int32] {
-  self.registers.exact_view()
+  let count = self.registers.length()
+  let ranks : Array[Int32] = Array::make(count, 0)
+  for index in 0..<count {
+    ranks[index] = self.registers[index].to_int()
+  }
+  ranks.exact_view()
 }
 
 ///|
@@ -228,8 +258,8 @@ fn HllSketch::absorb_hash(self : HllSketch, hash : UInt64) -> Unit {
   if rank > ceiling {
     rank = ceiling
   }
-  if rank > self.registers[index] {
-    self.registers[index] = rank
+  if rank > self.registers[index].to_int() {
+    self.registers[index] = rank.to_byte()
   }
 }
 
@@ -321,7 +351,8 @@ pub fn HllSketch::estimate(self : HllSketch) -> Double {
   let m = count.to_double()
   let mut inverse_sum = 0.0
   let mut empty = 0
-  for rank in self.registers {
+  for index in 0..<count {
+    let rank = self.registers[index].to_int()
     inverse_sum = inverse_sum + hll_inverse_pow(rank)
     if rank == 0 {
       empty += 1
@@ -362,7 +393,7 @@ pub fn HllSketch::to_bytes(self : HllSketch) -> Bytes {
   out[0] = HLL_VERSION.to_byte()
   out[1] = self.precision.to_byte()
   for index in 0..<count {
-    out[2 + index] = self.registers[index].to_byte()
+    out[2 + index] = self.registers[index]
   }
   Bytes::from_array(out.exact_view())
 }
@@ -390,10 +421,10 @@ pub fn HllSketch::from_bytes(
     raise @types.EncodingError::Truncated(2, count, bytes.length() - 2)
   }
   let ceiling = 64 - precision + 1
-  let registers : Array[Int32] = Array::make(count, 0)
+  let registers = FixedArray::make(count, b'\x00')
   for index in 0..<count {
-    let rank = bytes[2 + index].to_int()
-    if rank > ceiling {
+    let rank = bytes[2 + index]
+    if rank.to_int() > ceiling {
       raise @types.EncodingError::Corrupt(2 + index)
     }
     registers[index] = rank

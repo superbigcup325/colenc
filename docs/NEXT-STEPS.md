@@ -89,14 +89,17 @@ Entry points: `sketches/hll.mbt`, `sketches/pkg.generated.mbti`,
   belong to moonlake. The kernel hashes typed bytes; signed zero and NaN
   payloads remain distinct under the released format. SQL normalization must
   happen in the adapter and must not silently alter the library hash/version.
-- At precision 14, the 16,384 registers are machine words in memory, about
-  64 KiB of payload, although serialization uses one byte per register plus
-  its header. Report memory in addition to serialized size; many small groups
-  can make dense HLL more expensive than an exact set.
+- At precision 14 the 16,384 registers are now one byte each in memory (16 KiB
+  of payload, previously 64 KiB as machine words), matching the serialized form
+  plus its header. Report memory in addition to serialized size; many small
+  groups can still make dense HLL more expensive than an exact set, because
+  every group pays the full dense state.
 - Adoption is complete and the consumer has measured its per-group crossover.
-  K3 evaluates compact dense registers first, with public-accessor and v1-byte
-  compatibility recorded before implementation. Sparse registers or an exact
-  small-set transition need separate promotion, merge and estimator decisions.
+  Compact dense registers are implemented with the v1 bytes unchanged; the
+  public `registers()` accessor now returns a snapshot instead of a live view,
+  and `register(index)` reads one rank without copying. Sparse registers or an
+  exact small-set transition need separate promotion, merge and estimator
+  decisions.
   The library already accepts precision; a SQL precision option is consumer work.
 - Preserve the distinction between exact register merge laws and statistical
   estimator error. Agreement with another estimator is useful independent

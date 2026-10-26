@@ -43,7 +43,7 @@ test "the rank ceiling follows the precision" {
   // A hash of zero has no set bit among its rank bits, so the rank is the
   // ceiling: 64 - precision + 1.
   sketch.absorb_hash(0UL)
-  inspect(sketch.registers[0], content="61")
+  inspect(sketch.registers[0].to_int(), content="61")
 }
 
 ///|
@@ -58,4 +58,64 @@ test "the serialized form of a fixed sequence" {
     hll_hex(sketch.to_bytes()),
     content="010400000000010000000100000000020000",
   )
+}
+
+///|
+test "register reads one rank and reports a bad index as an error" {
+  let sketch = HllSketch::new(4) catch { _ => abort("precision 4 rejected") }
+  sketch.absorb_hash(0UL)
+  assert_eq(sketch.register(0) catch { _ => -1 }, 61)
+  assert_eq(sketch.register(15) catch { _ => -1 }, 0)
+  let mut raised = 0
+  ignore(
+    sketch.register(-1) catch {
+      _ => {
+        raised += 1
+        0
+      }
+    },
+  )
+  ignore(
+    sketch.register(16) catch {
+      _ => {
+        raised += 1
+        0
+      }
+    },
+  )
+  assert_eq(raised, 2)
+}
+
+///|
+test "registers is a snapshot of the byte state, not a live view" {
+  let sketch = HllSketch::new(4) catch { _ => abort("precision 4 rejected") }
+  let before = sketch.registers()
+  assert_eq(before.length(), 16)
+  sketch.absorb_hash(0UL)
+  assert_eq(before[0], 0)
+  assert_eq(sketch.registers()[0], 61)
+  // the in-memory state is one byte per register, as many as the precision says
+  assert_eq(sketch.registers.length(), 16)
+}
+
+///|
+test "every legal rank survives the byte state and the serialized round trip" {
+  // ranks 0 through the ceiling for each precision, written register by register
+  for precision in 4..<=16 {
+    let ceiling = 64 - precision + 1
+    let sketch = HllSketch::new(precision) catch {
+      _ => abort("precision rejected")
+    }
+    let count = sketch.register_count()
+    for index in 0..<count {
+      sketch.registers[index] = (index % (ceiling + 1)).to_byte()
+    }
+    let back = HllSketch::from_bytes(sketch.to_bytes()[:]) catch {
+      _ => abort("round trip rejected")
+    }
+    for index in 0..<count {
+      assert_eq(back.register(index) catch { _ => -1 }, index % (ceiling + 1))
+    }
+    assert_eq(back.to_bytes(), sketch.to_bytes())
+  }
 }

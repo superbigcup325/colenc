@@ -126,6 +126,12 @@ Deliver in stages:
 1. Record how `registers() -> ArrayView[Int32]`, which currently promises a
    non-copying view, remains compatible or migrates. Do not silently change its
    type or turn it into a copying accessor while claiming the old cost.
+   *Decision (implemented):* the signature is kept so existing callers compile,
+   but the result is now a snapshot built per call (O(register_count) time and
+   space) that no longer tracks later updates. The allocation-free read is the
+   new `register(index)`, which returns an error for an out-of-range index.
+   Callers that relied on a live view must re-read. This is documented on the
+   accessor and in the changelog.
 2. Evaluate byte registers with the same precision, hash, rank, estimator and
    v1 serialized bytes. Test all precisions and merge/serialization identities.
 3. Consider sparse-to-dense state only if the many-small-groups measurement

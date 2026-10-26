@@ -411,6 +411,23 @@ tracked documents ship in the release archive.
   measured bimodally on the Int32 one over eight rounds (about 2.7 to 2.9 ms in
   some, 3.1 in others, against a steady 2.7 for the baseline), so treat a
   difference under 15% there as unresolved layout noise, not as a result
+- **A register per machine word cost four times its payload** → `HllSketch`
+  held its registers in an `Array[Int32]` although a rank never exceeds 61 and
+  the serialized form already used one byte each, so a precision-14 sketch
+  carried 64 KiB of state for 16 KiB of information. The state is a
+  `FixedArray[Byte]` now; precision, hash, rank rule, estimator and the v1 bytes
+  are untouched (`check_hll.py`, the pinned serialization test and the packaged
+  consumer pass on all three targets). The public `registers()` accessor used to
+  hand out a non-copying `ArrayView[Int32]`; it keeps its type but now builds a
+  fresh array per call (a snapshot, O(register_count)), and `register(index)`
+  is the new allocation-free read, returning an error for a bad index. Native
+  release, medians of three: update with 1000 groups of 1000 values 40.7 -> 36.0
+  ms, estimate 124 -> 113 us, merge 57.5 -> 52.8 us, `to_bytes` 7.3 -> 5.9 us,
+  `from_bytes` 10.5 -> 7.4 us; one 1M-value group is unchanged (18.5 vs 18.4 ms).
+  Peak RSS of the grouped state (1000 groups x 1000 values) 96.7 -> 25.0 MB and
+  of 5000 groups x 10 values 428 -> 109 MB, which is the dense-state cost the
+  consumer measured, not a sparse-state result: small groups still pay a full
+  16 KiB each, so a sparse state stays a separate decision
 
 ## Command reference
 
