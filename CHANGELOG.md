@@ -6,10 +6,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-26
+
 ### Migration from 0.1.1
 
 Two changes are observable to code written against 0.1.1; serialized formats
-(page encodings, Roaring, HLL, t-digest and FSST frames) are unchanged.
+(page encodings, Roaring, HLL, t-digest and FSST frames) are unchanged. They ship
+in a 0.1.x release by the maintainer's decision, so a consumer that pins 0.1.1
+and upgrades should apply the two items below.
 
 - `encode_column` and `decode_column` refuse `Encoding::Roaring` with
   `Unsupported`. Use `encode_roaring_column` and `decode_roaring_column`, which

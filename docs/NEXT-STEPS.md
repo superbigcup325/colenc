@@ -46,15 +46,17 @@ That public branch may lag the local planning revision until it is pushed.
 
 ## Release order and ownership
 
-**Recommended next version: 0.2.0.** The generic facade now refuses Roaring,
-and `HllSketch::registers()` returns a snapshot rather than a live view. These
-are observable compatibility changes, even though the serialized formats stay
-the same. The version is a proposal; this planning update leaves `moon.mod` at
-0.1.1 and assigns no publication date.
+**Version: 0.1.2, by the maintainer's decision to stay on 0.1.x.** The generic
+facade now refuses Roaring, and `HllSketch::registers()` returns a snapshot
+rather than a live view. These are observable compatibility changes, even though
+the serialized formats stay the same; semantic versioning would call them a
+minor bump, so the changelog carries a migration section at the top of the
+release. The release is authorized.
 
 Follow L0, L1, L2, C1 and C2 in order. Prepare the source and evidence before
-the external release actions. This plan does not authorize push, tag, publish
-or a moonlake release. Keep conditional investigations out of this candidate.
+the external release actions. The maintainer authorized push, tag and publish of 0.1.2 and the
+moonlake upgrade; a moonlake release stays separate. Keep conditional
+investigations out of this candidate.
 
 | Package | Owner and delivery | Exit |
 |---|---|---|

@@ -31,20 +31,20 @@ byte-identical to CRoaring, including its container choices and the run
 optimisation, judged by pyroaring instead of parquet-cpp.
 
 Phase two also includes HyperLogLog and t-digest in the dedicated `sketches`
-package, published in 0.1.1. Their properties and statistical/empirical accuracy
+package, first published in 0.1.1. Their properties and statistical/empirical accuracy
 gates are recorded in [the sketch contracts](docs/SKETCHES.md). Release
 follow-through and conditional library work are planned in
 [the current next steps](docs/NEXT-STEPS.md).
 
-Unreleased `main` also includes the bitmap dispatch separation, PLAIN and
-dictionary optimizations, compact HLL state, bitmap query methods, t-digest
-compression work and reusable FSST models. The [changelog](CHANGELOG.md#unreleased)
-records the migration from 0.1.1; the API below describes this source tree.
+Version 0.1.2 adds the bitmap dispatch separation, PLAIN and dictionary
+optimizations, compact HLL state, bitmap query methods, t-digest compression
+work and reusable FSST models. The [changelog](CHANGELOG.md#012---2026-10-26)
+records the migration from 0.1.1.
 
 Integration with [moonlake](https://github.com/superbigcup325/moonlake) is
 merged on its `main`: Parquet decoding routed through colenc, a new write path,
 and the spill format re-encoded (40% smaller). The package is published as
-`superbigcup325/colenc@0.1.1` on mooncakes, so a consumer resolves it from the
+`superbigcup325/colenc@0.1.2` on mooncakes, so a consumer resolves it from the
 registry by version.
 
 ## Quick start
