@@ -1394,6 +1394,78 @@ fn hll_many_groups(groups : Int32, per_group : Int32) -> Double {
 }
 
 ///|
+/// A reproducible value stream for the t-digest cases: roughly uniform over
+/// 0..1048575, with repeats, so ties reach the sort.
+fn tdigest_value(index : Int32, salt : Int32) -> Double {
+  ((lcg(index + salt * 7919) & 0xFFFFF) / 3 * 3).to_double()
+}
+
+///|
+fn tdigest_filled(count : Int32, salt : Int32) -> @sketches.TDigest {
+  let digest = @sketches.TDigest::new_default()
+  for index in 0..<count {
+    digest.update(tdigest_value(index, salt)) catch {
+      _ => abort("update raised")
+    }
+  }
+  digest
+}
+
+///|
+/// Abort unless the median of a uniform-ish stream lands within five percent of
+/// the range's middle, so a broken compression pass cannot read as a fast one.
+fn tdigest_guard(digest : @sketches.TDigest) -> Unit {
+  let median = digest.quantile(0.5) catch { _ => abort("quantile raised") }
+  if median < 498073.0 || median > 550503.0 {
+    abort("t-digest median off: \{median}")
+  }
+}
+
+///|
+fn bench_tdigest(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
+  let n = 1000000
+  record(b, label("tdigest", "update-1m", n * 8, n), fn() {
+    let digest = tdigest_filled(n, 0)
+    tdigest_guard(digest)
+    sink.val = sink.val + digest.centroid_count()
+  })
+  let small = 20000
+  record(b, label("tdigest", "update-20k", small * 8, small), fn() {
+    let digest = tdigest_filled(small, 1)
+    sink.val = sink.val + digest.centroid_count()
+  })
+  let left = tdigest_filled(n, 2)
+  let right = tdigest_filled(n, 3)
+  left.compress()
+  right.compress()
+  tdigest_guard(left)
+  record(b, label("tdigest", "merge", 400 * 16, 400), fn() {
+    let merged = left.merge(right) catch { _ => abort("merge raised") }
+    sink.val = sink.val + merged.centroid_count()
+  })
+  let qs = Array::makei(99, fn(i) { (i + 1).to_double() / 100.0 })
+  record(b, label("tdigest", "quantile-x99", 400 * 16, 99), fn() {
+    let mut total = 0.0
+    for q in qs {
+      total = total + (left.quantile(q) catch { _ => abort("quantile raised") })
+    }
+    sink.val = sink.val + total.to_int()
+  })
+  let buffered = tdigest_filled(700, 4)
+  record(b, label("tdigest", "to_bytes", 400 * 16, 400), fn() {
+    sink.val = sink.val + left.to_bytes().length()
+  })
+  record(b, label("tdigest", "from_bytes", 400 * 16, 400), fn() {
+    let bytes = left.to_bytes()
+    let back = @sketches.TDigest::from_bytes(bytes[:]) catch {
+      _ => abort("from_bytes raised")
+    }
+    sink.val = sink.val + back.centroid_count()
+  })
+  sink.val = sink.val + buffered.centroid_count()
+}
+
+///|
 /// Parse a non-negative decimal argument; anything else aborts.
 fn parse_count(text : String) -> Int32 {
   let mut value = 0
@@ -1561,6 +1633,12 @@ fn main {
   let bencher = @bench.Bench()
   let sink = @ref.Ref(0)
   let argv = @env.args()
+  if argv.length() > 1 && argv[1] == "tdigest" {
+    bench_tdigest(bencher, sink)
+    println(bencher.dump_summaries())
+    println("sink=\{sink.val}")
+    return
+  }
   if argv.length() > 1 && argv[1] == "hll" {
     bench_hll(bencher, sink)
     println(bencher.dump_summaries())
