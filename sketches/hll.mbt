@@ -166,34 +166,177 @@ fn hll_alpha(precision : Int32) -> Double {
 }
 
 ///|
-/// A dense HyperLogLog sketch: `m = 2^precision` registers of six bits, each
-/// holding the largest rank its bucket has seen. A register lives in memory as
-/// one byte, the width the serialized form uses, so the state is `m` bytes
-/// rather than `m` machine words.
+/// A HyperLogLog sketch of one precision, held in whichever of two
+/// representations its current cardinality makes cheaper. Both hold the same
+/// register vector: the dense form is `m = 2^precision` one-byte registers, and
+/// the sparse form stores only the registers that are not zero, sorted by
+/// register index. The estimator, the hash, the rank rule and the serialized
+/// bytes do not depend on which one is in use; the choice is invisible to
+/// everything outside this file.
 pub struct HllSketch {
   priv precision : Int32
-  priv registers : FixedArray[Byte]
+  priv mut registers : HllRegisters
+}
+
+///|
+/// The register vector of a sketch. A sparse entry is one word: `index << 6 |
+/// rank`, which fits in 22 bits because an index is at most 16 and a rank at most
+/// six. One word rather than three packed bytes keeps sorted insertion a word move
+/// and the binary search a word compare, and a live entry still costs four bytes
+/// against the dense array's one per register — paid only for the registers that
+/// are set. `count` is how many slots are live; the array grows by doubling below
+/// `hll_sparse_limit`.
+priv struct HllSparse {
+  mut count : Int32
+  mut entries : FixedArray[UInt32]
+}
+
+///|
+priv enum HllRegisters {
+  Sparse(HllSparse)
+  Dense(FixedArray[Byte])
+}
+
+///|
+/// The rank field's width at the bottom of a sparse entry.
+const HLL_SPARSE_RANK_BITS : Int32 = 6
+
+///|
+/// The ceiling on live entries in a sparse state. The promotion is what bounds
+/// the per-group cost from above, and the count is what bounds the update cost:
+/// insertion is a sorted-array shift, so a larger cap buys memory for shifting
+/// time. At the default precision the whole sparse state is at most 512 bytes
+/// against the dense form's 16,384.
+const HLL_SPARSE_MAX : Int32 = 128
+
+///|
+/// How many live entries a sparse state may hold before it promotes to dense.
+/// The empty-register count of an HLL makes small groups overwhelmingly sparse,
+/// so this is the switch that turns "one sketch per group" from 16 KiB of resident
+/// registers into a few hundred bytes. It is capped at an eighth of the dense
+/// array as well, so a sparse state can never be as large as the form it replaces
+/// (precision 9 gets 64 entries, and everything from precision 10 up gets 128).
+/// Below precision 9 the dense state is at most 512 bytes, so a second
+/// representation would only add work and those sketches never leave it.
+fn hll_sparse_limit(precision : Int32) -> Int32 {
+  if precision < 9 {
+    0
+  } else {
+    let eighth = (1 << precision) / 8
+    if eighth < HLL_SPARSE_MAX {
+      eighth
+    } else {
+      HLL_SPARSE_MAX
+    }
+  }
+}
+
+///|
+/// The smallest sparse state: eight slots, one word each.
+fn hll_sparse_new() -> HllSparse {
+  { count: 0, entries: FixedArray::make(8, 0U), }
+}
+
+///|
+fn HllSparse::capacity(self : HllSparse) -> Int32 {
+  self.entries.length()
+}
+
+///|
+fn HllSparse::index(self : HllSparse, slot : Int32) -> Int32 {
+  (self.entries[slot] >> HLL_SPARSE_RANK_BITS).reinterpret_as_int()
+}
+
+///|
+fn HllSparse::rank(self : HllSparse, slot : Int32) -> Int32 {
+  (self.entries[slot] & 0x3FU).reinterpret_as_int()
+}
+
+///|
+fn HllSparse::write(
+  self : HllSparse,
+  slot : Int32,
+  index : Int32,
+  rank : Int32,
+) -> Unit {
+  self.entries[slot] = (index.reinterpret_as_uint() << HLL_SPARSE_RANK_BITS) |
+    rank.reinterpret_as_uint()
+}
+
+///|
+/// The entry holding `index`, or the slot it would be inserted at. Entries are
+/// kept sorted by index so a repeated value — the common case, since an HLL is
+/// fed the same few values again and again — costs a binary search rather than a
+/// scan of the whole sparse state.
+fn HllSparse::find(self : HllSparse, index : Int32) -> (Bool, Int32) {
+  let mut low = 0
+  let mut high = self.count
+  while low < high {
+    let mid = (low + high) / 2
+    let at = (self.entries[mid] >> HLL_SPARSE_RANK_BITS).reinterpret_as_int()
+    if at == index {
+      return (true, mid)
+    }
+    if at < index {
+      low = mid + 1
+    } else {
+      high = mid
+    }
+  }
+  (false, low)
+}
+
+///|
+fn HllSparse::insert(
+  self : HllSparse,
+  at : Int32,
+  index : Int32,
+  rank : Int32,
+) -> Unit {
+  if self.count == self.capacity() {
+    let grown = FixedArray::make(self.capacity() * 2, 0U)
+    for offset in 0..<self.count {
+      grown[offset] = self.entries[offset]
+    }
+    self.entries = grown
+  }
+  let mut slot = self.count
+  while slot > at {
+    self.entries[slot] = self.entries[slot - 1]
+    slot -= 1
+  }
+  self.write(at, index, rank)
+  self.count += 1
 }
 
 ///|
 /// A sketch of the given precision. The precision fixes the register count and
-/// therefore the memory (one register per id bucket) and the standard error.
+/// therefore the standard error, and the dense form's size; the sketch starts in
+/// the representation that precision allows, which is usually the sparse one.
 pub fn HllSketch::new(
   precision : Int32,
 ) -> HllSketch raise @types.EncodingError {
   if precision < HLL_MIN_PRECISION || precision > HLL_MAX_PRECISION {
     raise @types.EncodingError::OutOfRange(precision.to_int64(), -1)
   }
-  let count = 1 << precision
-  { precision, registers: FixedArray::make(count, b'\x00'), }
+  { precision, registers: hll_fresh_registers(precision), }
+}
+
+///|
+/// The state a new sketch of this precision starts in.
+fn hll_fresh_registers(precision : Int32) -> HllRegisters {
+  if hll_sparse_limit(precision) == 0 {
+    Dense(FixedArray::make(1 << precision, b'\x00'))
+  } else {
+    Sparse(hll_sparse_new())
+  }
 }
 
 ///|
 pub fn HllSketch::new_default() -> HllSketch {
-  let count = 1 << HLL_DEFAULT_PRECISION
   {
     precision: HLL_DEFAULT_PRECISION,
-    registers: FixedArray::make(count, b'\x00'),
+    registers: hll_fresh_registers(HLL_DEFAULT_PRECISION),
   }
 }
 
@@ -204,24 +347,98 @@ pub fn HllSketch::precision(self : HllSketch) -> Int32 {
 
 ///|
 pub fn HllSketch::register_count(self : HllSketch) -> Int32 {
-  self.registers.length()
+  match self.registers {
+    Dense(dense) => dense.length()
+    Sparse(_) => 1 << self.precision
+  }
+}
+
+///|
+/// Every register's rank, in index order, however it is stored. Internal
+/// readers (the estimator, `to_bytes`, `registers`) share this one accessor so a
+/// representation cannot answer differently from its own serialized form.
+fn HllSketch::rank_at(self : HllSketch, index : Int32) -> Int32 {
+  match self.registers {
+    Dense(dense) => dense[index].to_int()
+    Sparse(sparse) =>
+      match sparse.find(index) {
+        (true, slot) => sparse.rank(slot)
+        (false, _) => 0
+      }
+  }
+}
+
+///|
+/// The same, for a caller that already knows the index is in range: the sparse
+/// form pays one binary search, the dense form one load.
+fn HllSketch::note_rank(self : HllSketch, index : Int32, rank : Int32) -> Unit {
+  match self.registers {
+    Dense(dense) =>
+      if rank > dense[index].to_int() {
+        dense[index] = rank.to_byte()
+      }
+    Sparse(sparse) =>
+      match sparse.find(index) {
+        (true, slot) =>
+          if rank > sparse.rank(slot) {
+            sparse.write(slot, index, rank)
+          }
+        (false, slot) =>
+          if sparse.count >= hll_sparse_limit(self.precision) {
+            // Promote, then let the dense arm absorb this update: the promoted
+            // state and the serialized bytes an outside reader sees are the same
+            // either way.
+            let dense = self.promote()
+            if rank > dense[index].to_int() {
+              dense[index] = rank.to_byte()
+            }
+          } else {
+            sparse.insert(slot, index, rank)
+          }
+      }
+  }
+}
+
+///|
+/// The sparse state of this sketch expanded to the dense array, which is also
+/// what it is replaced with: called from the update path when a group's
+/// cardinality outgrows the sparse form.
+fn HllSketch::promote(self : HllSketch) -> FixedArray[Byte] {
+  let count = 1 << self.precision
+  let dense = FixedArray::make(count, b'\x00')
+  match self.registers {
+    Sparse(sparse) => {
+      for slot in 0..<sparse.count {
+        dense[sparse.index(slot)] = sparse.rank(slot).to_byte()
+      }
+      self.registers = Dense(dense)
+    }
+    Dense(current) => {
+      for index in 0..<count {
+        dense[index] = current[index]
+      }
+      self.registers = Dense(dense)
+    }
+  }
+  dense
 }
 
 ///|
 /// One register's rank, for a rig that wants to look at the state rather than
-/// only at the estimate. Reading it does not copy. An index outside
-/// `0 <= index < register_count()` is an error, not a panic.
+/// only at the estimate. An index outside `0 <= index < register_count()` is an
+/// error, not a panic.
 pub fn HllSketch::register(
   self : HllSketch,
   index : Int32,
 ) -> Int32 raise @types.EncodingError {
-  if index < 0 || index >= self.registers.length() {
+  let count = self.register_count()
+  if index < 0 || index >= count {
     raise @types.EncodingError::OutOfRange(
       index.to_int64(),
-      self.registers.length().to_int64().to_int(),
+      count.to_int64().to_int(),
     )
   }
-  self.registers[index].to_int()
+  self.rank_at(index)
 }
 
 ///|
@@ -231,10 +448,10 @@ pub fn HllSketch::register(
 /// per call) and its result no longer tracks later updates. Use `register` to
 /// read single ranks without that cost.
 pub fn HllSketch::registers(self : HllSketch) -> ArrayView[Int32] {
-  let count = self.registers.length()
+  let count = self.register_count()
   let ranks : Array[Int32] = Array::make(count, 0)
   for index in 0..<count {
-    ranks[index] = self.registers[index].to_int()
+    ranks[index] = self.rank_at(index)
   }
   ranks.exact_view()
 }
@@ -258,9 +475,7 @@ fn HllSketch::absorb_hash(self : HllSketch, hash : UInt64) -> Unit {
   if rank > ceiling {
     rank = ceiling
   }
-  if rank > self.registers[index].to_int() {
-    self.registers[index] = rank.to_byte()
-  }
+  self.note_rank(index, rank)
 }
 
 ///|
@@ -332,12 +547,53 @@ pub fn HllSketch::merge(
   if self.precision != other.precision {
     raise @types.EncodingError::InvalidTag(other.precision.to_int64().to_int())
   }
-  let registers = self.registers.copy()
-  let count = registers.length()
-  for index in 0..<count {
-    let theirs = other.registers[index]
-    if theirs > registers[index] {
-      registers[index] = theirs
+  let merged = self.copy()
+  // Dense against dense is the case a large merge actually hits, and it is the
+  // same loop it always was. Walking the other sketch's live registers instead of
+  // all `m` of them is what keeps the union of two sparse sketches sparse.
+  match (merged.registers, other.registers) {
+    (Dense(mine), Dense(theirs)) =>
+      for index in 0..<theirs.length() {
+        if theirs[index] > mine[index] {
+          mine[index] = theirs[index]
+        }
+      }
+    _ =>
+      match other.registers {
+        Dense(dense) =>
+          for index in 0..<dense.length() {
+            let theirs = dense[index].to_int()
+            if theirs > 0 {
+              merged.note_rank(index, theirs)
+            }
+          }
+        Sparse(sparse) =>
+          for slot in 0..<sparse.count {
+            merged.note_rank(sparse.index(slot), sparse.rank(slot))
+          }
+      }
+  }
+  merged
+}
+
+///|
+/// A deep copy in the state the source is in: a result never aliases its input,
+/// and copying a sparse sketch does not expand it to dense.
+fn HllSketch::copy(self : HllSketch) -> HllSketch {
+  let registers = match self.registers {
+    Dense(dense) => {
+      let copy = FixedArray::make(dense.length(), b'\x00')
+      for index in 0..<dense.length() {
+        copy[index] = dense[index]
+      }
+      Dense(copy)
+    }
+    Sparse(sparse) => {
+      let copy = FixedArray::make(sparse.entries.length(), 0U)
+      for offset in 0..<sparse.entries.length() {
+        copy[offset] = sparse.entries[offset]
+      }
+      Sparse({ count: sparse.count, entries: copy, })
     }
   }
   { precision: self.precision, registers, }
@@ -347,15 +603,28 @@ pub fn HllSketch::merge(
 /// The cardinality estimate, with linear counting over the empty registers at
 /// the small end and the logarithmic correction at the large end.
 pub fn HllSketch::estimate(self : HllSketch) -> Double {
-  let count = self.registers.length()
+  let count = self.register_count()
   let m = count.to_double()
   let mut inverse_sum = 0.0
   let mut empty = 0
-  for index in 0..<count {
-    let rank = self.registers[index].to_int()
-    inverse_sum = inverse_sum + hll_inverse_pow(rank)
-    if rank == 0 {
-      empty += 1
+  match self.registers {
+    Dense(dense) =>
+      for index in 0..<count {
+        let rank = dense[index].to_int()
+        inverse_sum = inverse_sum + hll_inverse_pow(rank)
+        if rank == 0 {
+          empty += 1
+        }
+      }
+    Sparse(sparse) => {
+      empty = count - sparse.count
+      // A zero register contributes 2^-0 = 1 to the sum, which is why the empty
+      // registers are seeded here rather than skipped: the estimator has to see
+      // the same vector the dense form would hold.
+      inverse_sum = empty.to_double()
+      for slot in 0..<sparse.count {
+        inverse_sum = inverse_sum + hll_inverse_pow(sparse.rank(slot))
+      }
     }
   }
   let raw = hll_alpha(self.precision) * m * m / inverse_sum
@@ -388,12 +657,19 @@ fn hll_inverse_pow(rank : Int32) -> Double {
 /// The serialized form: version byte, precision byte, then one byte per
 /// register, little-endian throughout.
 pub fn HllSketch::to_bytes(self : HllSketch) -> Bytes {
-  let count = self.registers.length()
+  let count = self.register_count()
   let out = FixedArray::make(2 + count, b'\x00')
   out[0] = HLL_VERSION.to_byte()
   out[1] = self.precision.to_byte()
-  for index in 0..<count {
-    out[2 + index] = self.registers[index]
+  match self.registers {
+    Dense(dense) =>
+      for index in 0..<count {
+        out[2 + index] = dense[index]
+      }
+    Sparse(sparse) =>
+      for slot in 0..<sparse.count {
+        out[2 + sparse.index(slot)] = sparse.rank(slot).to_byte()
+      }
   }
   Bytes::from_array(out.exact_view())
 }
@@ -421,13 +697,32 @@ pub fn HllSketch::from_bytes(
     raise @types.EncodingError::Truncated(2, count, bytes.length() - 2)
   }
   let ceiling = 64 - precision + 1
+  let limit = hll_sparse_limit(precision)
+  let mut live = 0
+  // One pass builds the dense array and counts the live registers; a state small
+  // enough to be sparse is then re-read into that form, so the common full case
+  // costs exactly what it did before there was a second representation.
   let registers = FixedArray::make(count, b'\x00')
   for index in 0..<count {
     let rank = bytes[2 + index]
     if rank.to_int() > ceiling {
       raise @types.EncodingError::Corrupt(2 + index)
     }
+    if rank != b'\x00' {
+      live += 1
+    }
     registers[index] = rank
   }
-  { precision, registers, }
+  if limit > 0 && live <= limit {
+    let sparse = hll_sparse_new()
+    for index in 0..<count {
+      let rank = bytes[2 + index]
+      if rank != b'\x00' {
+        sparse.insert(sparse.count, index, rank.to_int())
+      }
+    }
+    { precision, registers: Sparse(sparse), }
+  } else {
+    { precision, registers: Dense(registers), }
+  }
 }

@@ -34,12 +34,22 @@ consumer adoption and measurement-driven follow-through.
 - `p`, the log2 of the register count, is chosen per sketch and must satisfy
   `4 <= p <= 16`. The default is `p = 14`, which is `m = 16384` registers and a
   standard error of about 0.81%.
-- **Dense registers only.** One register per bucket, six bits of rank, held as
-  one byte in memory and written as one byte each; the serialized sketch
-  is exactly `m` register bytes plus the two header bytes. The sparse
-  representation a production HLL++ carries is not in v1: it exists to make small
-  cardinalities cheap, and it doubles the state machine. That is a scope
-  decision, recorded here rather than discovered later.
+- **Two states, one format.** A register holds six bits of rank and is written as
+  one byte, so the serialized sketch is exactly `m` register bytes plus the two
+  header bytes whatever the sketch holds in memory. In memory a sketch is either
+  dense (that same `m`-byte array) or sparse (a sorted array of live entries, one
+  word each: the bucket index above six bits of rank). A sketch starts sparse and
+  promotes to dense once it carries more than `min(128, m / 8)` live registers —
+  128 at the default precision, 64 at precision 9, and never below precision 9,
+  where the dense array is small enough that a second state machine would only add
+  work. Promotion is one-way and invisible: the estimate, the merge result and
+  every serialized byte are identical in both forms.
+  This was a **dense-only v1** first, on the argument that sparse state doubles the
+  state machine for a benefit nobody had measured. The consumer then measured it
+  (`H0` in [next steps](NEXT-STEPS.md)): one sketch per group at 16 KiB of
+  registers, 405 MB of peak RSS for a grouped `approx_count_distinct` over 20,000
+  ten-value groups. The cost column below is why the decision changed, and the
+  scope it replaces stays recorded here rather than silently edited away.
 - The estimator is the classical HyperLogLog one with the small-range (linear
   counting) and large-range corrections. **No empirically fitted bias tables**:
   those are calibrated against a training corpus, and colenc cannot honestly
@@ -82,10 +92,60 @@ The sketch lives in its own package and exports:
 - `to_bytes` / `from_bytes`, with every malformed input a typed error carrying
   an offset, never a panic
 
+### State cost
+
+A sketch is cheap to hold only if the group is large; that is the whole reason the
+consumer entertained a sparse form. Measured with `harness/hll_state.py` against a
+control build of the dense-only 0.1.2, native release, peak RSS of an isolated
+child that builds the sketches, fills each group with distinct `Int64` values and
+estimates every one (`--repeats 2`):
+
+| groups × distinct | values | dense | sparse | dense wall | sparse wall |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1000 × 10 | 10,000 | 24.5 MB | 12.6 MB | 13.4 ms | 1.6 ms |
+| 1000 × 100 | 100,000 | 24.5 MB | 12.6 MB | 14.7 ms | 9.3 ms |
+| 1000 × 128 | 128,000 | 24.5 MB | 12.5 MB | 15.9 ms | 13.4 ms |
+| 1000 × 200 | 200,000 | 24.6 MB | 24.4 MB | 17.8 ms | 27.0 ms |
+| 1000 × 500 | 500,000 | 24.4 MB | 24.5 MB | 24.8 ms | 34.8 ms |
+| 1000 × 1000 | 1,000,000 | 24.4 MB | 24.4 MB | 42.1 ms | 50.7 ms |
+| 5000 × 10 | 50,000 | 106.5 MB | 12.5 MB | 56.5 ms | 4.1 ms |
+| 20000 × 10 | 200,000 | 404.9 MB | 12.6 MB | 259.4 ms | 16.7 ms |
+| 50000 × 10 | 500,000 | 992.4 MB | 12.6 MB | 704.3 ms | 34.2 ms |
+| 20000 × 1 | 20,000 | 405.0 MB | 12.6 MB | 241.7 ms | 2.8 ms |
+| 1 × 1000000 | 1,000,000 | 12.5 MB | 12.6 MB | 21.2 ms | 22.0 ms |
+
+The shape that motivated it — many small groups — drops by up to 79× in resident
+memory and by up to 20× in wall time, because the dense state is paged in per group
+whether the group has one value or a thousand. A group that promotes costs the
+sorted-array shift on the way there and nothing after: `1000 × 1000` pays 8.6 ms
+more, `1000 × 200` 9.2 ms more, and `1 × 1000000` — one promotion, then a
+million dense updates — is unchanged.
+
+The same trade in the per-operation rig (`harness/perf hll`, native release,
+medians of seven runs, against the dense-only control):
+
+| case | dense | sparse | delta |
+| --- | ---: | ---: | ---: |
+| update, 1M values in one group | 19.14 ms | 19.81 ms | +3.5% |
+| update, 1000 groups × 1000 values | 38.43 ms | 47.39 ms | +23.3% |
+| estimate, full sketch | 121 ns | 124 ns | +2.2% |
+| merge, two full sketches | 56.8 ns | 54.5 ns | −4.1% |
+| to_bytes, full sketch | 6.31 µs | 5.93 µs | −6.0% |
+| from_bytes, full sketch | 7.99 µs | 9.84 µs | +23.1% |
+
+Two of those deserve their reason. `update … 1000 groups` is the worst case for the
+representation: every group holds 128 entries in sorted order before it promotes, so
+it pays the shift 1000 times. It is bounded work — 128 entries per group — and it
+buys the small-group rows above. `from_bytes` pays one extra branch per register to
+count the live ones, because the state it rebuilds has to match the state it wrote.
+
 ### Serialization
 
 A **colenc-owned** format: a version byte, the precision, and the register array
-little-endian. It does not follow a named reference format, because the
+little-endian. The bytes describe the register vector, not the representation it
+is held in, so a sparse sketch serializes to the full array and a deserialized
+sketch takes the state its contents justify; the format did not change when the
+sparse state landed, and the pinned byte stream and its checksum are the same. It does not follow a named reference format, because the
 reference implementation's serialization is its own state machine (HLL++ with a
 sparse mode and an ordered sparse/dense toggle) and copying it would buy
 compatibility nobody asks for. Estimate agreement with that implementation must
@@ -181,6 +241,53 @@ Four groups, all of which must pass before the sketch is called done.
 - `quantile(q)` returns the minimum exactly for `q <= 0` and the maximum exactly
   for `q >= 1`; otherwise it interpolates linearly between the two centroids
   whose positions bracket `q`, clamping to the extremes outside them.
+
+### State cost
+
+A sketch is cheap to hold only if the group is large; that is the whole reason the
+consumer entertained a sparse form. Measured with `harness/hll_state.py` against a
+control build of the dense-only 0.1.2, native release, peak RSS of an isolated
+child that builds the sketches, fills each group with distinct `Int64` values and
+estimates every one (`--repeats 2`):
+
+| groups × distinct | values | dense | sparse | dense wall | sparse wall |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1000 × 10 | 10,000 | 24.5 MB | 12.6 MB | 13.4 ms | 1.6 ms |
+| 1000 × 100 | 100,000 | 24.5 MB | 12.6 MB | 14.7 ms | 9.3 ms |
+| 1000 × 128 | 128,000 | 24.5 MB | 12.5 MB | 15.9 ms | 13.4 ms |
+| 1000 × 200 | 200,000 | 24.6 MB | 24.4 MB | 17.8 ms | 27.0 ms |
+| 1000 × 500 | 500,000 | 24.4 MB | 24.5 MB | 24.8 ms | 34.8 ms |
+| 1000 × 1000 | 1,000,000 | 24.4 MB | 24.4 MB | 42.1 ms | 50.7 ms |
+| 5000 × 10 | 50,000 | 106.5 MB | 12.5 MB | 56.5 ms | 4.1 ms |
+| 20000 × 10 | 200,000 | 404.9 MB | 12.6 MB | 259.4 ms | 16.7 ms |
+| 50000 × 10 | 500,000 | 992.4 MB | 12.6 MB | 704.3 ms | 34.2 ms |
+| 20000 × 1 | 20,000 | 405.0 MB | 12.6 MB | 241.7 ms | 2.8 ms |
+| 1 × 1000000 | 1,000,000 | 12.5 MB | 12.6 MB | 21.2 ms | 22.0 ms |
+
+The shape that motivated it — many small groups — drops by up to 79× in resident
+memory and by up to 20× in wall time, because the dense state is paged in per group
+whether the group has one value or a thousand. A group that promotes costs the
+sorted-array shift on the way there and nothing after: `1000 × 1000` pays 8.6 ms
+more, `1000 × 200` 9.2 ms more, and `1 × 1000000` — one promotion, then a
+million dense updates — is unchanged.
+
+The same trade in the per-operation rig (`harness/perf hll`, native release,
+medians of seven runs, against the dense-only control):
+
+| case | dense | sparse | delta |
+| --- | ---: | ---: | ---: |
+| update, 1M values in one group | 19.14 ms | 19.81 ms | +3.5% |
+| update, 1000 groups × 1000 values | 38.43 ms | 47.39 ms | +23.3% |
+| estimate, full sketch | 121 ns | 124 ns | +2.2% |
+| merge, two full sketches | 56.8 ns | 54.5 ns | −4.1% |
+| to_bytes, full sketch | 6.31 µs | 5.93 µs | −6.0% |
+| from_bytes, full sketch | 7.99 µs | 9.84 µs | +23.1% |
+
+Two of those deserve their reason. `update … 1000 groups` is the worst case for the
+representation: every group holds 128 entries in sorted order before it promotes, so
+it pays the shift 1000 times. It is bounded work — 128 entries per group — and it
+buys the small-group rows above. `from_bytes` pays one extra branch per register to
+count the live ones, because the state it rebuilds has to match the state it wrote.
 
 ### Serialization
 

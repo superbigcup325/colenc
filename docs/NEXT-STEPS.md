@@ -7,6 +7,32 @@ project's decision. The [implementation record](OPTIMIZATION-PLAN.md) preserves
 the completed kernel tasks; the [roadmap](ROADMAP.md) and
 [sketch contracts](SKETCHES.md) retain their acceptance definitions.
 
+## Current work order (2026-10-26)
+
+The upstream check found colenc `main` at `e08396e` with
+[CI passing](https://github.com/superbigcup325/colenc/actions/runs/40332052995)
+and moonlake `main` at `a0c7628` with
+[CI passing](https://github.com/superbigcup325/moonlake/actions/runs/40330396420).
+The dependency pair at `4de8077` also passed a
+[dispatched nightly](https://github.com/superbigcup325/moonlake/actions/runs/40329274231)
+and its pages workflow deployed. Neither repository has an open issue or pull
+request at this snapshot. These are source and workflow checks; moonlake's
+latest release remains 0.5.0, and its 0.6.0 registry consumer and hosted-page
+acceptance are still separate release checks.
+
+| Order | Owner and delivery | Exit |
+|---|---|---|
+| 1 | moonlake: finish the 0.6.0 release preparation | Keep the accepted scope frozen, reconcile current documentation, inspect the final archive and record its source/toolchain identity. Tagging, publication and the release dry run follow that project's release authorization; the registry consumer and hosted-version check follow the relevant external action. No new colenc release is a prerequisite |
+| 2 | moonlake H0: refresh grouped HLL costs against colenc 0.1.2 | Record SQL peak RSS and time against decode-only and exact-count controls, using few large groups and many small groups, including duplicates and NULLs. The current register payload is 16 KiB per p14 sketch; the 0.1.1 consumer's 64 KiB payload and approximately 750-value crossover are historical. Measure the new crossover rather than dividing the old one by four |
+| 3 | moonlake E5: remove input collection before budgeted GROUP BY | First record partition-buffer accounting, skew behavior, ownership and the policy for a group whose exact state exceeds the budget. Then feed scan batches into bounded partition buffers and verify exact answers, cleanup and resource use. This is the next proposed implementation after 0.6.0, with no kernel dependency |
+| 4 | colenc: promote one conditional investigation only when its entry evidence exists | H0 showed the remaining state cost and the sparse HLL state is now in the tree, awaiting a release decision rather than a measurement; FSST reuse waits for repeated small batches with measurable training cost; I0 waits for immutable row identity and a repeated-predicate workload. A measured negative result closes the investigation |
+
+The consumer owns the detailed
+[delivery sequence](https://github.com/superbigcup325/moonlake/blob/main/docs/ROADMAP.md#next-delivery-after-colenc-012).
+H0 and E5 address different costs: compact sketch state cannot remove retained
+scan input, and streaming scan input cannot bound the number or size of group
+states. Do not bundle speculative kernels into moonlake's accepted release.
+
 ## Final evidence
 
 | Item | State |
@@ -47,7 +73,7 @@ out of this candidate.
 | L1 | colenc: versioned candidate and artifact | **Done** at `b1b2b7f`. Manifest, changelog, README, AGENTS.md, roadmap and this document name 0.1.2; the quartet, three targets, every harness and the archive consumer passed; `moon package --list` carries no local-only path; source, archive SHA-256 and toolchain are in the table above |
 | L2 | colenc: publish and verify the registry copy | **Done**. CI green before the tag, `moon publish --dry-run` returned `202 Accepted`, the publish returned `Server status: 200 OK`, tag `v0.1.2` and its release notes identify `b1b2b7f`, and the registry consumer passed on three targets with fresh caches |
 | C1 | moonlake: consume the registry version, repeat acceptance | **Done** at `95c42c6`, verification §41 there. Registry resolution without an override; 348 wasm-gc / 361 native / 348 js tests, the 33 goldens on three paths, the window and correlation differentials, the pushdown fuzz, page fixtures, CLI, spill, writer interop, corpus 17 decoded / 51 refused / 0 failing, 75 unit tests, the 2.41 GB write, Chromium 16/16 and the archive consumer |
-| C2 | moonlake: final consumer baseline and release evidence | **Done** at `4de8077`, verification §41 there. Three alternating candidate/control pairs with the oracles green and identical output hashes, both records committed under `harness/baseline/`, the table in `docs/bench-baseline.md`, and the unresolved Parquet cases reported as unresolved rather than picked. Grouped HLL memory and the exact-state crossover stay as measured in the sketch contract |
+| C2 | moonlake: final consumer baseline and release evidence | **Done** at `4de8077`, verification §41 there. Three alternating candidate/control pairs with the oracles green and identical output hashes, both records committed under `harness/baseline/`, the table in `docs/bench-baseline.md`, and the unresolved Parquet cases reported as unresolved rather than picked. Those cases do not re-measure grouped SQL HLL memory or its crossover against exact state; H0 owns that refresh |
 
 The acceptance definitions L1 carried are unchanged: `moon info`, `moon fmt`,
 `moon check --deny-warn`, `moon test` on native, wasm-gc and js, every harness
@@ -63,10 +89,10 @@ deliveries shipped in 0.1.2.
 
 | Task | Implemented delivery | Remaining boundary |
 |---|---|---|
-| K0 | Dedicated Roaring facade; generic dispatch refuses the set encoding | Migration and registry-consumer confirmation |
-| [K1](OPTIMIZATION-PLAN.md#k1-plain-word-loads) | Validated word loads for Int64/Double and Int32/Float, with overflow-safe count checks | Consumer Parquet/spill measurements; no SIMD or unpacker rewrite is implied |
+| K0 | Dedicated Roaring facade; generic dispatch refuses the set encoding | Migration and registry-consumer confirmation are complete; retain the dedicated-entry-point contract |
+| [K1](OPTIMIZATION-PLAN.md#k1-plain-word-loads) | Validated word loads for Int64/Double and Int32/Float, with overflow-safe count checks | The consumer's short Parquet pair is unresolved; no SIMD or unpacker rewrite is implied |
 | [K2](OPTIMIZATION-PLAN.md#k2-dictionary-budget-checked-during-construction) | Stop dictionary construction when its payload would exceed the limit | Accepted bytes and `None` fallback remain unchanged |
-| [K3](OPTIMIZATION-PLAN.md#k3-compact-hll-state) | Dense byte registers, snapshot accessor and allocation-free `register(index)` | Sparse state and the refreshed SQL crossover remain separate work |
+| [K3](OPTIMIZATION-PLAN.md#k3-compact-hll-state) | Dense byte registers, snapshot accessor and allocation-free `register(index)` | Sparse state is delivered in the tree and unreleased; the refreshed SQL crossover stays with H0 |
 | [K4](OPTIMIZATION-PLAN.md#k4-roaring-query-apis) | Intersection count, overlap predicate and stateless `ids_after` batches | I0 still owns engine integration and selection semantics |
 | [K5](OPTIMIZATION-PLAN.md#k5-t-digest-compression-and-batch-quantiles) | Merge the sorted buffer with ordered centroids and cache lower scale values | Batch quantiles were deferred after measurement; k1 and accuracy ceilings remain unchanged |
 | [K6](OPTIMIZATION-PLAN.md#k6-reusable-fsst-model) | Immutable reusable model; every batch retains the existing self-contained frame | Caller-owned lifetime and drift policy; no shared-table frame or model export format |
@@ -78,7 +104,7 @@ its workload demonstrates the need; no additional kernel blocks L0 to C2.
 
 | Priority | Investigation and owner | Entry evidence | Delivery and stop condition |
 |---|---|---|---|
-| 1 | Sparse HLL state, colenc with a moonlake workload | Many small groups remain a material memory cost after compact-state adoption. The library's dense control still reaches 109 MB peak RSS for 5000 groups of 10 values | Compare dense state with a sparse representation of the same registers; decide promotion and merge rules before implementation. Preserve hash, rank, estimator and v1 bytes, and measure actual RSS/update/merge costs across group sizes. An exact-small-set estimator is a separate decision; retain dense state if the tradeoff does not pay |
+| 1 | Sparse HLL state, colenc with a moonlake workload | H0 met it: grouped `approx_count_distinct` over 20,000 ten-value groups peaked at 405 MB against 21 MB for the exact count, and the library's dense control reached 109 MB for 5000 groups of 10 values | **Delivered, unreleased** — see [the delivery record](#sparse-hll-state-delivery-record). Dense state stayed the fallback above the promotion limit; an exact-small-set estimator is still a separate decision |
 | 2 | FSST model reuse in a consumer, moonlake | Repeated small string batches with a stable enough distribution and training visible in the profile | One opt-in workload with a bounded model lifetime and held-out/drifting batches. Report training amortization, table bytes per frame, encode/decode time, memory and fallback behavior. Keep one-shot behavior available; defer export/shared-table formats unless this caller needs them |
 | 3 | I0 immutable-table Roaring experiment, moonlake | A repeated-predicate workload with explicit row-ID ownership and immutable source identity | Compare exact results and build/load/query/memory/size costs across selective and unselective cases; state the reuse needed to amortize the index. A negative result closes I0. Reduced decoding requires a separate selection/gather contract before integration |
 
@@ -87,6 +113,42 @@ need a query-bound consumer; 99 scalar queries currently take about 2.3 us.
 Wider bitmap IDs, more set operations, shared-table FSST frames and new sketch
 algorithms remain workload-driven follow-ups, with contracts recorded before
 implementation. A measured negative result completes an investigation.
+
+## Sparse HLL state: delivery record
+
+The condition in priority 1 was met by moonlake's H0 refresh: the per-group 16 KiB
+register array, not the sketch's CPU, was what made a grouped
+`approx_count_distinct` expensive. `sketches/hll.mbt` now holds either a dense
+register array or a sorted array of live entries, and promotes once a sketch
+carries more than `min(128, m / 8)` live registers. What stayed fixed is the part
+that belongs to the format: the hash, the rank update, the estimator, the merge
+law and the v1 byte stream. The pinned byte stream and its checksum
+(`-541558647`) are unchanged, and `from_bytes` gives a deserialized sketch the
+state its contents justify.
+
+What moved is memory, and [the cost table](SKETCHES.md#state-cost) carries dense
+against sparse over eleven group shapes: 1000 × 10 drops 24.5 → 12.6 MB,
+5000 × 10 106.5 → 12.5 MB, 20000 × 10 404.9 → 12.6 MB, 50000 × 10 992.4 →
+12.6 MB, and 20000 × 1 405.0 → 12.6 MB, while a shape whose groups all promote
+(1000 × 1000) is unchanged at 24.4 MB in both. The same table reports the
+operation deltas: +23.3% on the update of 1000 groups that each promote, +3.5% on
+a million values in one group, −4.1% merge, −6.0% `to_bytes` and +23.1%
+`from_bytes`, which pays one extra branch per register to count the live ones.
+
+Two repeatable rigs cover it: `harness/hll_state.py` measures peak RSS and wall
+time of an isolated child across the group shapes, `--control` against a second
+build, so the dense comparison can be reproduced rather than quoted; and
+`harness/check_hll.py` keeps judging the estimator against datasketches. The
+gates: `moon check --deny-warn`, `moon info` (no public interface change),
+`moon fmt`, 172 tests on wasm-gc, native and js, the acceptance rig's four groups,
+and the new insertion-order, representation-invariance, promotion, sparse-merge,
+deserialization and precision-floor tests in `sketches/hll_wbtest.mbt`. The
+end-to-end SQL effect was measured in the consumer through an untracked
+`moon.work`; that record belongs to moonlake.
+
+This is a tree, not a release. 0.1.2 stays the published version, so consuming
+the sparse state needs a release decision rather than a silent dependency swap,
+and no consumer behavior is implied until that decision is made.
 
 ## HLL consumer seam and conditional library work
 
@@ -102,12 +164,13 @@ Entry points: `sketches/hll.mbt`, `sketches/pkg.generated.mbti`,
   plus its header. Report memory in addition to serialized size; many small
   groups can still make dense HLL more expensive than an exact set, because
   every group pays the full dense state.
-- Adoption is complete and the consumer has measured its per-group crossover.
-  Compact dense registers are implemented with the v1 bytes unchanged; the
-  public `registers()` accessor now returns a snapshot instead of a live view,
-  and `register(index)` reads one rank without copying. Sparse registers or an
-  exact small-set transition need separate promotion, merge and estimator
-  decisions.
+- Adoption is complete, and the sparse state is in the tree unreleased: a sketch
+  holds either the dense array or a sorted array of live entries and promotes
+  above `min(128, m / 8)` live registers, with the estimator, the merge law and
+  the v1 bytes unchanged. The public `registers()` accessor still returns a
+  snapshot rather than a live view, and `register(index)` reads one rank without
+  copying, in both states. An exact small-set transition remains a separate
+  decision, and a consumer picks the state up only through a new release.
   The library already accepts precision; a SQL precision option is consumer work.
 - Preserve the distinction between exact register merge laws and statistical
   estimator error. Agreement with another estimator is useful independent
@@ -216,6 +279,8 @@ throughput.
 | FSST | encode, 100 low-cardinality values, fresh training / reused model | 39.5 us / 2.8 us |
 | PLAIN decode, 500k values | Int64 / Int32 | 236 us / 152 us |
 
-Not recorded here: moonlake's end-to-end baseline. It needs the consumer's own
-`harness/bench_release.py` run against the registry dependency and a
-same-session control, and no colenc release carrying these changes exists yet.
+moonlake's end-to-end baseline is recorded separately at `4de8077`, in its
+`docs/bench-baseline.md` and verification §41, against the published 0.1.2
+dependency and a same-session 0.1.1 control. The library medians above and that
+consumer pair answer different questions. The SQL grouped-HLL crossover still
+needs H0; the library RSS rows do not supply it.

@@ -6,6 +6,26 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- `HllSketch` keeps its registers in whichever of two states is cheaper: the dense
+  array of `m` bytes, or a sorted array of the live entries (one word each, the
+  bucket index above the six-bit rank). A sketch starts sparse and promotes to
+  dense once it carries more than `min(128, m / 8)` live registers — 128 at the
+  default precision, 64 at precision 9, and never below precision 9, where the
+  dense array is small enough that a second state would only add work. Nothing
+  observable moves: the v1 serialized stream is the register vector, so the pinned
+  bytes and their checksum are identical and `from_bytes` rebuilds whichever state
+  the contents justify; the hash, the rank update, the estimator, the merge law
+  and the public interface are unchanged, and so is every stored sketch. What
+  changes is the resident cost of one sketch per group, which is what a grouped
+  aggregate pays: 1000 groups of 10 distinct values drop from 24.5 MB to 12.6 MB
+  of peak RSS, 20000 groups of 10 from 404.9 MB to 12.6 MB, and 50000 groups of 10
+  from 992.4 MB to 12.6 MB, while the update of 1000 groups that each promote
+  costs 23.3% more and a merge, `to_bytes` or a dense update are within noise of
+  where they were (native release; the matrix and the operation deltas are in
+  `docs/SKETCHES.md`, measured by the new `harness/hll_state.py`)
+
 ## [0.1.2] - 2026-10-26
 
 ### Migration from 0.1.1

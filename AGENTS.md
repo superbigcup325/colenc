@@ -82,6 +82,9 @@ its branch in `facade.mbt`.
   `python3 harness/check_tdigest.py` runs the quantile matrix and its three
   layers (structure, the reference comparison it reports, the absolute ceilings
   it gates on),
+  `python3 harness/hll_state.py --binary <perf build>` measures what a grouped
+  sketch keeps resident across group shapes, one isolated child per shape, with
+  `--control` to hold a second build side by side and `--json-out` to record,
   `python3 harness/check_consumer.py` runs a consumer against the unpacked
   release archive on all three backends with a fresh `MOON_HOME` (add
   `--registry-version X.Y.Z` after a publish)
