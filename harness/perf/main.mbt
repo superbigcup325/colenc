@@ -1466,6 +1466,132 @@ fn bench_tdigest(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
 }
 
 ///|
+fn fsst_values(kind : Int32, count : Int32) -> Array[Bytes] {
+  Array::makei(count, fn(i) {
+    match kind {
+      0 => @utf8.encode("label-\{(i % 16).to_string()}")
+      1 => @utf8.encode("shared-prefix-\{i.to_string()}")
+      _ => @utf8.encode("u\{lcg(i).to_string()}-\{lcg(i * 3 + 1).to_string()}")
+    }
+  })
+}
+
+///|
+/// One FSST batch: encode (which trains a table every call) and decode, each
+/// guarded by a round trip before timing.
+fn bench_fsst_case(
+  b : @bench.Bench,
+  sink : @ref.Ref[Int32],
+  name : String,
+  values : Array[Bytes],
+) -> Unit {
+  let out = Buffer()
+  @encoders.encode_fsst(values, out)
+  let bytes = out.to_bytes()
+  let (back, _) = @encoders.decode_fsst(bytes[:], values.length()) catch {
+    _ => abort("fsst decode raised")
+  }
+  if back.length() != values.length() {
+    abort("fsst \{name}: lost values")
+  }
+  let mut raw = 0
+  for index in 0..<values.length() {
+    if back[index] != values[index] {
+      abort("fsst \{name}: value \{index} differs")
+    }
+    raw += values[index].length()
+  }
+  let n = values.length()
+  record(b, label("fsst", name + "-encode", raw, n), fn() {
+    let o = Buffer()
+    @encoders.encode_fsst(values, o)
+    sink.val = sink.val + o.length()
+  })
+  record(b, label("fsst", name + "-decode", raw, n), fn() {
+    let (got, _) = @encoders.decode_fsst(bytes[:], n) catch {
+      _ => abort("fsst decode raised")
+    }
+    sink.val = sink.val + got.length()
+  })
+  println("meta|fsst-\{name}|\{n}|\{raw}|\{bytes.length()}")
+}
+
+///|
+/// Held-out batches: train once on one batch, then encode a different batch of
+/// the same shape with that model, against training anew for the second batch.
+/// Both encodings are checked by a round trip through the unchanged decoder, and
+/// the encoded sizes go to a meta line so the table bytes repeated per batch are
+/// part of the amortization comparison.
+fn bench_fsst_reuse(
+  b : @bench.Bench,
+  sink : @ref.Ref[Int32],
+  name : String,
+  kind : Int32,
+  count : Int32,
+) -> Unit {
+  let all = fsst_values(kind, count * 2)
+  let train_batch = Array::makei(count, fn(i) { all[i] })
+  let held_out = Array::makei(count, fn(i) { all[count + i] })
+  let model = @encoders.FsstModel::train(train_batch)
+  let reused = Buffer()
+  @encoders.encode_fsst_with(model, held_out, reused)
+  let fresh = Buffer()
+  @encoders.encode_fsst(held_out, fresh)
+  for encoded in [reused.to_bytes(), fresh.to_bytes()] {
+    let (back, _) = @encoders.decode_fsst(encoded[:], count) catch {
+      _ => abort("fsst reuse decode raised")
+    }
+    for index in 0..<count {
+      if back[index] != held_out[index] {
+        abort("fsst reuse \{name}: value \{index} differs")
+      }
+    }
+  }
+  let mut raw = 0
+  for value in held_out {
+    raw += value.length()
+  }
+  record(b, label("fsst", name + "-train", raw, count), fn() {
+    sink.val = sink.val + @encoders.FsstModel::train(train_batch).symbol_count()
+  })
+  record(b, label("fsst", name + "-encode-reused", raw, count), fn() {
+    let o = Buffer()
+    @encoders.encode_fsst_with(model, held_out, o)
+    sink.val = sink.val + o.length()
+  })
+  record(b, label("fsst", name + "-encode-fresh", raw, count), fn() {
+    let o = Buffer()
+    @encoders.encode_fsst(held_out, o)
+    sink.val = sink.val + o.length()
+  })
+  println(
+    "meta|fsst-reuse-\{name}|\{count}|\{raw}|reused \{reused.length()}|fresh \{fresh.length()}|table \{model.table_bytes()}",
+  )
+}
+
+///|
+fn bench_fsst(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
+  let kinds = ["lowcard", "prefix", "highcard"]
+  for kind in 0..<3 {
+    for count in [100, 1000, 20000] {
+      bench_fsst_case(
+        b,
+        sink,
+        kinds[kind] + "-" + count.to_string(),
+        fsst_values(kind, count),
+      )
+      bench_fsst_reuse(
+        b,
+        sink,
+        kinds[kind] + "-" + count.to_string(),
+        kind,
+        count,
+      )
+    }
+  }
+}
+
+///|
 /// Parse a non-negative decimal argument; anything else aborts.
 fn parse_count(text : String) -> Int32 {
   let mut value = 0
@@ -1635,6 +1761,12 @@ fn main {
   let argv = @env.args()
   if argv.length() > 1 && argv[1] == "tdigest" {
     bench_tdigest(bencher, sink)
+    println(bencher.dump_summaries())
+    println("sink=\{sink.val}")
+    return
+  }
+  if argv.length() > 1 && argv[1] == "fsst" {
+    bench_fsst(bencher, sink)
     println(bencher.dump_summaries())
     println("sink=\{sink.val}")
     return
