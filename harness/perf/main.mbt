@@ -519,6 +519,12 @@ fn bench_bitmap_setop(
   guard_set(merged, union_model, "\{name}: union")
   let shared = left.intersect(right)
   guard_set(shared, intersect_model, "\{name}: intersect")
+  if left.intersection_cardinality(right) != intersect_model.length() {
+    abort("\{name}: intersection_cardinality disagrees with the model")
+  }
+  if left.intersects(right) != (intersect_model.length() > 0) {
+    abort("\{name}: intersects disagrees with the model")
+  }
   // The result must own its containers: a later add may not rewrite an operand.
   merged.add(union_model.length() + 1) catch {
     error =>
@@ -540,9 +546,71 @@ fn bench_bitmap_setop(
   record(b, label("bitmap-setop", name + "-intersect", plain, values), fn() {
     sink.val = sink.val + left.intersect(right).cardinality()
   })
+  record(b, label("bitmap-setop", name + "-count", plain, values), fn() {
+    sink.val = sink.val + left.intersection_cardinality(right)
+  })
+  record(b, label("bitmap-setop", name + "-intersects", plain, values), fn() {
+    sink.val = sink.val + (if left.intersects(right) { 1 } else { 0 })
+  })
   println(
     "meta|setop-\{name}|\{values}|\{union_model.length()}|\{merged.to_bytes().length()}|\{plain}|\{optimize}",
   )
+}
+
+///|
+/// Full iteration by batches against `to_array`, and the cost of stopping after
+/// the first batch. The concatenated batches are checked against `to_array`
+/// before either timer starts.
+fn bench_bitmap_batches(
+  b : @bench.Bench,
+  sink : @ref.Ref[Int32],
+  name : String,
+  ids : Array[Int32],
+  optimize : Bool,
+) -> Unit {
+  let bitmap = build_bitmap(ids, name)
+  if optimize {
+    bitmap.run_optimize()
+  }
+  let expected = bitmap.to_array()
+  let got : Array[Int32] = []
+  let mut after = -1L
+  while true {
+    let batch = bitmap.ids_after(after, 4096)
+    for id in batch {
+      got.push(id)
+    }
+    if batch.length() < 4096 {
+      break
+    }
+    after = batch[batch.length() - 1].to_int64()
+  }
+  if got.length() != expected.length() {
+    abort("\{name}: batches lost ids")
+  }
+  for index in 0..<got.length() {
+    if got[index] != expected[index] {
+      abort("\{name}: batch id \{index} differs from to_array")
+    }
+  }
+  let plain = ids.length() * 4
+  let values = ids.length()
+  record(b, label("bitmap-iter", name + "-batches", plain, values), fn() {
+    let mut total = 0
+    let mut cursor = -1L
+    while true {
+      let batch = bitmap.ids_after(cursor, 4096)
+      total += batch.length()
+      if batch.length() < 4096 {
+        break
+      }
+      cursor = batch[batch.length() - 1].to_int64()
+    }
+    sink.val = sink.val + total
+  })
+  record(b, label("bitmap-iter", name + "-first-batch", plain, 4096), fn() {
+    sink.val = sink.val + bitmap.ids_after(-1L, 4096).length()
+  })
 }
 
 ///|
@@ -589,6 +657,10 @@ fn bench_roaring(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
     }
   }
   bench_bitmap_case(b, sink, "few-keys", grouped, false)
+  bench_bitmap_batches(b, sink, "sparse-1m", sparse_wide, false)
+  bench_bitmap_batches(b, sink, "dense-bitmap", dense, false)
+  bench_bitmap_batches(b, sink, "dense-run", dense, true)
+  bench_bitmap_batches(b, sink, "mixed-shapes", mixed, true)
   // Overlap shapes: disjoint, partial and identical.
   let disjoint = Array::makei(2000, fn(i) { 400000 + i * 2 })
   bench_bitmap_setop(b, sink, "disjoint", mixed, disjoint, false)
