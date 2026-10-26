@@ -1,13 +1,13 @@
-# Release and consumer follow-through: 0.1.3 is the current release
+# Release and consumer follow-through: 0.1.3 is released
 
-Status: 2026-10-26 (Asia/Shanghai). **Version 0.1.3 carries the sparse
-HyperLogLog state**; `chore(release): 0.1.3` is the commit that names it, and the
-publish step follows it, with the tag, the CI run and the archive hash recorded in
-the final-evidence table once they exist. moonlake consumes 0.1.2, and upgrading
-it is that project's decision, so nothing here implies consumer behavior beyond
-the matrix 0.1.3 was justified by. L0 through C2 are complete. What remains is the
-conditional work that waits on a consumer workload, and moonlake's own release,
-which is that project's decision. The [implementation record](OPTIMIZATION-PLAN.md) preserves
+Status: 2026-10-26 (Asia/Shanghai). **Version 0.1.3 is published** from `a97c230`,
+tagged `v0.1.3`, with green CI on that source and the packaged surface verified
+from the registry on three backends. It carries the sparse HyperLogLog state.
+moonlake consumes 0.1.2; upgrading it to 0.1.3 is that project's decision and its
+own gate, so nothing here implies consumer behavior beyond the matrix 0.1.3 was
+justified by. L0 through C2 are complete. What remains is the conditional work
+that waits on a consumer workload, and moonlake's own release, which is that
+project's decision. The [implementation record](OPTIMIZATION-PLAN.md) preserves
 the completed kernel tasks; the [roadmap](ROADMAP.md) and
 [sketch contracts](SKETCHES.md) retain their acceptance definitions.
 
@@ -41,9 +41,12 @@ states. Do not bundle speculative kernels into moonlake's accepted release.
 
 | Item | State |
 |---|---|
-| colenc 0.1.2 | [Published](https://github.com/superbigcup325/colenc/releases/tag/v0.1.2) from `b1b2b7f` on 2026-10-26, tagged `v0.1.2`, [CI green on that source](https://github.com/superbigcup325/colenc/actions/runs/40302072598). Archive SHA-256 `ad0d5fb0b49c2a729257c0f3afacdb4e93c9b964c3854df26999d00f3ed1ea1e`, built with moon 0.1.20261016 (1af328f 2026-10-16) |
-| Gate before publication | `moon info`, `moon fmt --check` and `moon check --deny-warn` clean; 165 tests per target on native, wasm-gc and js; every fixture regenerator in `--check` mode; all byte-diff, round-trip and property harnesses; the container check; and the archive consumer on three targets |
-| Registry copy | `moon view superbigcup325/colenc` reports 0.1.2 as latest, and `python3 harness/check_consumer.py --registry-version 0.1.2` passes on native, wasm-gc and js with a fresh registry and dependency cache |
+| colenc 0.1.3 | [Published](https://github.com/superbigcup325/colenc/releases/tag/v0.1.3) from `a97c230` on 2026-10-26, tagged `v0.1.3`, [CI green on that source](https://github.com/superbigcup325/colenc/actions/runs/40347165504) (check, harness and three test jobs). Archive SHA-256 `9dc5b38f01929f62a8d2c6d7868553114cf7bd3c78e7742c4fa83732a90c5d44`, built with moon 0.1.20261023 (3778465 2026-10-23) |
+| Gate before publication (0.1.3) | `moon info` (no interface change), `moon fmt --check` and `moon check --deny-warn` clean; 172 tests per target on native, wasm-gc and js; every fixture regenerator in `--check` mode; all byte-diff, round-trip and property harnesses; the container check; the archive consumer on three targets; a clean package archive; and `moon publish --dry-run` returning 202 Accepted |
+| Registry copy (0.1.3) | `moon view superbigcup325/colenc` reports 0.1.3 as latest, and `python3 harness/check_consumer.py --registry-version 0.1.3` passes on native, wasm-gc and js with a fresh registry and dependency cache |
+| colenc 0.1.2 (previous) | Published 2026-10-26 from `b1b2b7f`, tagged `v0.1.2`, [CI green on that source](https://github.com/superbigcup325/colenc/actions/runs/40302072598). Archive SHA-256 `ad0d5fb0b49c2a729257c0f3afacdb4e93c9b964c3854df26999d00f3ed1ea1e`, built with moon 0.1.20261016 (1af328f 2026-10-16); 165 tests per target then |
+| Gate before 0.1.2 | `moon info`, `moon fmt --check` and `moon check --deny-warn` clean; 165 tests per target on native, wasm-gc and js; every fixture regenerator in `--check` mode; all byte-diff, round-trip and property harnesses; the container check; and the archive consumer on three targets |
+| Registry copy (0.1.2) | `moon view superbigcup325/colenc` reported 0.1.2 as latest, and `python3 harness/check_consumer.py --registry-version 0.1.2` passed on native, wasm-gc and js with a fresh registry and dependency cache |
 | moonlake | `95c42c6` consumes 0.1.2 with no workspace override, with the acceptance record and the performance pair in `4de8077` and the closing note in `a0c7628`; `main` is pushed, its CI is green and a dispatched nightly passed. It needed no source change: the engine reaches the bitmap through the dedicated entry points and reads HLL registers through `register(index)` |
 | The cost K0 was measured on | **Closed.** The 0.1.1 artifact cost about 10% on moonlake's wide CSV scans because the generic dispatch kept the bitmap reachable. Against a 0.1.1 control built in its own worktree, three alternating pairs on a quiet host put the CSV cases 6-11% in 0.1.2's favour in every round: `count(*)` 171.3 to 153.0 ms, the filtered count 188.5 to 170.0, the two-table join 235.4 to 214.8, Q3 266.7 to 249.6 and the fanout join 383.2 to 348.4. The two Parquet cases stay unresolved at 4 ms and 11 ms with in-record spreads up to 73% |
 | Library measurements | The final [scoreboard](scoreboard.md) from `26fb9c0` is unchanged by the release; the release carries the same library code it recorded. Worst encode swing was 14% native and 23% wasm-gc |
@@ -150,11 +153,12 @@ deserialization and precision-floor tests in `sketches/hll_wbtest.mbt`. The
 end-to-end SQL effect was measured in the consumer through an untracked
 `moon.work`; that record belongs to moonlake.
 
-**0.1.3 is that release.** The sparse state is in the published artifact, with the
-byte stream, the interface and the estimator unchanged, so a consumer that pins
-0.1.2 and upgrades gets the memory behavior and nothing else to port. moonlake's
-upgrade is its own decision and its own gate; see the final-evidence table for how
-this version was verified and published.
+**0.1.3 is that release, and it is published.** The sparse state is in the
+artifact the registry serves, with the byte stream, the interface and the
+estimator unchanged, so a consumer that pins 0.1.2 and upgrades gets the memory
+behavior and nothing else to port. moonlake's upgrade is its own decision and its
+own gate; the final-evidence table records how this version was verified and
+published, and `moon view superbigcup325/colenc` is the live check.
 
 ## HLL consumer seam and conditional library work
 
