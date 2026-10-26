@@ -428,6 +428,29 @@ tracked documents ship in the release archive.
   of 5000 groups x 10 values 428 -> 109 MB, which is the dense-state cost the
   consumer measured, not a sparse-state result: small groups still pay a full
   16 KiB each, so a sparse state stays a separate decision
+- **A question about an intersection does not need the intersection** → `intersect`
+  builds a result bitmap (and for run containers converts both sides to 8 KB
+  word arrays), so asking only for its size or for whether it is empty paid for
+  containers the caller discarded. `intersection_cardinality` and `intersects`
+  walk the two key lists and count per container pair without allocating a
+  result, and `intersects` returns at the first shared id; `ids_after(after,
+  limit)` returns the next batch of ascending ids from a cursor (the last id seen,
+  `-1L` to start) instead of expanding the whole bitmap, and holds no state, so
+  there is nothing to invalidate when the bitmap changes between calls. They are
+  checked against an independent set oracle for every container pairing
+  (array/bitmap/run, plain and run-optimised, 4096/4097, the largest id) and
+  against `to_array`, and the perf rig aborts if either disagrees with its model
+  before timing. Native release, medians of three rounds, `intersect` -> count:
+  array containers partial overlap 150 -> 37 us, identical 167 -> 30 us; bitmap
+  containers 14.0 -> 3.45 us; mixed shapes identical 5.5 -> 1.04 us but partial
+  only 6.6 -> 5.9 us; run containers 957 us -> 0.02 us (the run case goes
+  through two word arrays in `intersect`). `intersects` on overlapping sets is
+  about 10 ns, but with no overlap it still walks everything (array-disjoint
+  40 us), so early stop only helps where an overlap exists. Batches: the first
+  4096 ids of a 1M-id bitmap cost 4.3 us against 907 us for `to_array`, and a full
+  walk is faster than `to_array` on dense containers (bitmap 486 -> 282 us, run
+  438 -> 181 us, mixed 17.7 -> 10.4 us) but 14% slower on the sparse 1M-id array
+  case (907 -> 1035 us), because each batch re-locates its key by binary search
 
 ## Command reference
 

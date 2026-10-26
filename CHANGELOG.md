@@ -8,6 +8,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `RoaringBitmap::intersection_cardinality`, `RoaringBitmap::intersects` and
+  `RoaringBitmap::ids_after`. The first two answer how many ids two bitmaps share
+  and whether they share any without building the intersection, and `intersects`
+  stops at the first shared id. `ids_after(after, limit)` returns up to `limit`
+  ascending ids greater than `after` (start with `-1L`, continue from the last id
+  returned; a short batch means the bitmap is exhausted) and keeps no state, so a
+  changing bitmap cannot invalidate it. Portable bytes and existing operations are
+  unchanged.
 - `HllSketch::register(index)` reads one register's rank without copying and
   reports an out-of-range index as `OutOfRange`.
 

@@ -93,7 +93,10 @@ pub fn RoaringBitmap::contains(Self, Int32) -> Bool
 pub fn RoaringBitmap::from_bytes(BytesView) -> Self raise @types.EncodingError
 pub fn RoaringBitmap::from_bytes_with_consumed(BytesView) -> (Self, Int32) raise @types.EncodingError
 pub fn RoaringBitmap::from_ids(Array[Int32]) -> Self raise @types.EncodingError
+pub fn RoaringBitmap::ids_after(Self, Int64, Int32) -> Array[Int32]
 pub fn RoaringBitmap::intersect(Self, Self) -> Self
+pub fn RoaringBitmap::intersection_cardinality(Self, Self) -> Int32
+pub fn RoaringBitmap::intersects(Self, Self) -> Bool
 pub fn RoaringBitmap::is_empty(Self) -> Bool
 pub fn RoaringBitmap::new() -> Self
 pub fn RoaringBitmap::run_optimize(Self) -> Unit
