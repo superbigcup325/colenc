@@ -1,0 +1,235 @@
+{
+  "date": "2026-10-26",
+  "timezone": "Asia/Shanghai",
+  "status": "Exploratory microbenchmark. No production implementation or full acceptance run.",
+  "source_revision": "9fdd2521d8046fe8211f3aae43aada9f70602a0d",
+  "machine": {
+    "cpu": "12th Gen Intel(R) Core(TM) i5-12500H",
+    "architecture": "x86_64"
+  },
+  "toolchain": {
+    "moon": "0.1.20261016 (1af328f 2026-10-16)",
+    "moonc": "v0.10.16+b1a0e846e (2026-10-16)",
+    "moonrun": "0.1.20261016 (1af328f 2026-10-16)"
+  },
+  "input": {
+    "type": "Int64",
+    "values": 500000,
+    "plain_bytes": 4000000,
+    "generation": "(i * 104729) XOR (i << 37), with the first three values replaced by Int64 minimum, Int64 maximum and -1; exact code below"
+  },
+  "method": {
+    "build": "release",
+    "sequence_per_process": [
+      "bytewalk-A",
+      "bulk-A",
+      "bulk-B",
+      "bytewalk-B"
+    ],
+    "samples_per_case": 7,
+    "median_unit": "microseconds",
+    "allocation": "Both paths allocate the same zero-filled Int64 result array. Only the input loads differ.",
+    "correctness": "Every decoded value compared with the input and the other path; empty input checked. Both target runs exited 0.",
+    "isolation": "Separate source copy; both variants in the same executable on each target. Input was resident in memory.",
+    "limitations": [
+      "Exploratory comparison, not the release scoreboard or an end-to-end Parquet result.",
+      "JavaScript was not run. No malformed-input battery, full library suite or fresh-cache archive consumer was run for this probe.",
+      "No RSS, CPU affinity, frequency trace or individual trial observations were recorded.",
+      "Core bench emits statistical summaries. This file preserves every field of those summaries."
+    ]
+  },
+  "probe": {
+    "files": {
+      "main.mbt": "///|\nfn bytewalk(data : BytesView, count : Int32) -> Array[Int64] {\n  @encoders.decode_int64(data, count) catch { _ => abort(\"original decode failed\") }\n}\n\n///|\nfn bulk(data : BytesView, count : Int32) -> Array[Int64] {\n  if count < 0 || count > data.length() / 8 { abort(\"invalid probe input\") }\n  let out = Array::make(count, 0L)\n  for index in 0..<count {\n    out[index] = data.unsafe_read_uint64_le(index * 8).reinterpret_as_int64()\n  }\n  out\n}\n\n///|\nfn main {\n  let n = 500000\n  let values = Array::makei(n, fn(i) {\n    (i.to_int64() * 104729L) ^ (i.to_int64() << 37)\n  })\n  values[0] = -9223372036854775808L\n  values[1] = 9223372036854775807L\n  values[2] = -1L\n  let out = Buffer()\n  @encoders.encode_int64(values, out)\n  let bytes = out.to_bytes()\n  let original = bytewalk(bytes, n)\n  let candidate = bulk(bytes, n)\n  for index in 0..<n {\n    if original[index] != values[index] || candidate[index] != values[index] {\n      abort(\"probe value mismatch\")\n    }\n  }\n  if bulk(b\"\", 0).length() != 0 { abort(\"empty probe mismatch\") }\n  println(\"guard: 500000 varied int64s and empty input agree\")\n  let b = @bench.Bench()\n  b.bench(name=\"plain64-bytewalk-A\", fn() { b.keep(bytewalk(bytes, n)) }, count=7)\n  b.bench(name=\"plain64-bulk-A\", fn() { b.keep(bulk(bytes, n)) }, count=7)\n  b.bench(name=\"plain64-bulk-B\", fn() { b.keep(bulk(bytes, n)) }, count=7)\n  b.bench(name=\"plain64-bytewalk-B\", fn() { b.keep(bytewalk(bytes, n)) }, count=7)\n  println(b.dump_summaries())\n}\n",
+      "moon.pkg": "import {\n  \"superbigcup325/colenc/encoders\",\n  \"moonbitlang/core/bench\",\n}\npkgtype(kind: \"executable\")\n"
+    },
+    "sha256": {
+      "main.mbt": "a8b90564fce5aaa6bb4df64f6e2247a0a6654f1d66633677681a382cfcaf3bdf",
+      "moon.pkg": "51da5725df2f956142b61a9e2d2c9f4b03f7a8db2b0be9d15c3fbdf7f7a36976"
+    }
+  },
+  "results": {
+    "native": {
+      "exit_code": 0,
+      "guard": "guard: 500000 varied int64s and empty input agree",
+      "summaries": [
+        {
+          "name": "plain64-bytewalk-A",
+          "sum": 10986.61704375,
+          "min": 1541.9804203125,
+          "max": 1585.5742953125,
+          "mean": 1569.5167205357143,
+          "median": 1574.13696875,
+          "variance": 274.873463591413,
+          "std_dev": 16.579308296530737,
+          "std_dev_pct": 1.0563320593916206,
+          "median_abs_dev": 15.879479962499886,
+          "median_abs_dev_pct": 1.0087737139614705,
+          "quartiles": [
+            1560.5152109375,
+            1574.13696875,
+            1581.94746875
+          ],
+          "iqr": 21.43225781250021,
+          "batch_size": 64,
+          "runs": 7
+        },
+        {
+          "name": "plain64-bulk-A",
+          "sum": 1765.0802771794872,
+          "min": 250.15893205128205,
+          "max": 254.96280153846152,
+          "mean": 252.1543253113553,
+          "median": 251.80136410256412,
+          "variance": 3.5988118436296834,
+          "std_dev": 1.8970534635665077,
+          "std_dev_pct": 0.7523382600017123,
+          "median_abs_dev": 1.801054876923088,
+          "median_abs_dev_pct": 0.71526811752675,
+          "quartiles": [
+            250.66872820512822,
+            251.80136410256412,
+            253.40986153846154
+          ],
+          "iqr": 2.741133333333323,
+          "batch_size": 390,
+          "runs": 7
+        },
+        {
+          "name": "plain64-bulk-B",
+          "sum": 1773.6136821243522,
+          "min": 251.12353316062175,
+          "max": 255.37774481865287,
+          "mean": 253.37338316062173,
+          "median": 253.27386010362684,
+          "variance": 2.6111861892926256,
+          "std_dev": 1.6159165168079153,
+          "std_dev_pct": 0.6377609584127203,
+          "median_abs_dev": 2.4550511673573943,
+          "median_abs_dev_pct": 0.9693267068117142,
+          "quartiles": [
+            252.35155958549223,
+            253.27386010362684,
+            254.56771243523318
+          ],
+          "iqr": 2.2161528497409506,
+          "batch_size": 386,
+          "runs": 7
+        },
+        {
+          "name": "plain64-bytewalk-B",
+          "sum": 11038.316215384615,
+          "min": 1534.0122246153846,
+          "max": 1616.8920984615386,
+          "mean": 1576.9023164835164,
+          "median": 1581.8071692307692,
+          "variance": 1023.4634477818869,
+          "std_dev": 31.991615273097526,
+          "std_dev_pct": 2.028763287280765,
+          "median_abs_dev": 47.73883043999995,
+          "median_abs_dev_pct": 3.0179930505192543,
+          "quartiles": [
+            1553.1543923076924,
+            1581.8071692307692,
+            1599.6479692307694
+          ],
+          "iqr": 46.493576923076944,
+          "batch_size": 65,
+          "runs": 7
+        }
+      ],
+      "ratio_of_mean_case_medians": 6.248463568849286
+    },
+    "wasm-gc": {
+      "exit_code": 0,
+      "guard": "guard: 500000 varied int64s and empty input agree",
+      "summaries": [
+        {
+          "name": "plain64-bytewalk-A",
+          "sum": 36931.217475,
+          "min": 5019.153360000001,
+          "max": 5475.989965,
+          "mean": 5275.888210714285,
+          "median": 5280.7949,
+          "variance": 34583.7518352978,
+          "std_dev": 185.96707191139458,
+          "std_dev_pct": 3.524848603382692,
+          "median_abs_dev": 245.17111269000094,
+          "median_abs_dev_pct": 4.642693331831557,
+          "quartiles": [
+            5152.276175,
+            5280.7949,
+            5425.363450000001
+          ],
+          "iqr": 273.0872750000008,
+          "batch_size": 20,
+          "runs": 7
+        },
+        {
+          "name": "plain64-bulk-A",
+          "sum": 16143.55538181818,
+          "min": 2271.6462522727275,
+          "max": 2336.4206977272725,
+          "mean": 2306.222197402597,
+          "median": 2312.675681818182,
+          "variance": 877.9962781362401,
+          "std_dev": 29.631001976582567,
+          "std_dev_pct": 1.2848285828639905,
+          "median_abs_dev": 35.20436058681742,
+          "median_abs_dev_pct": 1.5222350830939,
+          "quartiles": [
+            2277.792352272727,
+            2312.675681818182,
+            2333.6140227272726
+          ],
+          "iqr": 55.82167045454571,
+          "batch_size": 44,
+          "runs": 7
+        },
+        {
+          "name": "plain64-bulk-B",
+          "sum": 15474.750964444447,
+          "min": 2194.9830355555555,
+          "max": 2237.3905066666666,
+          "mean": 2210.6787092063496,
+          "median": 2206.760333333333,
+          "variance": 229.34741354977152,
+          "std_dev": 15.14422046689005,
+          "std_dev_pct": 0.6850484606298551,
+          "median_abs_dev": 11.2947103733328,
+          "median_abs_dev_pct": 0.5118231555427692,
+          "quartiles": [
+            2199.7692,
+            2206.760333333333,
+            2218.0393444444444
+          ],
+          "iqr": 18.270144444444213,
+          "batch_size": 45,
+          "runs": 7
+        },
+        {
+          "name": "plain64-bytewalk-B",
+          "sum": 34684.72434,
+          "min": 4854.15496,
+          "max": 5082.5878299999995,
+          "mean": 4954.96062,
+          "median": 4949.1342,
+          "variance": 8287.328117705349,
+          "std_dev": 91.03476323748718,
+          "std_dev_pct": 1.837244939344991,
+          "median_abs_dev": 139.65936327000128,
+          "median_abs_dev_pct": 2.821894853245266,
+          "quartiles": [
+            4886.091075,
+            4949.1342,
+            5013.3326
+          ],
+          "iqr": 127.24152499999946,
+          "batch_size": 20,
+          "runs": 7
+        }
+      ],
+      "ratio_of_mean_case_medians": 2.263541084707013
+    }
+  }
+}

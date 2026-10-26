@@ -1,21 +1,22 @@
 # Next steps after 0.1.1
 
-Planning snapshot: 2026-10-26 (Asia/Shanghai), source revision `090548c`.
-The next work is consumer adoption and measured follow-through. Roaring, HLL
-and t-digest are implemented and released; the former A-through-E development
-sequence is complete for the library packages and bitmap rewrites, while its
-moonlake bitmap experiment is still pending. It is superseded by the plan here.
-The [roadmap](ROADMAP.md) and [sketch contracts](SKETCHES.md) retain their
-acceptance definitions.
+Planning snapshot: 2026-10-26 (Asia/Shanghai), library revision `9fdd252`.
+Roaring, HLL and t-digest are released in 0.1.1; moonlake has consumed that
+version, implemented both SQL sketch functions and accepted its local 0.6.0
+candidate. The bitmap dispatch fix is implemented locally and awaits release
+follow-through. The next kernel work is recorded as six tasks in the
+[optimization handoff](OPTIMIZATION-PLAN.md), starting with PLAIN word loads and
+dictionary budget checks. The [roadmap](ROADMAP.md) and
+[sketch contracts](SKETCHES.md) retain their acceptance definitions.
 
 ## Current evidence
 
 | Project | Observed state | Planning implication |
 |---|---|---|
-| colenc | [0.1.1 is published](https://github.com/superbigcup325/colenc/releases/tag/v0.1.1); remote `main` is `c04d7e1`, where [CI passed](https://github.com/superbigcup325/colenc/actions/runs/40205435645), and local `main` is a documentation commit ahead | Retain the released E0-E8 and sketch contracts. Do not schedule their implementation again |
+| colenc | [0.1.1 is published](https://github.com/superbigcup325/colenc/releases/tag/v0.1.1); remote `main` is `c04d7e1`, where [CI passed](https://github.com/superbigcup325/colenc/actions/runs/40205435645). Local `main` is `9fdd252`, three commits ahead, including the bitmap dispatch change | The new dedicated bitmap entry points and generic-dispatch refusal are implemented but unreleased. The older green CI does not certify that change |
 | Release artifact | Built from `504092a`; the tagged tree adds documentation and sketch coverage to the archive consumer, with identical library code. The release records three-target registry-consumer acceptance | Distinguish the registry artifact from its later documentation. Its older README wording does not mean HLL/t-digest are absent |
-| moonlake | Local `bc1a8f5`+ accepts colenc 0.1.1 (`24d983b`), adds `approx_count_distinct` and `approx_quantile` on the sketch API, and passed its own acceptance again; 0.6.0 is unreleased and the live latest release is 0.5.0. No sibling workspace override | Adoption and the HLL/t-digest SQL seams are done on the consumer side. A Roaring engine workload (I0) is still an investigation, and the bitmap now carries a measured consumer cost (see K0 below) |
-| Consumer acceptance | moonlake's full local pass is on `3ab2634`; its later Parquet reader fix has targeted evidence. Remote `main` remains `750b98c`, whose latest nightly failed on the locally fixed corpus case | Refresh the final consumer candidate. colenc's green CI and small registry probe do not certify an engine revision |
+| moonlake | Local `6963e3b` carries the colenc 0.1.1 upgrade (`24d983b`), `approx_count_distinct` and `approx_quantile`; full local acceptance ran on `bc1a8f5`. 0.6.0 is unreleased and the latest published version is 0.5.0. No sibling workspace override | C0 and A0/A1/A2 are completed consumer work. I0 is still an investigation; the current registry dependency still carries the measured link cost described below |
+| Consumer acceptance | R2 ran the full list again on `bc1a8f5`: 361 native / 348 wasm-gc / 348 js tests, the golden and differential gates, corpus 17 decoded / 51 refused / 0 failing, the 2.41 GB write, Chromium 16/16 and fresh-cache archive consumers. Remote `main` remains `750b98c`, whose latest nightly failed on the locally fixed corpus case | Local acceptance is complete for that source and colenc 0.1.1. Changing the library dependency requires acceptance again; the final source has no remote CI/nightly evidence yet |
 | Measurements | `docs/scoreboard.md` was regenerated on 2026-10-26 at `090548c`. The host measured about 14% below the 2026-10-25 record on identical code (re-running `0cb57e9` today: 1941 MB/s against the recorded 2247.2 for `int64-monotonic`/PLAIN), so the new table sits lower across the board | Compare rows within one table, never across records taken in a different power state. On that same row the 0.1.1 code itself is −1.8% (1907 MB/s) |
 
 **K0 has a measurable case now.** moonlake recorded its 0.6.0 candidate beside
@@ -36,10 +37,13 @@ for the scan, i.e. parity within the run spread) and 8,248 bytes smaller, so the
 remaining step is a release decision plus the consumer's re-record, not another
 experiment.
 
-This planning pass inspected source, generated APIs, existing verification
-records and live release/CI metadata. It did not rerun library or engine tests,
-registry consumers or accuracy rigs. The current engine work order and its
-exit criteria are maintained in
+The source and status check used generated APIs, existing verification logs
+and read-only registry/GitHub queries. A separate Int64 load experiment ran on
+native and wasm-gc; its [source and complete timing summaries](plain64-probe-2026-10-26.json)
+are preserved with the [task and reproduction instructions](OPTIMIZATION-PLAN.md#exploratory-plain-record).
+That probe did not rerun full library/engine suites, registry consumers or
+sketch accuracy rigs, and it is not a new release scoreboard. The current engine
+work order and its exit criteria are maintained in
 [moonlake's roadmap](https://github.com/superbigcup325/moonlake/blob/main/docs/ROADMAP.md).
 That public branch may lag the local planning revision until it is pushed.
 
@@ -47,16 +51,34 @@ That public branch may lag the local planning revision until it is pushed.
 
 | Package | Owner and delivery | Exit |
 |---|---|---|
-| C0 | moonlake consumes the published 0.1.1 dependency; colenc provides the released API and compatibility evidence | Fresh dependency resolution without a sibling override, three-target consumer regression, encoding/writer/spill checks and a fresh-cache archive consumer. New `Encoding` and `EncodingError` variants are checked against consumer matches |
-| R2 | moonlake refreshes its final 0.6.0 candidate, including its reader fix | The consumer's full correctness, archive, large-file and browser gates run on one final revision. Its own CI/nightly, registry and deployed-page evidence are recorded when the corresponding release actions are authorized |
-| A0/A1 | moonlake records SQL and state-cost decisions, then adds explicit HLL aggregation; colenc documents the typed-byte seam and supports defects exposed by that use | SQL NULL/type/value equivalence is specified before updates are hashed. Compare canonical inputs exactly and estimates statistically; measure state per group. Keep the existing exact distinct aggregate exact |
-| A2 | moonlake adds explicit approximate quantiles after HLL; colenc retains the t-digest contract and rig | Exact sorted inputs judge empirical rank error. Input conversion, non-finite values, empty input, q validation and merge/order sensitivity have explicit behavior. Keep exact median available |
+| C0 | **Done locally**: moonlake consumes the published 0.1.1 dependency | Fresh dependency resolution without a sibling override, three-target suites, encoding/writer/spill checks and fresh-cache archive consumers passed; the added variants required no consumer match changes |
+| R2 | **Done locally** on `bc1a8f5`, including the reader fix, dependency upgrade and both SQL sketch functions | Full correctness, archive, large-file and browser gates passed on that revision. Repeat on any changed candidate; remote CI/nightly and registry/deployed-page checks follow the corresponding release actions |
+| A0/A1 | **Done locally**: moonlake records SQL/state costs and implements explicit `approx_count_distinct` | SQL normalization, NULL/empty behavior and per-group memory are documented and tested; exact distinct remains exact. Compact state is new K3 work, not unfinished HLL adoption |
+| A2 | **Done locally**: moonlake implements explicit `approx_quantile`; colenc retains its t-digest contract and rig | Numeric conversion, non-finite values, NULL/empty behavior and bind-time q validation have explicit behavior and tests. Exact median remains available |
 | I0 | moonlake investigates one immutable-table Roaring workload; colenc changes APIs only for a demonstrated need | Result equality and query/build/load/memory/size evidence include selective and unselective cases. A useful negative result completes the investigation; automatic or persistent indexes require further engine contracts |
-| K0 | colenc evaluates improvements exposed by actual consumer costs; the first case is the bitmap link cost described below | Record the workload and unchanged or revised contract before implementation. Require correctness/statistical gates and reproducible cost evidence; do not add a new sketch family to fill the queue |
+| K0 | **Implemented, unreleased** in `9fdd252`: keep Roaring out of generic dispatch | Dedicated Roaring entry points retain the payload; generic encode/decode now refuse Roaring. The migration is in CHANGELOG. Complete candidate/packaged-consumer acceptance, then follow the authorized release sequence and re-record the registry consumer |
 
-The engine packages are proposals rather than already shipped SQL functions.
-They do not require another colenc release merely to use the current APIs. No
-new release number or date is assigned by this plan.
+C0, R2 and A0/A1/A2 are implemented and accepted locally, but moonlake 0.6.0
+is not published. I0 and the six new kernel tasks remain proposals. K0 needs a
+new colenc release before the normal registry dependency can consume its fix;
+no release number or date is assigned here.
+
+## Kernel implementation handoff
+
+The [optimization plan](OPTIMIZATION-PLAN.md) is the task specification for the
+next implementer. Start with K1, then K2. Each task names source files, behavior
+that must remain stable, relevant gates and the measurement needed to finish.
+The PLAIN probe is preserved in the linked record, including its exact code;
+other tasks have no new measured performance result.
+
+| Task | Delivery | Start condition |
+|---|---|---|
+| [K1](OPTIMIZATION-PLAN.md#k1-plain-word-loads) | Validated bulk loads in PLAIN decoding, then affected full-width paths | Reproduce the isolated control; preserve errors, byte layout and allocation in the first comparison |
+| [K2](OPTIMIZATION-PLAN.md#k2-dictionary-budget-checked-during-construction) | Stop dictionary planning as soon as its encoded payload exceeds the budget | Keep under-limit bytes and the existing `None` fallback identical |
+| [K3](OPTIMIZATION-PLAN.md#k3-compact-hll-state) | Compact dense registers first; sparse state and CPU experiments separately | Record compatibility for the public non-copying `registers()` accessor and v1 bytes |
+| [K4](OPTIMIZATION-PLAN.md#k4-roaring-query-apis) | Count-only intersection, overlap testing and ordered batch iteration | Name the workload, ownership/lifecycle and count-width contract; engine integration follows I0 |
+| [K5](OPTIMIZATION-PLAN.md#k5-t-digest-compression-and-batch-quantiles) | Reduce compression work under k1; evaluate a batch quantile API | Preserve the existing structure, rank convention and accuracy matrix |
+| [K6](OPTIMIZATION-PLAN.md#k6-reusable-fsst-model) | Measure and, if useful, expose reusable training state | Demonstrate amortization on held-out batches and record frame compatibility |
 
 ## HLL consumer seam and conditional library work
 
@@ -71,10 +93,11 @@ Entry points: `sketches/hll.mbt`, `sketches/pkg.generated.mbti`,
   64 KiB of payload, although serialization uses one byte per register plus
   its header. Report memory in addition to serialized size; many small groups
   can make dense HLL more expensive than an exact set.
-- Start engine adoption with the released precision and API. Consider sparse
-  registers, an exact-small-set transition or a precision option only after
-  measuring the per-group crossover and recording representation, merge and
-  serialization compatibility decisions.
+- Adoption is complete and the consumer has measured its per-group crossover.
+  K3 evaluates compact dense registers first, with public-accessor and v1-byte
+  compatibility recorded before implementation. Sparse registers or an exact
+  small-set transition need separate promotion, merge and estimator decisions.
+  The library already accepts precision; a SQL precision option is consumer work.
 - Preserve the distinction between exact register merge laws and statistical
   estimator error. Agreement with another estimator is useful independent
   evidence, not an exact-value oracle or byte-compatibility claim.
@@ -115,10 +138,11 @@ therefore establishes set computation, not reduced Parquet decoding by itself.
 
 Begin with one opt-in repeated-predicate experiment and its exact scan control.
 Account for index construction and reuse, residual filtering, high and low
-selectivity, and stale source detection. Consider iteration, count-only
-intersection or wider IDs only if that experiment shows why the existing API
-is insufficient. Persistent sidecars and automatic planner selection are
-engine work, with a separate contract.
+selectivity, and stale source detection. K4 can benchmark count-only intersection
+and iteration against today's materialized operations without claiming an
+engine scan improvement. Integrating them still follows I0's selection contract;
+wider IDs, persistent sidecars and automatic planner selection require separate
+consumer evidence and contracts.
 
 ## Scope carried forward
 
@@ -129,8 +153,9 @@ current release is complete.
 
 ## Final reminder: update benchmarks
 
-**Pending, after the final code and dependency changes.** This planning pass
-did not regenerate any performance or accuracy result.
+**Pending, after the final code and dependency changes.** The exploratory K1
+probe is a separate kernel measurement; it does not replace the final scoreboard,
+sketch accuracy rigs or consumer acceptance.
 
 - colenc: run `python3 harness/scoreboard.py` to update `docs/scoreboard.md`;
   retain native/wasm-gc medians, revision/toolchain/data identity and spread.

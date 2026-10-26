@@ -10,7 +10,7 @@
 **Integration (P5)**: merged into moonlake's `main` — the Parquet reader routed through colenc, a write path added, and the spill format re-encoded (8.08 → 4.86 MiB on the bake-off workload)
 **Release**: `superbigcup325/colenc@0.1.1` is published on mooncakes. It carries the Roaring index, the bitmap and key-search rewrites, and the `sketches` package (HyperLogLog and t-digest). The archive consumer check exercises the packaged surface — including both sketches — on all three backends before and after a publication
 **Phase two (P6)**: the bitmap index landed — E8 Roaring is byte-identical to CRoaring, container shapes and the run-optimisation rule included, judged by pyroaring
-**Next step (2026-10-25)**: moonlake still imports 0.1.0. Consume the published 0.1.1 dependency and refresh the engine candidate, then define SQL sketch semantics and state costs before HLL and t-digest adoption. Investigate one Roaring engine workload with exact scan controls. The bitmap rewrites and both sketches are implemented; [Next steps](NEXT-STEPS.md) records consumer/library ownership, conditional kernel work and a final benchmark-update reminder
+**Next step (2026-10-26)**: moonlake consumes 0.1.1, implements both SQL sketch functions and has accepted its local 0.6.0 candidate. The bitmap dispatch separation is implemented in local `9fdd252` and awaits release follow-through. The [kernel handoff](OPTIMIZATION-PLAN.md) orders PLAIN word loads, dictionary budget checks and compact HLL state, followed by conditional Roaring query APIs, t-digest work and FSST model reuse. [Next steps](NEXT-STEPS.md) records completed consumer work, release boundaries and the final benchmark reminder
 
 ---
 
@@ -140,5 +140,7 @@ Phase two, in progress:
 
 After the final kernel and consumer changes, regenerate `docs/scoreboard.md`,
 record sketch and bitmap query costs, and update moonlake's end-to-end baseline.
-These updates are pending; this planning pass measured no new performance.
-See the [final checklist](NEXT-STEPS.md#final-reminder-update-benchmarks).
+These final updates are pending. The separate
+[PLAIN probe](OPTIMIZATION-PLAN.md#exploratory-plain-record) measures a kernel
+candidate, not a release or consumer acceptance result. See the
+[final checklist](NEXT-STEPS.md#final-reminder-update-benchmarks).
