@@ -851,6 +851,7 @@ fn RoaringBitmap::roaring_write_plan(
   flags : Array[Int32],
   with_runs : Bool,
 ) -> Unit {
+  let start = out.length()
   let size = self.keys.length()
   if with_runs {
     out.write_int_le(ROARING_COOKIE_RUN | ((size - 1) << 16))
@@ -866,7 +867,7 @@ fn RoaringBitmap::roaring_write_plan(
     roaring_write_u16(out, cards[index] - 1)
   }
   if !with_runs || size >= ROARING_NO_OFFSET_THRESHOLD {
-    let mut offset = out.length() + 4 * size
+    let mut offset = out.length() - start + 4 * size
     for index in 0..<size {
       out.write_int_le(offset)
       offset += sizes[index]
@@ -971,6 +972,12 @@ pub fn RoaringBitmap::from_bytes_with_consumed(
     if index > 0 && keys[index] <= keys[index - 1] {
       raise @types.EncodingError::Corrupt(cursor - 4)
     }
+    if keys[index] > ROARING_MAX_ID >> 16 {
+      raise @types.EncodingError::OutOfRange(
+        keys[index].to_int64() << 16,
+        cursor - 4,
+      )
+    }
     if cards[index] < 1 || cards[index] > ROARING_CONTAINER_VALUES {
       raise @types.EncodingError::Corrupt(cursor - 2)
     }
@@ -1015,9 +1022,17 @@ pub fn RoaringBitmap::from_bytes_with_consumed(
       // pass is skipped; an error drops the array rather than exposing it.
       let pairs : Array[Int32] = Array::unsafe_make_uninit(count)
       let mut counted = 0
+      let mut previous_end = -1
       for run in 0..<run_count {
         let start = data.unsafe_read_uint16_le(position).to_int()
         let length_minus_one = data.unsafe_read_uint16_le(position + 2).to_int()
+        if start + length_minus_one >= ROARING_CONTAINER_VALUES {
+          raise @types.EncodingError::Corrupt(position)
+        }
+        if start <= previous_end {
+          raise @types.EncodingError::Corrupt(position)
+        }
+        previous_end = start + length_minus_one
         pairs[2 * run] = start
         pairs[2 * run + 1] = length_minus_one
         counted += length_minus_one + 1
