@@ -6,6 +6,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `HllSketch::add_int32_batch`, `add_int64_batch`, `add_float_batch`,
+  `add_double_batch` and `add_bool_batch` accept an `ArrayView` of values. A
+  batch is exactly the corresponding sequence of single updates, so registers,
+  estimates and bytes are identical; it keeps a caller's hot loop inside the
+  package. On native release, the same precomputed array of 1,000,000 `Int64`
+  values took 4.77 ms through single calls and 4.19 ms through the batch over
+  five runs (-12.1%). The other types share the same loop shape, but the
+  performance number was measured for `Int64` only.
+
 ### Changed
 
 - `HllSketch` hashes typed values directly from their canonical little-endian bit

@@ -79,6 +79,76 @@ test "the leading-zero helper matches every bit position" {
 }
 
 ///|
+test "the Int64 batch update equals per-value updates" {
+  let values : Array[Int64] = [
+    0L,
+    1L,
+    -1L,
+    42L,
+    42L,
+    9223372036854775807L,
+    -9223372036854775807L - 1L,
+  ]
+  let one_at_a_time = HllSketch::new_default()
+  let batched = HllSketch::new_default()
+  for value in values {
+    one_at_a_time.add_int64(value)
+  }
+  batched.add_int64_batch(values[:])
+  assert_eq(batched.to_bytes(), one_at_a_time.to_bytes())
+  assert_eq(batched.estimate(), one_at_a_time.estimate())
+}
+
+///|
+test "the remaining typed batch updates equal per-value updates" {
+  let int32s : Array[Int32] = [0, 1, -1, 2147483647, -2147483647 - 1]
+  let int32_single = HllSketch::new_default()
+  let int32_batch = HllSketch::new_default()
+  for value in int32s {
+    int32_single.add_int32(value)
+  }
+  int32_batch.add_int32_batch(int32s[:])
+  assert_eq(int32_batch.to_bytes(), int32_single.to_bytes())
+
+  let floats : Array[Float] = [
+    Float::reinterpret_from_int(0),
+    Float::reinterpret_from_int(-2147483648),
+    Float::reinterpret_from_int(0x7FC00001),
+    Float(1.5),
+  ]
+  let float_single = HllSketch::new_default()
+  let float_batch = HllSketch::new_default()
+  for value in floats {
+    float_single.add_float(value)
+  }
+  float_batch.add_float_batch(floats[:])
+  assert_eq(float_batch.to_bytes(), float_single.to_bytes())
+
+  let doubles : Array[Double] = [
+    0.0,
+    -0.0,
+    1.5,
+    0x7FF8000000000001UL.reinterpret_as_double(),
+  ]
+  let double_single = HllSketch::new_default()
+  let double_batch = HllSketch::new_default()
+  for value in doubles {
+    double_single.add_double(value)
+  }
+  double_batch.add_double_batch(doubles[:])
+  assert_eq(double_batch.to_bytes(), double_single.to_bytes())
+
+  let bools : Array[Bool] = [false, true, true, false, true]
+  let bool_single = HllSketch::new_default()
+  let bool_batch = HllSketch::new_default()
+  for value in bools {
+    bool_single.add_bool(value)
+  }
+  bool_batch.add_bool_batch(bools[:])
+  assert_eq(bool_batch.to_bytes(), bool_single.to_bytes())
+}
+
+///|
 test "the inverse power covers every legal rank" {
   let mut expected = 1.0
   for rank in 0..<=61 {

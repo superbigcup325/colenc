@@ -87,6 +87,10 @@ The sketch lives in its own package and exports:
   constructor (`HllSketch::new_default`)
 - one typed entry point per column value: `add_int32`, `add_int64`, `add_float`,
   `add_double`, `add_bool`, and `add_bytes` for `Bytes`
+- `add_int32_batch`, `add_int64_batch`, `add_float_batch`, `add_double_batch`
+  and `add_bool_batch` take an `ArrayView` of the same type. A batch is exactly
+  the corresponding sequence of single updates: it produces the same registers,
+  estimate and bytes, and exists to keep a caller's hot loop inside the package
 - `merge` of two sketches with equal precision, returning a new sketch and
   leaving both operands untouched (the same ownership rule a set operation
   follows: a result never aliases an operand)
@@ -166,6 +170,15 @@ the typed-hash commit, the combined rank changes measured 7.14 to 4.16 ms
 to 7.8 us (-93.7%) for the estimate, over three alternating native-release
 runs. The exhaustive leading-zero test covers all 64 bit positions, and the
 inverse-power test pins every legal rank through 61 against repeated halving.
+
+The final candidate was a typed batch entry point. The same precomputed array
+of 1,000,000 `Int64` values went through one sketch with single `add_int64`
+calls and another through `add_int64_batch`, in one binary, over five runs:
+4.77 to 4.19 ms (-12.1%). The gain is the repeated public call and loop
+boundary, not different hashing or register work; the two paths serialize to
+the same bytes, which a whitebox test asserts. `Int32`, `Float`, `Double` and
+`Bool` have the same batch shape, but only the `Int64` case carries a timing
+claim.
 
 ### Serialization
 

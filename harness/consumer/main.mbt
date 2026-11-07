@@ -207,14 +207,21 @@ fn sketches() -> Unit raise {
   // serializes them, reads them back and compares an answer. If the archive ever
   // ships this package without its interfaces, this call is what notices.
   let hll = @sketches.HllSketch::new_default()
-  for index in 0..<500 {
-    hll.add_int32(index)
+  let hll_values = Array::makei(500, fn(index) { index })
+  for value in hll_values {
+    hll.add_int32(value)
   }
   let hll_bytes = hll.to_bytes()
   let hll_back = @sketches.HllSketch::from_bytes(hll_bytes.exact_view())
   ensure(
     hll_back.to_bytes() == hll_bytes,
     "hll round trip through the packaged surface",
+  )
+  let hll_batched = @sketches.HllSketch::new_default()
+  hll_batched.add_int32_batch(hll_values[:])
+  ensure(
+    hll_batched.to_bytes() == hll_bytes,
+    "hll batch update through the packaged surface",
   )
   ensure(hll.estimate() > 400.0 && hll.estimate() < 600.0, "hll estimate")
 

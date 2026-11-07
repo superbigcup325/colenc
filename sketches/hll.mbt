@@ -482,8 +482,30 @@ pub fn HllSketch::add_int32(self : HllSketch, value : Int32) -> Unit {
 }
 
 ///|
+pub fn HllSketch::add_int32_batch(
+  self : HllSketch,
+  values : ArrayView[Int32],
+) -> Unit {
+  for value in values {
+    self.absorb_hash(
+      hll_hash_short_le(value.to_int64().reinterpret_as_uint64(), 4),
+    )
+  }
+}
+
+///|
 pub fn HllSketch::add_int64(self : HllSketch, value : Int64) -> Unit {
   self.absorb_hash(hll_hash_short_le(value.reinterpret_as_uint64(), 8))
+}
+
+///|
+pub fn HllSketch::add_int64_batch(
+  self : HllSketch,
+  values : ArrayView[Int64],
+) -> Unit {
+  for value in values {
+    self.absorb_hash(hll_hash_short_le(value.reinterpret_as_uint64(), 8))
+  }
 }
 
 ///|
@@ -494,14 +516,47 @@ pub fn HllSketch::add_float(self : HllSketch, value : Float) -> Unit {
 }
 
 ///|
+pub fn HllSketch::add_float_batch(
+  self : HllSketch,
+  values : ArrayView[Float],
+) -> Unit {
+  for value in values {
+    self.absorb_hash(
+      hll_hash_short_le(value.reinterpret_as_uint().to_uint64(), 4),
+    )
+  }
+}
+
+///|
 pub fn HllSketch::add_double(self : HllSketch, value : Double) -> Unit {
   self.absorb_hash(hll_hash_short_le(value.reinterpret_as_uint64(), 8))
+}
+
+///|
+pub fn HllSketch::add_double_batch(
+  self : HllSketch,
+  values : ArrayView[Double],
+) -> Unit {
+  for value in values {
+    self.absorb_hash(hll_hash_short_le(value.reinterpret_as_uint64(), 8))
+  }
 }
 
 ///|
 pub fn HllSketch::add_bool(self : HllSketch, value : Bool) -> Unit {
   let bits = if value { 1UL } else { 0UL }
   self.absorb_hash(hll_hash_short_le(bits, 1))
+}
+
+///|
+pub fn HllSketch::add_bool_batch(
+  self : HllSketch,
+  values : ArrayView[Bool],
+) -> Unit {
+  for value in values {
+    let bits = if value { 1UL } else { 0UL }
+    self.absorb_hash(hll_hash_short_le(bits, 1))
+  }
 }
 
 ///|
