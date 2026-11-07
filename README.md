@@ -36,6 +36,14 @@ gates are recorded in [the sketch contracts](docs/SKETCHES.md). Release
 follow-through and conditional library work are planned in
 [the current next steps](docs/NEXT-STEPS.md).
 
+Version 0.1.4 is the release candidate for the post-0.1.3 tree. It carries the
+Roaring buffer-offset and decoder-validation fixes, HLL typed hashing and batch
+updates, `UInt64::clz`, exact inverse powers, one-pass sparse deserialization,
+`TDigest::quantiles`, and the sparse Roaring batch-iteration fix. The serialized
+formats and encoding choice bits are unchanged; the sketch batch methods and
+quantile API are additive. The [changelog](CHANGELOG.md#014---2026-11-08) has
+the measurements and the recorded negative results.
+
 Version 0.1.3 gives the HyperLogLog sketch a second, sparse state: a sketch
 holds the dense register array or a sorted array of its live entries, and
 promotes once it outgrows the sparse form. Nothing observable moves — the v1
