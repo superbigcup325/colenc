@@ -865,6 +865,36 @@ fn bench_plain(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
 }
 
 ///|
+/// Narrow DELTA string matrix: the changed DELTA_BYTE_ARRAY path beside the
+/// unchanged DELTA_LENGTH_BYTE_ARRAY control, without unrelated encodings.
+fn bench_delta_strings(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
+  let labels = Array::makei(STR_COUNT, fn(i) {
+    @utf8.encode("label-\{(i % 16).to_string()}")
+  })
+  let prefixes = Array::makei(STR_COUNT, fn(i) {
+    @utf8.encode("shared-prefix-\{i.to_string()}")
+  })
+  let label_bytes = bytes_total(labels)
+  let prefix_bytes = bytes_total(prefixes)
+  bench_encoding(
+    b,
+    sink,
+    "string-lowcard-deltalen",
+    @colenc_types.ColBuf::ByteArrays(labels),
+    @colenc_types.DeltaLength,
+    label_bytes,
+  )
+  bench_encoding(
+    b,
+    sink,
+    "string-prefix-deltaba",
+    @colenc_types.ColBuf::ByteArrays(prefixes),
+    @colenc_types.DeltaByteArray,
+    prefix_bytes,
+  )
+}
+
+///|
 fn bench_families(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
   let n = INT_COUNT
   let monotonic = @colenc_types.ColBuf::Int64s(
@@ -1451,6 +1481,17 @@ fn bench_tdigest(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
     }
     sink.val = sink.val + total.to_int()
   })
+  record(b, label("tdigest", "quantile-x99-batch", 400 * 16, 99), fn() {
+    let got = left.quantiles(qs) catch { _ => abort("batch quantile raised") }
+    if got.length() != qs.length() {
+      abort("batch quantile count differs")
+    }
+    let mut total = 0.0
+    for value in got {
+      total = total + value
+    }
+    sink.val = sink.val + total.to_int()
+  })
   let buffered = tdigest_filled(700, 4)
   record(b, label("tdigest", "to_bytes", 400 * 16, 400), fn() {
     sink.val = sink.val + left.to_bytes().length()
@@ -1650,6 +1691,33 @@ fn bench_hll(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
       sink.val = sink.val + total.to_int()
     },
   )
+  let small_groups = 1000
+  let small_per_group = 20
+  record(
+    b,
+    label(
+      "hll",
+      "update-int64-1000-groups-x20",
+      small_groups * small_per_group * 8,
+      small_groups * small_per_group,
+    ),
+    fn() {
+      let total = hll_many_groups(small_groups, small_per_group)
+      hll_guard(total, small_groups * small_per_group)
+      sink.val = sink.val + total.to_int()
+    },
+  )
+  let small = @sketches.HllSketch::new_default()
+  for index in 0..<20 {
+    small.add_int64(hll_value(index, 0))
+  }
+  let small_bytes = small.to_bytes()
+  record(b, label("hll", "from_bytes-sparse", 16384, 16384), fn() {
+    let back = @sketches.HllSketch::from_bytes(small_bytes[:]) catch {
+      _ => abort("from_bytes raised")
+    }
+    sink.val = sink.val + back.register_count()
+  })
   let filled = @sketches.HllSketch::new_default()
   let other = @sketches.HllSketch::new_default()
   for index in 0..<n {
@@ -1801,6 +1869,18 @@ fn main {
     let total = hll_many_groups(groups, per_group)
     hll_guard(total, groups * per_group)
     println("groups=\{groups} per_group=\{per_group} estimate=\{total}")
+    return
+  }
+  if argv.length() > 1 && argv[1] == "families" {
+    bench_families(bencher, sink)
+    println(bencher.dump_summaries())
+    println("sink=\{sink.val}")
+    return
+  }
+  if argv.length() > 1 && argv[1] == "delta" {
+    bench_delta_strings(bencher, sink)
+    println(bencher.dump_summaries())
+    println("sink=\{sink.val}")
     return
   }
   if argv.length() > 1 && argv[1] == "dict" {

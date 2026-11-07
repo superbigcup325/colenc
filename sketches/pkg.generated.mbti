@@ -49,6 +49,7 @@ pub fn TDigest::minimum(Self) -> Double raise @types.EncodingError
 pub fn TDigest::new(Int32) -> Self raise @types.EncodingError
 pub fn TDigest::new_default() -> Self
 pub fn TDigest::quantile(Self, Double) -> Double raise @types.EncodingError
+pub fn TDigest::quantiles(Self, Array[Double]) -> Array[Double] raise @types.EncodingError
 pub fn TDigest::to_bytes(Self) -> Bytes
 pub fn TDigest::update(Self, Double) -> Unit raise @types.EncodingError
 

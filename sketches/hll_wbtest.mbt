@@ -343,6 +343,33 @@ test "reading a serialized state back keeps a small one sparse" {
 }
 
 ///|
+test "deserializing sparse entries keeps their order at the promotion limit" {
+  let count : Int32 = 1 << 14
+  let precision : Int32 = 14
+  let bytes = FixedArray::make(2 + count, b'\x00')
+  bytes[0] = HLL_VERSION.to_byte()
+  bytes[1] = precision.to_byte()
+  for slot in 0..<128 {
+    let rank : Int32 = slot % 51 + 1
+    bytes[2 + slot * 127] = rank.to_byte()
+  }
+  let source = Bytes::from_array(bytes.exact_view())
+  let sparse = HllSketch::from_bytes(source.exact_view()) catch {
+    _ => abort("sparse state rejected")
+  }
+  assert_true(sparse.is_sparse())
+  assert_eq(sparse.to_bytes(), source)
+  let extra : Int32 = 1
+  bytes[2 + 128 * 127] = extra.to_byte()
+  let dense_source = Bytes::from_array(bytes.exact_view())
+  let dense = HllSketch::from_bytes(dense_source.exact_view()) catch {
+    _ => abort("dense state rejected")
+  }
+  assert_false(dense.is_sparse())
+  assert_eq(dense.to_bytes(), dense_source)
+}
+
+///|
 test "precision below 9 never goes sparse" {
   for precision in 4..<=8 {
     let sketch = HllSketch::new(precision) catch { _ => abort("rejected") }
