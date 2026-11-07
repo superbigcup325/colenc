@@ -11,6 +11,39 @@ project's decision. The [implementation record](OPTIMIZATION-PLAN.md) preserves
 the completed kernel tasks; the [roadmap](ROADMAP.md) and
 [sketch contracts](SKETCHES.md) retain their acceptance definitions.
 
+## Post-merge status (2026-11-08)
+
+This section supersedes the historical work-order snapshot below. `main` is
+`27a29a5`; PR #2, #3, #4 and #5 are merged and issue #1 is closed. The Roaring
+append-offset and decoder-validation fix, HLL typed hashing and batch API,
+`UInt64::clz`, exact `2^-rank`, sparse `from_bytes`, `TDigest::quantiles`, and
+the sparse Roaring batch-iteration fix are in the source tree. The HLL and
+t-digest APIs are additive; no encoded format changed. `CHANGELOG.md` and
+[`docs/SKETCHES.md`](SKETCHES.md) carry the measurements.
+
+FSST symbol-table views and the DELTA_BYTE_ARRAY continuous-body candidate were
+measured and rejected because their named controls regressed beyond spread.
+Their repeatable `harness/perf` controls remain. The published registry artifact
+is still 0.1.3, so the post-release source changes are unreleased and the next
+version is a maintainer decision.
+
+The two remaining consumer-led investigations still have no workload trigger:
+
+- **FSST model reuse (F1)** needs repeated small string batches with a stable
+  distribution, a profile that shows training cost, a bounded model lifetime,
+  held-out and drifting batches, and a one-shot fallback. The library already
+  exposes `FsstModel` and `encode_fsst_with`; no shared-table frame or export
+  format is implied.
+- **Immutable-table Roaring (I0/F2)** needs explicit row-ID ownership, immutable
+  source identity, repeated predicates, and an exact scan control. Build/load,
+  query, memory, size and reuse must be measured together. A bitmap intersection
+  alone does not establish reduced Parquet decoding; that needs a separate
+  selection/gather contract.
+
+A measured negative result closes either investigation. Wider bitmap IDs,
+automatic planner choice, extra set operations, larger row groups and further
+eager shapes keep their existing evidence gates.
+
 ## Current work order (2026-10-26)
 
 The upstream check found colenc `main` at `e08396e` with
@@ -115,8 +148,12 @@ its workload demonstrates the need; no additional kernel blocks L0 to C2.
 | 2 | FSST model reuse in a consumer, moonlake | Repeated small string batches with a stable enough distribution and training visible in the profile | One opt-in workload with a bounded model lifetime and held-out/drifting batches. Report training amortization, table bytes per frame, encode/decode time, memory and fallback behavior. Keep one-shot behavior available; defer export/shared-table formats unless this caller needs them |
 | 3 | I0 immutable-table Roaring experiment, moonlake | A repeated-predicate workload with explicit row-ID ownership and immutable source identity | Compare exact results and build/load/query/memory/size costs across selective and unselective cases; state the reuse needed to amortize the index. A negative result closes I0. Reduced decoding requires a separate selection/gather contract before integration |
 
-HLL CPU rewrites need a profile after the state change. Batch t-digest queries
-need a query-bound consumer; 99 scalar queries currently take about 2.3 us.
+The HLL CPU rewrites are complete: typed values hash without scratch buffers,
+rank uses `UInt64::clz`, `2^-rank` uses exact exponent bits, sparse
+deserialization takes one validated pass, and typed batch updates are additive
+API. `TDigest::quantiles` was added after a same-binary measurement, and the
+sparse Roaring batch-iteration fix is merged. FSST symbol views and the
+DELTA_BYTE_ARRAY body-buffer candidate were rejected with recorded controls.
 Wider bitmap IDs, more set operations, shared-table FSST frames and new sketch
 algorithms remain workload-driven follow-ups, with contracts recorded before
 implementation. A measured negative result completes an investigation.

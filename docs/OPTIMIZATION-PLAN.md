@@ -27,8 +27,9 @@ on the resulting source again.
 | K2: Dictionary budget during construction | `5df03c6` | Early `None` once the dictionary payload would pass the budget; accepted bytes unchanged |
 | K3: Compact HLL state | `d497326` | Dense byte registers, snapshot `registers()` and allocation-free `register(index)`; sparse state deferred |
 | K4: Roaring query APIs | `5163107` | Intersection count, overlap testing and stateless ordered batches; engine adoption still follows I0 |
-| K5: t-digest compression and batch quantiles | `353e692` | Ordered centroid/buffer merge and cached lower scale values; batch queries deferred after measurement |
+| K5: t-digest compression and batch quantiles | `353e692` | Ordered centroid/buffer merge and cached lower scale values; batch queries were later measured and delivered in K7 |
 | K6: Reusable FSST model | `3bb6ca0` | Immutable trained model and `encode_fsst_with`, retaining the existing self-contained frame |
+| K7: Post-release CPU and query measurements | `9824a82`, `2f3278a`, `27a29a5` | HLL typed hashing, batch updates, `clz`, exact inverse powers and one-pass sparse deserialization; t-digest batch quantiles; sparse Roaring iteration. FSST symbol views and the DELTA body-buffer candidate were rejected with measured controls |
 
 The [final benchmark record](NEXT-STEPS.md#final-benchmark-record) and
 [scoreboard](scoreboard.md) contain the post-implementation measurements.
@@ -54,6 +55,41 @@ changing an oracle.
   repeatable performance record and remaining limitations together. Keep changes
   separable by task. Publication and release sequencing follow
   [Next steps](NEXT-STEPS.md#release-order-and-ownership).
+
+## K7. Post-release CPU and query measurements
+
+Delivered after 0.1.3 through PR #3, #4 and #5. Every candidate was measured
+separately against an unchanged binary; a candidate that regressed a named
+control beyond spread is recorded as closed rather than shipped.
+
+- HLL typed values hash their canonical little-endian bits directly, rank uses
+  `UInt64::clz`, and `2^-rank` is built from IEEE-754 exponent bits. Against
+  `main`, one million updates in one group went 20.14 to 3.93 ms (-80.5%),
+  1,000 groups of 1,000 updates 48.41 to 21.69 ms (-55.2%), and a full-sketch
+  estimate 134.8 to 7.9 us (-94.2%).
+- Five typed batch-update methods take `ArrayView` and keep a caller's hot loop
+  inside the package. One million precomputed `Int64` values took 4.77 ms
+  through single calls and 4.19 ms through the batch (-12.1%).
+- Sparse HLL deserialization collects ordered entries in the first validated
+  pass: 16.1 to 12.2 us (-24.2%), with dense `from_bytes` unchanged within
+  noise. A small-state linear search was rejected after a 2.7% grouped-update
+  regression.
+- `TDigest::quantiles` finalizes once and reuses cumulative centers: 99 queries
+  took 2.66 us through scalar calls and 1.09 us through the batch (-59.0%).
+- Roaring sparse full batched iteration skips an empty lower-bound search:
+  1.12 to 0.914 ms (-18.4%), with dense and run controls within 2%.
+
+Two candidates were closed as negative results. FSST symbol-table views gave no
+decode win and regressed several cases by 1 to 4%. A DELTA_BYTE_ARRAY continuous
+body cut the target encode 9.16 to 5.80 ms (-36.7%), but the unchanged
+DELTA_LENGTH_BYTE_ARRAY control regressed 2.78 to 2.97 ms (+6.9%). The
+production encoders were left unchanged; `harness/perf families` and
+`harness/perf delta` preserve the controls.
+
+All delivered paths kept serialized bytes, hash and rank rules, estimator
+contracts and error offsets unchanged. Three-backend tests, the affected
+reference rigs and the packaged consumer passed. The published artifact remains
+0.1.3, so these changes are unreleased.
 
 ## K1. PLAIN word loads
 
@@ -157,12 +193,12 @@ The delivery decisions and conditional next stage are:
    per-group register array, not the sketch's CPU, dominating a grouped
    aggregate, and the two-state sketch shipped in 0.1.3.
 
-A separate CPU experiment can price numeric hashing without per-value scratch
-buffers, typed batch updates, `UInt64::clz` instead of the manual leading-zero
-walk, and an exact lookup for inverse powers in `estimate`. Keep hashes,
-registers and estimates stable; measure each change rather than bundling them.
-The kernel already accepts a precision parameter; exposing one in SQL is
-moonlake work.
+The separate CPU experiment is complete: numeric hashing without scratch
+buffers, typed batch updates, `UInt64::clz`, exact inverse powers and one-pass
+sparse deserialization are delivered in [K7](#k7-post-release-cpu-and-query-measurements).
+Each change was measured separately while hashes, registers, estimates and
+bytes stayed stable. The kernel already accepts a precision parameter; exposing
+one in SQL remains moonlake work.
 
 **Exit:** the existing HLL statistical, algebra and malformed-state groups pass;
 all three targets retain the promised bytes and merge ownership. Record update,
@@ -230,11 +266,11 @@ is a separate moonlake change.
 buffer and merges it with the ordered centroids, and computes each centroid's
 lower scale value once; the centroid list is identical to the old one. On the
 perf rig a 1M-value update stream went from 88.5 to 51.9 ms and a merge from
-3.7 to 2.5 us (native release, medians of three). `quantiles(qs)` was not added:
-a scalar query on a finalized digest costs about 23 ns (2.3 us for 99 queries,
-and `compress` returns immediately once the buffer is empty), so a batch call
-would save validation work measured in nanoseconds, and no query-bound consumer
-has been demonstrated. It stays a follow-up for a consumer that shows that need.
+3.7 to 2.5 us (native release, medians of three). `quantiles(qs)` was deferred
+at that point because 99 scalar queries took about 2.3 us and no query-bound
+consumer had been demonstrated. A later same-binary measurement showed that a
+shared finalize and cumulative centers still cut 99 queries from 2.66 to
+1.09 us, so the batch API was delivered in K7 with an explicit contract.
 
 **Exit:** retain structural invariants, exact extremes, serialization checks,
 the named distribution/order/merge-tree matrix and its existing absolute
