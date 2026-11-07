@@ -53,6 +53,27 @@ test "roaring: two containers get one offset each" {
 }
 
 ///|
+test "roaring: appended serialization keeps offsets relative to its start" {
+  let bitmap = RoaringBitmap::from_ids([0, 65536]) catch {
+    _ => abort("from_ids raised")
+  }
+  let out = @buffer.Buffer()
+  out.write_bytes(b"prefix")
+  bitmap.serialize(out)
+  let expected = @buffer.Buffer()
+  expected.write_bytes(b"prefix")
+  expected.write_bytes(bitmap.to_bytes())
+  assert_eq(out.to_bytes(), expected.to_bytes())
+  let back = RoaringBitmap::from_bytes(out.to_bytes()[6:]) catch {
+    error =>
+      fail(
+        "appended bitmap did not decode: \{@types.EncodingError::message(error)}",
+      )
+  }
+  assert_eq(back.to_array(), [0, 65536])
+}
+
+///|
 test "roaring: four containers still carry the offset table" {
   let bitmap = RoaringBitmap::from_ids([0, 65536, 131072, 196608]) catch {
     _ => RoaringBitmap::new()
@@ -166,6 +187,21 @@ test "roaring: negative ids and the u32 half are refused" {
     other => fail("unexpected error \{@types.EncodingError::message(other)}")
   } noraise {
     _ => fail("a negative id must be refused")
+  }
+}
+
+///|
+test "roaring: decoding refuses ids above the int32 range" {
+  // key 0x8000, low 0: the portable u32 id 0x80000000 is not an INT32 id.
+  let bytes = b"\x3a\x30\x00\x00\x01\x00\x00\x00\x00\x80\x00\x00\x10\x00\x00\x00\x00\x00"
+  try RoaringBitmap::from_bytes(bytes) catch {
+    @types.EncodingError::OutOfRange(value, offset) => {
+      assert_eq(value, 2147483648L)
+      assert_eq(offset, 8)
+    }
+    other => fail("unexpected error \{@types.EncodingError::message(other)}")
+  } noraise {
+    _ => fail("an id above INT32 max must be refused")
   }
 }
 
@@ -286,6 +322,43 @@ test "roaring: values that do not ascend inside a container are refused" {
     other => fail("unexpected error \{@types.EncodingError::message(other)}")
   } noraise {
     _ => fail("descending values must be refused")
+  }
+}
+
+///|
+test "roaring: decoding refuses a run that crosses its container boundary" {
+  // One run [65535, 65536] in key 0: its second value belongs to key 1.
+  let bytes = b"\x3b\x30\x00\x00\x01\x00\x00\x01\x00\x01\x00\xff\xff\x01\x00"
+  try RoaringBitmap::from_bytes(bytes) catch {
+    @types.EncodingError::Corrupt(offset) => assert_eq(offset, 11)
+    other => fail("unexpected error \{@types.EncodingError::message(other)}")
+  } noraise {
+    _ => fail("a run crossing the container boundary must be refused")
+  }
+}
+
+///|
+test "roaring: decoding refuses overlapping or out-of-order runs" {
+  let cases : Array[(Bytes, Int32)] = [
+    // [10, 14] followed by [14, 14] overlaps at 14.
+    (
+      b"\x3b\x30\x00\x00\x01\x00\x00\x05\x00\x02\x00\x0a\x00\x04\x00\x0e\x00\x00\x00",
+      15,
+    ),
+    // [20, 20] followed by [10, 10] moves backwards.
+    (
+      b"\x3b\x30\x00\x00\x01\x00\x00\x01\x00\x02\x00\x14\x00\x00\x00\x0a\x00\x00\x00",
+      15,
+    ),
+  ]
+  for case in cases {
+    let (bytes, want_offset) = case
+    try RoaringBitmap::from_bytes(bytes) catch {
+      @types.EncodingError::Corrupt(offset) => assert_eq(offset, want_offset)
+      other => fail("unexpected error \{@types.EncodingError::message(other)}")
+    } noraise {
+      _ => fail("overlapping or out-of-order runs must be refused")
+    }
   }
 }
 
