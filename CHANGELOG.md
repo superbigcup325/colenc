@@ -4,6 +4,43 @@ All notable changes to this project are documented in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `HllSketch::add_int32_batch`, `add_int64_batch`, `add_float_batch`,
+  `add_double_batch` and `add_bool_batch` accept an `ArrayView` of values. A
+  batch is exactly the corresponding sequence of single updates, so registers,
+  estimates and bytes are identical; it keeps a caller's hot loop inside the
+  package. On native release, the same precomputed array of 1,000,000 `Int64`
+  values took 4.77 ms through single calls and 4.19 ms through the batch over
+  five runs (-12.1%). The other types share the same loop shape, but the
+  performance number was measured for `Int64` only.
+
+### Changed
+
+- `HllSketch` hashes typed values directly from their canonical little-endian bit
+  pattern instead of allocating an eight-byte scratch array and copying bytes into
+  it on every update. The hash, rank rule, estimator, merge law, public interface
+  and v1 serialized bytes are unchanged. Native release, medians of three
+  alternating baseline/candidate runs on laptop (each case already a median of
+  seven batches): 1,000,000 `Int64` updates in one group 20.34 to 7.26 ms
+  (-64.3%), and 1,000 groups of 1,000 updates 50.70 to 35.75 ms (-29.5%).
+  Estimate, merge, `to_bytes` and `from_bytes` moved within 1%, which is the
+  run-to-run spread on that host. `harness/perf hll` reproduces the cases.
+- HLL rank computation now uses the toolchain's `UInt64::clz`, and `2^-rank` is
+  built directly from IEEE-754 exponent bits instead of a per-register halving
+  loop. Registers, estimates and bytes are unchanged. Against the preceding
+  typed-hash commit, three alternating runs put one group of 1,000,000 updates
+  at 7.14 to 4.16 ms (-41.8%), 1,000 groups of 1,000 updates at 34.23 to
+  21.32 ms (-37.7%), and a full-sketch estimate at 123.7 to 7.8 us (-93.7%);
+  merge and serialization stayed within 1%.
+- Against `main`, with the whole branch in one binary and three alternating
+  native-release runs on the same host: 1,000,000 `Int64` updates in one group
+  went from 20.14 to 3.93 ms (-80.5%), 1,000 groups of 1,000 updates from 48.41
+  to 21.69 ms (-55.2%), and a full-sketch estimate from 134.8 to 7.9 us
+  (-94.2%). Merge and serialization stayed within 2%.
+
 ## [0.1.3] - 2026-10-26
 
 ### Changed

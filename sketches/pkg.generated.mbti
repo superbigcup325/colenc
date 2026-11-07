@@ -14,11 +14,16 @@ pub struct HllSketch {
   // private fields
 }
 pub fn HllSketch::add_bool(Self, Bool) -> Unit
+pub fn HllSketch::add_bool_batch(Self, ArrayView[Bool]) -> Unit
 pub fn HllSketch::add_bytes(Self, Bytes) -> Unit
 pub fn HllSketch::add_double(Self, Double) -> Unit
+pub fn HllSketch::add_double_batch(Self, ArrayView[Double]) -> Unit
 pub fn HllSketch::add_float(Self, Float) -> Unit
+pub fn HllSketch::add_float_batch(Self, ArrayView[Float]) -> Unit
 pub fn HllSketch::add_int32(Self, Int32) -> Unit
+pub fn HllSketch::add_int32_batch(Self, ArrayView[Int32]) -> Unit
 pub fn HllSketch::add_int64(Self, Int64) -> Unit
+pub fn HllSketch::add_int64_batch(Self, ArrayView[Int64]) -> Unit
 pub fn HllSketch::estimate(Self) -> Double
 pub fn HllSketch::from_bytes(BytesView) -> Self raise @types.EncodingError
 pub fn HllSketch::merge(Self, Self) -> Self raise @types.EncodingError

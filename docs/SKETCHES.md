@@ -87,6 +87,10 @@ The sketch lives in its own package and exports:
   constructor (`HllSketch::new_default`)
 - one typed entry point per column value: `add_int32`, `add_int64`, `add_float`,
   `add_double`, `add_bool`, and `add_bytes` for `Bytes`
+- `add_int32_batch`, `add_int64_batch`, `add_float_batch`, `add_double_batch`
+  and `add_bool_batch` take an `ArrayView` of the same type. A batch is exactly
+  the corresponding sequence of single updates: it produces the same registers,
+  estimate and bytes, and exists to keep a caller's hot loop inside the package
 - `merge` of two sketches with equal precision, returning a new sketch and
   leaving both operands untouched (the same ownership rule a set operation
   follows: a result never aliases an operand)
@@ -140,6 +144,48 @@ representation: every group holds 128 entries in sorted order before it promotes
 it pays the shift 1000 times. It is bounded work — 128 entries per group — and it
 buys the small-group rows above. `from_bytes` pays one extra branch per register to
 count the live ones, because the state it rebuilds has to match the state it wrote.
+
+The typed update methods took the next measured step on 2026-11-07. They now hash
+the value's canonical little-endian bits directly, instead of allocating an
+eight-byte scratch array and copying the bytes into it before every hash. The byte
+stream is produced by the same MurmurHash3 tail and finalization, so the pinned
+register bytes and every estimate stay identical. Against the pre-change binary,
+three alternating runs on laptop (native release; each case a median of seven
+batches) put 1,000,000 `Int64` updates in one group at 20.34 to 7.26 ms (-64.3%)
+and 1,000 groups of 1,000 updates at 50.70 to 35.75 ms (-29.5%). The grouped case
+moves less because sorted sparse insertion and promotion dominate it. Estimate,
+merge, `to_bytes` and `from_bytes` stayed within 1%, the host's run-to-run spread.
+`harness/perf hll` is the repeatable rig.
+
+Two rank-side candidates followed, each measured against the commit before it
+rather than bundled. Replacing the six-branch leading-zero ladder with
+`UInt64::clz` put a single group of 1,000,000 updates at 7.11 to 4.21 ms
+(-40.7%) and 1,000 groups of 1,000 updates at 33.95 to 31.69 ms (-6.6%).
+Constructing `2^-rank` from the IEEE-754 exponent bits, instead of multiplying
+by 0.5 once per rank, put a full-sketch estimate at 124.0 to 7.7 us (-93.8%);
+it also took the grouped update from 31.83 to 21.44 ms (-32.6%) because that
+case estimates every group. Merge and serialization stayed within 1%. Against
+the typed-hash commit, the combined rank changes measured 7.14 to 4.16 ms
+(-41.8%) for one group, 34.23 to 21.32 ms (-37.7%) for 1,000 groups, and 123.7
+to 7.8 us (-93.7%) for the estimate, over three alternating native-release
+runs. The exhaustive leading-zero test covers all 64 bit positions, and the
+inverse-power test pins every legal rank through 61 against repeated halving.
+
+The final candidate was a typed batch entry point. The same precomputed array
+of 1,000,000 `Int64` values went through one sketch with single `add_int64`
+calls and another through `add_int64_batch`, in one binary, over five runs:
+4.77 to 4.19 ms (-12.1%). The gain is the repeated public call and loop
+boundary, not different hashing or register work; the two paths serialize to
+the same bytes, which a whitebox test asserts. `Int32`, `Float`, `Double` and
+`Bool` have the same batch shape, but only the `Int64` case carries a timing
+claim.
+
+With all four changes in one binary, three alternating runs against `main` on
+the same host put a single group of 1,000,000 updates at 20.14 to 3.93 ms
+(-80.5%), 1,000 groups of 1,000 updates at 48.41 to 21.69 ms (-55.2%), and a
+full-sketch estimate at 134.8 to 7.9 us (-94.2%). Merge and serialization
+stayed within 2%. These are the aggregate rows; the per-step numbers above are
+the evidence that each change earned its place.
 
 ### Serialization
 

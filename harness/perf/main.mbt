@@ -1617,6 +1617,23 @@ fn bench_hll(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
     hll_guard(estimate, n)
     sink.val = sink.val + estimate.to_int()
   })
+  let batch_values = Array::makei(n, fn(index) { hll_value(index, 0) })
+  record(b, label("hll", "update-int64-array-singles", n * 8, n), fn() {
+    let sketch = @sketches.HllSketch::new_default()
+    for value in batch_values {
+      sketch.add_int64(value)
+    }
+    let estimate = sketch.estimate()
+    hll_guard(estimate, n)
+    sink.val = sink.val + estimate.to_int()
+  })
+  record(b, label("hll", "update-int64-array-batch", n * 8, n), fn() {
+    let sketch = @sketches.HllSketch::new_default()
+    sketch.add_int64_batch(batch_values[:])
+    let estimate = sketch.estimate()
+    hll_guard(estimate, n)
+    sink.val = sink.val + estimate.to_int()
+  })
   let groups = 1000
   let per_group = 1000
   record(
