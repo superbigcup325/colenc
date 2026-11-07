@@ -60,6 +60,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the same representation and bytes. A linear-search candidate for small sparse
   states was measured and rejected: it won 3.3% on 1,000 groups of 20 values
   while regressing the 1,000 x 1,000 grouped case by 2.7%, beyond its spread.
+- Two further candidates were measured and closed as negative results. Holding
+  FSST symbol bytes as views instead of owning `Bytes` gave no decode win and
+  regressed several cases by 1 to 4%, so model reuse remains the supported
+  amortization path; low-cardinality batches still go from 42.0 to 3.0 us with a
+  reused model. Writing DELTA_BYTE_ARRAY suffixes into one body buffer cut the
+  target encode from 9.16 to 5.80 ms (-36.7%) over five alternating narrow runs,
+  but the unchanged DELTA_LENGTH_BYTE_ARRAY encode regressed from 2.78 to
+  2.97 ms (+6.9%), beyond spread, so the production encoder was left untouched.
+  `harness/perf families` and `harness/perf delta` now isolate those controls.
 
 ## [0.1.3] - 2026-10-26
 

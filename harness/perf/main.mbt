@@ -865,6 +865,36 @@ fn bench_plain(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
 }
 
 ///|
+/// Narrow DELTA string matrix: the changed DELTA_BYTE_ARRAY path beside the
+/// unchanged DELTA_LENGTH_BYTE_ARRAY control, without unrelated encodings.
+fn bench_delta_strings(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
+  let labels = Array::makei(STR_COUNT, fn(i) {
+    @utf8.encode("label-\{(i % 16).to_string()}")
+  })
+  let prefixes = Array::makei(STR_COUNT, fn(i) {
+    @utf8.encode("shared-prefix-\{i.to_string()}")
+  })
+  let label_bytes = bytes_total(labels)
+  let prefix_bytes = bytes_total(prefixes)
+  bench_encoding(
+    b,
+    sink,
+    "string-lowcard-deltalen",
+    @colenc_types.ColBuf::ByteArrays(labels),
+    @colenc_types.DeltaLength,
+    label_bytes,
+  )
+  bench_encoding(
+    b,
+    sink,
+    "string-prefix-deltaba",
+    @colenc_types.ColBuf::ByteArrays(prefixes),
+    @colenc_types.DeltaByteArray,
+    prefix_bytes,
+  )
+}
+
+///|
 fn bench_families(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
   let n = INT_COUNT
   let monotonic = @colenc_types.ColBuf::Int64s(
@@ -1839,6 +1869,18 @@ fn main {
     let total = hll_many_groups(groups, per_group)
     hll_guard(total, groups * per_group)
     println("groups=\{groups} per_group=\{per_group} estimate=\{total}")
+    return
+  }
+  if argv.length() > 1 && argv[1] == "families" {
+    bench_families(bencher, sink)
+    println(bencher.dump_summaries())
+    println("sink=\{sink.val}")
+    return
+  }
+  if argv.length() > 1 && argv[1] == "delta" {
+    bench_delta_strings(bencher, sink)
+    println(bencher.dump_summaries())
+    println("sink=\{sink.val}")
     return
   }
   if argv.length() > 1 && argv[1] == "dict" {
