@@ -615,16 +615,15 @@ pub fn HllSketch::estimate(self : HllSketch) -> Double {
 }
 
 ///|
-/// 2^-rank, written as a lookup so the estimate does not call a transcendental
-/// function once per register.
+/// 2^-rank as an exact IEEE-754 power of two: bias minus rank in the exponent
+/// bits, so the estimator spends one shift and no loop per register.
 fn hll_inverse_pow(rank : Int32) -> Double {
-  let mut value = 1.0
-  let mut index = 0
-  while index < rank {
-    value = value * 0.5
-    index += 1
+  let exponent = 1023 - rank
+  if exponent < 0 {
+    0.0
+  } else {
+    (exponent.to_uint64() << 52).reinterpret_as_double()
   }
-  value
 }
 
 ///|

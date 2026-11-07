@@ -79,6 +79,15 @@ test "the leading-zero helper matches every bit position" {
 }
 
 ///|
+test "the inverse power covers every legal rank" {
+  let mut expected = 1.0
+  for rank in 0..<=61 {
+    assert_eq(hll_inverse_pow(rank), expected)
+    expected = expected * 0.5
+  }
+}
+
+///|
 test "the rank ceiling follows the precision" {
   let sketch = HllSketch::new(4) catch { _ => abort("precision 4 rejected") }
   // A hash of zero has no set bit among its rank bits, so the rank is the
