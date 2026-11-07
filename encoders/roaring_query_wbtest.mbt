@@ -141,6 +141,16 @@ test "batches concatenate to the full id array" {
 }
 
 ///|
+test "a batch entering a later key reads it from the first array value" {
+  let bitmap = rq_bitmap([7, 65536, 65543, 131072], false)
+  // The cursor leaves key 0 and enters key 1 with from_low = 0.
+  assert_eq(bitmap.ids_after(7L, 2), [65536, 65543])
+  assert_eq(bitmap.ids_after(65535L, 1), [65536])
+  // A later key whose only value is low 0 must still be included.
+  assert_eq(bitmap.ids_after(65543L, 1), [131072])
+}
+
+///|
 test "a cursor in the middle of a container, a gap or past the end" {
   let cursors : Array[Int64] = [
     -5L, -1L, 0L, 1L, 99L, 100L, 4095L, 4096L, 65535L, 65536L, 70000L, 196614L, 2147483645L,

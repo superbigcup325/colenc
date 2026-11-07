@@ -40,6 +40,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   went from 20.14 to 3.93 ms (-80.5%), 1,000 groups of 1,000 updates from 48.41
   to 21.69 ms (-55.2%), and a full-sketch estimate from 134.8 to 7.9 us
   (-94.2%). Merge and serialization stayed within 2%.
+- `RoaringBitmap::ids_after` starts an array container at its first value when a
+  batch enters it at low zero, instead of binary-searching a lower bound that is
+  already zero. The stateless cursor, batch semantics and portable bytes are
+  unchanged. Native release A/B over three alternating runs: full batched
+  iteration of one million sparse ids 1.12 to 0.914 ms (-18.4%), and the first
+  4096-id batch 4.4 to 3.6 us. Dense bitmap and run iteration stayed within
+  2%, and the sparse batch is now faster than the 1.01 ms `to_array` control.
 
 ## [0.1.3] - 2026-10-26
 

@@ -276,7 +276,15 @@ fn container_push_from(
   let base = key << 16
   match container {
     ArrayContainer(values) => {
-      let mut index = sorted_position(values, from_low)
+      // A container resumed from its beginning has no lower bound to locate:
+      // the first value is already the first candidate. Every later container
+      // in a full walk takes this path, so skipping the search removes one
+      // binary search per array container.
+      let mut index = if from_low == 0 {
+        0
+      } else {
+        sorted_position(values, from_low)
+      }
       while index < values.length() && out.length() < limit {
         out.push(base | values[index])
         index += 1
