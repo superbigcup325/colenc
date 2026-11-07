@@ -289,6 +289,13 @@ Four groups, all of which must pass before the sketch is called done.
 - `quantile(q)` returns the minimum exactly for `q <= 0` and the maximum exactly
   for `q >= 1`; otherwise it interpolates linearly between the two centroids
   whose positions bracket `q`, clamping to the extremes outside them.
+- `quantiles(qs)` validates every q before reading the digest, returns answers
+  in input order, allows duplicates and q values in any order, and returns an
+  empty array for an empty request. An empty digest with a nonempty request
+  raises `Incomplete`; an invalid q always raises `InvalidArgument`. One batch
+  finalizes the digest and builds cumulative centers once, then binary-searches
+  them per q. On native release over five runs, 99 ascending queries took 2.66
+  us through `quantile` and 1.09 us through `quantiles` (-59.0%).
 
 ### State cost
 

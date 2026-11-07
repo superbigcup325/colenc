@@ -231,6 +231,15 @@ fn sketches() -> Unit raise {
   }
   let median = digest.quantile(0.5)
   ensure(median > 200.0 && median < 300.0, "t-digest median")
+  let qs : Array[Double] = [0.25, 0.5, 0.75]
+  let answers = digest.quantiles(qs)
+  ensure(answers.length() == qs.length(), "t-digest batch length")
+  for index in 0..<qs.length() {
+    ensure(
+      answers[index] == digest.quantile(qs[index]),
+      "t-digest batch matches scalar",
+    )
+  }
   let digest_bytes = digest.to_bytes()
   let digest_back = @sketches.TDigest::from_bytes(digest_bytes.exact_view())
   ensure(

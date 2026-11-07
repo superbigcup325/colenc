@@ -1451,6 +1451,17 @@ fn bench_tdigest(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
     }
     sink.val = sink.val + total.to_int()
   })
+  record(b, label("tdigest", "quantile-x99-batch", 400 * 16, 99), fn() {
+    let got = left.quantiles(qs) catch { _ => abort("batch quantile raised") }
+    if got.length() != qs.length() {
+      abort("batch quantile count differs")
+    }
+    let mut total = 0.0
+    for value in got {
+      total = total + value
+    }
+    sink.val = sink.val + total.to_int()
+  })
   let buffered = tdigest_filled(700, 4)
   record(b, label("tdigest", "to_bytes", 400 * 16, 400), fn() {
     sink.val = sink.val + left.to_bytes().length()

@@ -16,6 +16,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   values took 4.77 ms through single calls and 4.19 ms through the batch over
   five runs (-12.1%). The other types share the same loop shape, but the
   performance number was measured for `Int64` only.
+- `TDigest::quantiles(qs)` returns several quantiles in input order over one
+  finalized digest. It validates q before reading state, supports duplicates
+  and unsorted q, and keeps `quantile`'s extremes and interpolation. Native
+  release, medians of five same-binary runs: 99 scalar queries 2.66 us, the
+  batch 1.09 us (-59.0%).
 
 ### Changed
 

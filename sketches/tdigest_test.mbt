@@ -103,6 +103,52 @@ test "a quantile outside 0..1 is rejected" {
 }
 
 ///|
+test "batch quantiles match scalar queries in input order" {
+  let values = Array::makei(1000, fn(index) {
+    (index * 37 % 1009).to_double() / 3.0
+  })
+  let digest = tdigest_of(values)
+  let qs : Array[Double] = [0.9, 0.0, 0.5, 0.5, 1.0, 0.25, 0.75]
+  let got = digest.quantiles(qs) catch { _ => abort("batch quantiles raised") }
+  assert_eq(got.length(), qs.length())
+  for index in 0..<qs.length() {
+    let expected = digest.quantile(qs[index]) catch {
+      _ => abort("scalar quantile raised")
+    }
+    assert_eq(got[index], expected)
+  }
+  let buffered = tdigest_of([1.0, 2.0, 4.0, 8.0])
+  let buffered_got = buffered.quantiles(qs) catch {
+    _ => abort("buffered batch quantiles raised")
+  }
+  for index in 0..<qs.length() {
+    let expected = buffered.quantile(qs[index]) catch {
+      _ => abort("buffered scalar quantile raised")
+    }
+    assert_eq(buffered_got[index], expected)
+  }
+  assert_eq(
+    (digest.quantiles([]) catch { _ => abort("empty batch raised") }).length(),
+    0,
+  )
+  let invalid = try {
+    let _ = digest.quantiles([0.5, 1.1])
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(invalid)
+  let empty = @sketches.TDigest::new_default()
+  let no_values = try {
+    let _ = empty.quantiles([0.5])
+    false
+  } catch {
+    _ => true
+  }
+  assert_true(no_values)
+}
+
+///|
 test "the weight sum is the value count and the centroid count stays bounded" {
   let digest = @sketches.TDigest::new(100) catch { _ => abort("x") }
   for index in 0..<50_000 {

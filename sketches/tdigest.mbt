@@ -463,6 +463,85 @@ pub fn TDigest::quantile(
 }
 
 ///|
+/// Several quantiles over one finalized digest. The answers follow the input
+/// order, duplicate q values are allowed, and an empty q array returns an empty
+/// result. q is validated before the digest is read, so an invalid q always
+/// reports `InvalidArgument`, including on an empty digest.
+pub fn TDigest::quantiles(
+  self : TDigest,
+  qs : Array[Double],
+) -> Array[Double] raise @types.EncodingError {
+  for q in qs {
+    if !tdigest_is_finite(q) || q < 0.0 || q > 1.0 {
+      raise @types.EncodingError::InvalidArgument("quantile outside 0..1")
+    }
+  }
+  if qs.length() == 0 {
+    return []
+  }
+  if !self.has_values {
+    raise @types.EncodingError::Incomplete(0, 1)
+  }
+  self.compress()
+  let count = self.means.length()
+  let centers : Array[Double] = Array(capacity=count)
+  let cumulative : Array[Double] = Array(capacity=count)
+  let mut before = 0.0
+  for index in 0..<count {
+    cumulative.push(before)
+    centers.push(before + self.weights[index] / 2.0)
+    before = before + self.weights[index]
+  }
+  let out : Array[Double] = Array(capacity=qs.length())
+  for q in qs {
+    if q <= 0.0 {
+      out.push(self.minimum)
+      continue
+    }
+    if q >= 1.0 {
+      out.push(self.maximum)
+      continue
+    }
+    if count == 1 {
+      out.push(self.means[0])
+      continue
+    }
+    let target = q * self.total
+    let mut low = 0
+    let mut high = count
+    while low < high {
+      let mid = (low + high) >> 1
+      if centers[mid] < target {
+        low = mid + 1
+      } else {
+        high = mid
+      }
+    }
+    if low >= count {
+      let last_center = cumulative[count - 1] + self.weights[count - 1] / 2.0
+      let span = self.total - last_center
+      let t = if span == 0.0 { 0.0 } else { (target - last_center) / span }
+      out.push(
+        self.means[count - 1] + (self.maximum - self.means[count - 1]) * t,
+      )
+      continue
+    }
+    let center = centers[low]
+    if low == 0 {
+      let span = center
+      let t = if span == 0.0 { 0.0 } else { target / span }
+      out.push(self.minimum + (self.means[0] - self.minimum) * t)
+      continue
+    }
+    let previous_center = cumulative[low] - self.weights[low - 1] / 2.0
+    let span = center - previous_center
+    let t = if span == 0.0 { 0.0 } else { (target - previous_center) / span }
+    out.push(self.means[low - 1] + (self.means[low] - self.means[low - 1]) * t)
+  }
+  out
+}
+
+///|
 /// The serialized form: version byte, compression as u16le, centroid count as
 /// u32le, the minimum and maximum as f64le, then one (mean f64le, weight f64le)
 /// pair per centroid. The extremes travel with the stream because a centroid
