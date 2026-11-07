@@ -35,6 +35,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   at 7.14 to 4.16 ms (-41.8%), 1,000 groups of 1,000 updates at 34.23 to
   21.32 ms (-37.7%), and a full-sketch estimate at 123.7 to 7.8 us (-93.7%);
   merge and serialization stayed within 1%.
+- Against `main`, with the whole branch in one binary and three alternating
+  native-release runs on the same host: 1,000,000 `Int64` updates in one group
+  went from 20.14 to 3.93 ms (-80.5%), 1,000 groups of 1,000 updates from 48.41
+  to 21.69 ms (-55.2%), and a full-sketch estimate from 134.8 to 7.9 us
+  (-94.2%). Merge and serialization stayed within 2%.
 
 ## [0.1.3] - 2026-10-26
 

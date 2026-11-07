@@ -180,6 +180,13 @@ the same bytes, which a whitebox test asserts. `Int32`, `Float`, `Double` and
 `Bool` have the same batch shape, but only the `Int64` case carries a timing
 claim.
 
+With all four changes in one binary, three alternating runs against `main` on
+the same host put a single group of 1,000,000 updates at 20.14 to 3.93 ms
+(-80.5%), 1,000 groups of 1,000 updates at 48.41 to 21.69 ms (-55.2%), and a
+full-sketch estimate at 134.8 to 7.9 us (-94.2%). Merge and serialization
+stayed within 2%. These are the aggregate rows; the per-step numbers above are
+the evidence that each change earned its place.
+
 ### Serialization
 
 A **colenc-owned** format: a version byte, the precision, and the register array
