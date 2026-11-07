@@ -255,3 +255,89 @@ test "the promotion limit never reaches the dense form's size" {
   assert_eq(hll_sparse_limit(14), 128)
   assert_eq(hll_sparse_limit(16), 128)
 }
+
+///|
+/// The canonical little-endian bytes a typed value hashes through.
+fn hll_test_bytes(bits : UInt64, length : Int32) -> Bytes {
+  let bytes = FixedArray::make(length, b'\x00')
+  for index in 0..<length {
+    bytes[index] = ((bits >> (8 * index)) & 0xFFUL).to_int().to_byte()
+  }
+  Bytes::from_array(bytes.exact_view())
+}
+
+///|
+test "the short integer hash equals the general Murmur path" {
+  let values : Array[UInt64] = [
+    0UL, 1UL, 0xFFUL, 0x1122334455667788UL, 0x8000000000000000UL, 0xFFFFFFFFFFFFFFFFUL,
+  ]
+  for length in 1..<=8 {
+    for value in values {
+      assert_eq(
+        hll_hash_short_le(value, length),
+        hll_hash(hll_test_bytes(value, length).exact_view()),
+      )
+    }
+  }
+}
+
+///|
+test "typed updates hash their canonical little-endian bytes" {
+  let int32_typed = HllSketch::new(4) catch { _ => abort("rejected") }
+  let int32_raw = HllSketch::new(4) catch { _ => abort("rejected") }
+  for value in [0, 1, -1, 2147483647, -2147483647 - 1] {
+    int32_typed.add_int32(value)
+    int32_raw.add_bytes(
+      hll_test_bytes(value.to_int64().reinterpret_as_uint64(), 4),
+    )
+  }
+  assert_eq(int32_typed.to_bytes(), int32_raw.to_bytes())
+
+  let int64_typed = HllSketch::new(4) catch { _ => abort("rejected") }
+  let int64_raw = HllSketch::new(4) catch { _ => abort("rejected") }
+  for value in [0L, 1L, -1L, 9223372036854775807L, -9223372036854775807L - 1L] {
+    int64_typed.add_int64(value)
+    int64_raw.add_bytes(hll_test_bytes(value.reinterpret_as_uint64(), 8))
+  }
+  assert_eq(int64_typed.to_bytes(), int64_raw.to_bytes())
+
+  let floats : Array[Float] = [
+    Float::reinterpret_from_int(0),
+    Float::reinterpret_from_int(-2147483648),
+    Float::reinterpret_from_int(0x7F800000),
+    Float::reinterpret_from_int(0x7FC00001),
+    Float(1.5),
+  ]
+  let float_typed = HllSketch::new(4) catch { _ => abort("rejected") }
+  let float_raw = HllSketch::new(4) catch { _ => abort("rejected") }
+  for value in floats {
+    float_typed.add_float(value)
+    float_raw.add_bytes(
+      hll_test_bytes(value.reinterpret_as_uint().to_uint64(), 4),
+    )
+  }
+  assert_eq(float_typed.to_bytes(), float_raw.to_bytes())
+
+  let doubles : Array[Double] = [
+    0.0,
+    -0.0,
+    1.5,
+    0x7FF8000000000001UL.reinterpret_as_double(),
+    0xFFF0000000000000UL.reinterpret_as_double(),
+  ]
+  let double_typed = HllSketch::new(4) catch { _ => abort("rejected") }
+  let double_raw = HllSketch::new(4) catch { _ => abort("rejected") }
+  for value in doubles {
+    double_typed.add_double(value)
+    double_raw.add_bytes(hll_test_bytes(value.reinterpret_as_uint64(), 8))
+  }
+  assert_eq(double_typed.to_bytes(), double_raw.to_bytes())
+
+  let bool_typed = HllSketch::new(4) catch { _ => abort("rejected") }
+  let bool_raw = HllSketch::new(4) catch { _ => abort("rejected") }
+  for value in [false, true] {
+    bool_typed.add_bool(value)
+    bool_raw.add_bytes(hll_test_bytes(if value { 1UL } else { 0UL }, 1))
+  }
+  assert_eq(bool_typed.to_bytes(), bool_raw.to_bytes())
+}

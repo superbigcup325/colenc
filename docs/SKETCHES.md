@@ -141,6 +141,18 @@ it pays the shift 1000 times. It is bounded work — 128 entries per group — a
 buys the small-group rows above. `from_bytes` pays one extra branch per register to
 count the live ones, because the state it rebuilds has to match the state it wrote.
 
+The typed update methods took the next measured step on 2026-11-07. They now hash
+the value's canonical little-endian bits directly, instead of allocating an
+eight-byte scratch array and copying the bytes into it before every hash. The byte
+stream is produced by the same MurmurHash3 tail and finalization, so the pinned
+register bytes and every estimate stay identical. Against the pre-change binary,
+three alternating runs on laptop (native release; each case a median of seven
+batches) put 1,000,000 `Int64` updates in one group at 20.34 to 7.26 ms (-64.3%)
+and 1,000 groups of 1,000 updates at 50.70 to 35.75 ms (-29.5%). The grouped case
+moves less because sorted sparse insertion and promotion dominate it. Estimate,
+merge, `to_bytes` and `from_bytes` stayed within 1%, the host's run-to-run spread.
+`harness/perf hll` is the repeatable rig.
+
 ### Serialization
 
 A **colenc-owned** format: a version byte, the precision, and the register array

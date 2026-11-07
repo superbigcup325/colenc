@@ -105,9 +105,16 @@ fn hll_hash(view : BytesView) -> UInt64 {
       HLL_MURMUR_C2
     h1 = h1 ^ k1
   }
+  hll_finalize(h1, h2, length)
+}
+
+///|
+/// The finalization shared by the byte path and the typed short path, so both
+/// feed MurmurHash3 the same length and the same accumulated state.
+fn hll_finalize(h1 : UInt64, h2 : UInt64, length : Int32) -> UInt64 {
   let wide = length.to_uint64()
-  h1 = h1 ^ wide
-  h2 = h2 ^ wide
+  let mut h1 = h1 ^ wide
+  let mut h2 = h2 ^ wide
   h1 = h1 + h2
   h2 = h2 + h1
   h1 = hll_fmix64(h1)
@@ -115,6 +122,21 @@ fn hll_hash(view : BytesView) -> UInt64 {
   h1 = h1 + h2
   h2 = h2 + h1
   h1
+}
+
+///|
+/// Hash up to eight canonical little-endian bytes already held in an integer.
+/// The typed entry points use this instead of allocating a scratch array and
+/// copying bytes into it; `length` keeps the Murmur tail and finalization
+/// identical to hashing the same bytes.
+fn hll_hash_short_le(value : UInt64, length : Int32) -> UInt64 {
+  let mask = if length >= 8 {
+    0xFFFFFFFFFFFFFFFFUL
+  } else {
+    (1UL << (length * 8)) - 1UL
+  }
+  let k1 = hll_rotl64((value & mask) * HLL_MURMUR_C1, 31) * HLL_MURMUR_C2
+  hll_finalize(k1, 0UL, length)
 }
 
 ///|
@@ -479,55 +501,33 @@ fn HllSketch::absorb_hash(self : HllSketch, hash : UInt64) -> Unit {
 }
 
 ///|
-fn hll_scratch() -> FixedArray[Byte] {
-  FixedArray::make(8, b'\x00')
-}
-
-///|
 pub fn HllSketch::add_int32(self : HllSketch, value : Int32) -> Unit {
-  let scratch = hll_scratch()
-  let bits = value.to_int64()
-  for index in 0..<4 {
-    scratch[index] = (bits >> (8 * index)).to_byte()
-  }
-  let view = scratch.unsafe_reinterpret_as_bytes().exact_view(start=0, end=4)
-  self.absorb_hash(hll_hash(view))
+  self.absorb_hash(
+    hll_hash_short_le(value.to_int64().reinterpret_as_uint64(), 4),
+  )
 }
 
 ///|
 pub fn HllSketch::add_int64(self : HllSketch, value : Int64) -> Unit {
-  let scratch = hll_scratch()
-  for index in 0..<8 {
-    scratch[index] = (value >> (8 * index)).to_byte()
-  }
-  self.absorb_hash(hll_hash(scratch.unsafe_reinterpret_as_bytes()))
+  self.absorb_hash(hll_hash_short_le(value.reinterpret_as_uint64(), 8))
 }
 
 ///|
 pub fn HllSketch::add_float(self : HllSketch, value : Float) -> Unit {
-  let scratch = hll_scratch()
-  let bits = value.reinterpret_as_uint().reinterpret_as_int()
-  for index in 0..<4 {
-    scratch[index] = ((bits >> (8 * index)) & 0xFF).to_byte()
-  }
-  let view = scratch.unsafe_reinterpret_as_bytes().exact_view(start=0, end=4)
-  self.absorb_hash(hll_hash(view))
+  self.absorb_hash(
+    hll_hash_short_le(value.reinterpret_as_uint().to_uint64(), 4),
+  )
 }
 
 ///|
 pub fn HllSketch::add_double(self : HllSketch, value : Double) -> Unit {
-  let scratch = hll_scratch()
-  let bits = value.reinterpret_as_int64()
-  for index in 0..<8 {
-    scratch[index] = (bits >> (8 * index)).to_byte()
-  }
-  self.absorb_hash(hll_hash(scratch.unsafe_reinterpret_as_bytes()))
+  self.absorb_hash(hll_hash_short_le(value.reinterpret_as_uint64(), 8))
 }
 
 ///|
 pub fn HllSketch::add_bool(self : HllSketch, value : Bool) -> Unit {
-  let one = FixedArray::make(1, if value { b'\x01' } else { b'\x00' })
-  self.absorb_hash(hll_hash(one.unsafe_reinterpret_as_bytes()))
+  let bits = if value { 1UL } else { 0UL }
+  self.absorb_hash(hll_hash_short_le(bits, 1))
 }
 
 ///|
