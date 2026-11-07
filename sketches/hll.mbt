@@ -727,29 +727,41 @@ pub fn HllSketch::from_bytes(
   let ceiling = 64 - precision + 1
   let limit = hll_sparse_limit(precision)
   let mut live = 0
-  // One pass builds the dense array and counts the live registers; a state small
-  // enough to be sparse is then re-read into that form, so the common full case
-  // costs exactly what it did before there was a second representation.
+  // One pass validates and builds the dense array while collecting sparse
+  // entries in index order. Once the live count passes the promotion limit,
+  // candidate collection stops and the rest of a dense stream is filled without
+  // an extra branch per register; a sparse state no longer re-reads the stream.
   let registers = FixedArray::make(count, b'\x00')
-  for index in 0..<count {
+  let candidates = FixedArray::make(limit + 1, 0U)
+  let mut index = 0
+  while index < count && live <= limit {
+    let rank = bytes[2 + index]
+    let rank_value = rank.to_int()
+    if rank_value > ceiling {
+      raise @types.EncodingError::Corrupt(2 + index)
+    }
+    registers[index] = rank
+    if rank_value > 0 {
+      candidates[live] = (index.reinterpret_as_uint() << HLL_SPARSE_RANK_BITS) |
+        rank_value.reinterpret_as_uint()
+      live += 1
+    }
+    index += 1
+  }
+  for index in index..<count {
     let rank = bytes[2 + index]
     if rank.to_int() > ceiling {
       raise @types.EncodingError::Corrupt(2 + index)
     }
-    if rank != b'\x00' {
-      live += 1
-    }
     registers[index] = rank
   }
   if limit > 0 && live <= limit {
-    let sparse = hll_sparse_new()
-    for index in 0..<count {
-      let rank = bytes[2 + index]
-      if rank != b'\x00' {
-        sparse.insert(sparse.count, index, rank.to_int())
-      }
+    let capacity = if live < 8 { 8 } else { live }
+    let entries = FixedArray::make(capacity, 0U)
+    for slot in 0..<live {
+      entries[slot] = candidates[slot]
     }
-    { precision, registers: Sparse(sparse), }
+    { precision, registers: Sparse({ count: live, entries, }), }
   } else {
     { precision, registers: Dense(registers), }
   }

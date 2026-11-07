@@ -1650,6 +1650,33 @@ fn bench_hll(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
       sink.val = sink.val + total.to_int()
     },
   )
+  let small_groups = 1000
+  let small_per_group = 20
+  record(
+    b,
+    label(
+      "hll",
+      "update-int64-1000-groups-x20",
+      small_groups * small_per_group * 8,
+      small_groups * small_per_group,
+    ),
+    fn() {
+      let total = hll_many_groups(small_groups, small_per_group)
+      hll_guard(total, small_groups * small_per_group)
+      sink.val = sink.val + total.to_int()
+    },
+  )
+  let small = @sketches.HllSketch::new_default()
+  for index in 0..<20 {
+    small.add_int64(hll_value(index, 0))
+  }
+  let small_bytes = small.to_bytes()
+  record(b, label("hll", "from_bytes-sparse", 16384, 16384), fn() {
+    let back = @sketches.HllSketch::from_bytes(small_bytes[:]) catch {
+      _ => abort("from_bytes raised")
+    }
+    sink.val = sink.val + back.register_count()
+  })
   let filled = @sketches.HllSketch::new_default()
   let other = @sketches.HllSketch::new_default()
   for index in 0..<n {

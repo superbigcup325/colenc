@@ -47,6 +47,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   iteration of one million sparse ids 1.12 to 0.914 ms (-18.4%), and the first
   4096-id batch 4.4 to 3.6 us. Dense bitmap and run iteration stayed within
   2%, and the sparse batch is now faster than the 1.01 ms `to_array` control.
+- `HllSketch::from_bytes` now collects sparse entries during the first validated
+  pass and stops collecting once the promotion limit is passed, instead of
+  re-reading the whole register array for a sparse result. Three alternating
+  native-release runs put sparse `from_bytes` at 16.1 to 12.2 us (-24.2%) and
+  dense `from_bytes` at 9.9 to 8.1 us; the 128-entry promotion boundary retains
+  the same representation and bytes. A linear-search candidate for small sparse
+  states was measured and rejected: it won 3.3% on 1,000 groups of 20 values
+  while regressing the 1,000 x 1,000 grouped case by 2.7%, beyond its spread.
 
 ## [0.1.3] - 2026-10-26
 
