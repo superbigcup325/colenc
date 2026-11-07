@@ -140,36 +140,10 @@ fn hll_hash_short_le(value : UInt64, length : Int32) -> UInt64 {
 }
 
 ///|
+/// The toolchain's leading-zero count handles zero as 64 and lowers to the
+/// target's own instruction or intrinsic on all three backends.
 fn hll_leading_zeros(value : UInt64) -> Int32 {
-  if value == 0UL {
-    return 64
-  }
-  let mut rest = value
-  let mut count = 0
-  if rest >> 32 == 0UL {
-    count += 32
-    rest = rest << 32
-  }
-  if rest >> 48 == 0UL {
-    count += 16
-    rest = rest << 16
-  }
-  if rest >> 56 == 0UL {
-    count += 8
-    rest = rest << 8
-  }
-  if rest >> 60 == 0UL {
-    count += 4
-    rest = rest << 4
-  }
-  if rest >> 62 == 0UL {
-    count += 2
-    rest = rest << 2
-  }
-  if rest >> 63 == 0UL {
-    count += 1
-  }
-  count
+  value.clz()
 }
 
 ///|

@@ -49,6 +49,36 @@ test "leading zeros ladder" {
 }
 
 ///|
+/// An independent definition for the exhaustive leading-zero check: the count
+/// is 63 minus the highest set bit's index.
+fn hll_leading_zeros_reference(value : UInt64) -> Int32 {
+  if value == 0UL {
+    return 64
+  }
+  let mut bit = 63
+  while ((value >> bit) & 1UL) == 0UL {
+    bit -= 1
+  }
+  63 - bit
+}
+
+///|
+test "the leading-zero helper matches every bit position" {
+  assert_eq(hll_leading_zeros(0UL), hll_leading_zeros_reference(0UL))
+  for bit in 0..<64 {
+    let value = 1UL << bit
+    assert_eq(hll_leading_zeros(value), hll_leading_zeros_reference(value))
+  }
+  for
+    value in [
+      0xFFFFFFFFFFFFFFFFUL, 0xAAAAAAAAAAAAAAAAUL, 0x5555555555555555UL, 0x00FF000000000000UL,
+      0x00000000000000FFUL,
+    ] {
+    assert_eq(hll_leading_zeros(value), hll_leading_zeros_reference(value))
+  }
+}
+
+///|
 test "the rank ceiling follows the precision" {
   let sketch = HllSketch::new(4) catch { _ => abort("precision 4 rejected") }
   // A hash of zero has no set bit among its rank bits, so the rank is the
