@@ -153,6 +153,20 @@ moves less because sorted sparse insertion and promotion dominate it. Estimate,
 merge, `to_bytes` and `from_bytes` stayed within 1%, the host's run-to-run spread.
 `harness/perf hll` is the repeatable rig.
 
+Two rank-side candidates followed, each measured against the commit before it
+rather than bundled. Replacing the six-branch leading-zero ladder with
+`UInt64::clz` put a single group of 1,000,000 updates at 7.11 to 4.21 ms
+(-40.7%) and 1,000 groups of 1,000 updates at 33.95 to 31.69 ms (-6.6%).
+Constructing `2^-rank` from the IEEE-754 exponent bits, instead of multiplying
+by 0.5 once per rank, put a full-sketch estimate at 124.0 to 7.7 us (-93.8%);
+it also took the grouped update from 31.83 to 21.44 ms (-32.6%) because that
+case estimates every group. Merge and serialization stayed within 1%. Against
+the typed-hash commit, the combined rank changes measured 7.14 to 4.16 ms
+(-41.8%) for one group, 34.23 to 21.32 ms (-37.7%) for 1,000 groups, and 123.7
+to 7.8 us (-93.7%) for the estimate, over three alternating native-release
+runs. The exhaustive leading-zero test covers all 64 bit positions, and the
+inverse-power test pins every legal rank through 61 against repeated halving.
+
 ### Serialization
 
 A **colenc-owned** format: a version byte, the precision, and the register array

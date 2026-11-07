@@ -17,6 +17,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (-64.3%), and 1,000 groups of 1,000 updates 50.70 to 35.75 ms (-29.5%).
   Estimate, merge, `to_bytes` and `from_bytes` moved within 1%, which is the
   run-to-run spread on that host. `harness/perf hll` reproduces the cases.
+- HLL rank computation now uses the toolchain's `UInt64::clz`, and `2^-rank` is
+  built directly from IEEE-754 exponent bits instead of a per-register halving
+  loop. Registers, estimates and bytes are unchanged. Against the preceding
+  typed-hash commit, three alternating runs put one group of 1,000,000 updates
+  at 7.14 to 4.16 ms (-41.8%), 1,000 groups of 1,000 updates at 34.23 to
+  21.32 ms (-37.7%), and a full-sketch estimate at 123.7 to 7.8 us (-93.7%);
+  merge and serialization stayed within 1%.
 
 ## [0.1.3] - 2026-10-26
 
