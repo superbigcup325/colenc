@@ -1,33 +1,42 @@
-# Release and consumer follow-through: 0.1.3 is released
+# Release and consumer follow-through: 0.1.4 is released
 
-Status: 2026-10-26 (Asia/Shanghai). **Version 0.1.3 is published** from `a97c230`,
-tagged `v0.1.3`, with green CI on that source and the packaged surface verified
-from the registry on three backends. It carries the sparse HyperLogLog state.
-moonlake consumes 0.1.2; upgrading it to 0.1.3 is that project's decision and its
-own gate, so nothing here implies consumer behavior beyond the matrix 0.1.3 was
-justified by. L0 through C2 are complete. What remains is the conditional work
-that waits on a consumer workload, and moonlake's own release, which is that
-project's decision. The [implementation record](OPTIMIZATION-PLAN.md) preserves
-the completed kernel tasks; the [roadmap](ROADMAP.md) and
-[sketch contracts](SKETCHES.md) retain their acceptance definitions.
+Status: 2026-11-09 (Asia/Shanghai). **Version 0.1.4 is published** from
+`d7d0579`, tagged `v0.1.4`, with green CI on that source and the packaged
+surface verified from the registry on three backends. It carries the Roaring
+portable-stream fixes, the measured HLL CPU work, additive typed batch updates
+and `TDigest::quantiles`; no serialized format or encoding choice bit changed.
+The archive SHA-256 is `83b21e33…dcb1a`, built with moon 0.1.20261023.
 
-## Post-merge status (2026-11-08)
+**Version 0.1.3** remains the sparse-HyperLogLog release. moonlake consumes it
+(its `344d739`, verification §44 there) with no workspace override, and published
+its accepted scope as **0.5.1** on 2026-10-27. L0 through C2, H0 and the
+budgeted GROUP BY input work are complete. moonlake has since shipped E6a
+through E6c in 0.6.4; that work is not a colenc release prerequisite. The
+[implementation record](OPTIMIZATION-PLAN.md) preserves the completed kernel
+tasks; the [roadmap](ROADMAP.md) and [sketch contracts](SKETCHES.md) retain
+their acceptance definitions.
 
-This section supersedes the historical work-order snapshot below. `main` is
-`27a29a5`; PR #2, #3, #4 and #5 are merged and issue #1 is closed. The Roaring
-append-offset and decoder-validation fix, HLL typed hashing and batch API,
-`UInt64::clz`, exact `2^-rank`, sparse `from_bytes`, `TDigest::quantiles`, and
-the sparse Roaring batch-iteration fix are in the source tree. The HLL and
-t-digest APIs are additive; no encoded format changed. `CHANGELOG.md` and
+## Post-release status (2026-11-09)
+
+This section supersedes the historical work-order snapshot below. The release
+source is `d7d0579`; PR #2 through #10 are merged and issue #1 is closed. The
+Roaring append-offset and decoder-validation fix, HLL typed hashing and batch
+API, `UInt64::clz`, exact `2^-rank`, sparse `from_bytes`, `TDigest::quantiles`,
+and the sparse Roaring batch-iteration fix are in 0.1.4. The HLL and t-digest
+APIs are additive; no encoded format changed. `CHANGELOG.md` and
 [`docs/SKETCHES.md`](SKETCHES.md) carry the measurements.
 
 FSST symbol-table views and the DELTA_BYTE_ARRAY continuous-body candidate were
 measured and rejected because their named controls regressed beyond spread.
-Their repeatable `harness/perf` controls remain. The published registry artifact
-is still 0.1.3, so the post-release source changes are unreleased and the next
-version is a maintainer decision.
+Their repeatable `harness/perf` controls remain. Issue #7 is closed by the
+0.1.4 publication. Issues #8 and #9 remain the two consumer-led evidence gates;
+neither has a workload trigger yet.
 
-The two remaining consumer-led investigations still have no workload trigger:
+The two remaining consumer-led investigations still have no workload trigger.
+A source check of moonlake `3b69d33` on 2026-11-09 found no FSST encoding call
+or model retained between batches, and no Roaring entry point or row-selection
+path in the engine. Both gates therefore remain closed; absent a workload this
+is not a negative performance result.
 
 - **FSST model reuse (F1)** needs repeated small string batches with a stable
   distribution, a profile that shows training cost, a bounded model lifetime,
@@ -44,43 +53,53 @@ A measured negative result closes either investigation. Wider bitmap IDs,
 automatic planner choice, extra set operations, larger row groups and further
 eager shapes keep their existing evidence gates.
 
-## Current work order (2026-10-26)
+## Current work order (2026-10-27)
 
-The upstream check found colenc `main` at `e08396e` with
-[CI passing](https://github.com/superbigcup325/colenc/actions/runs/40332052995)
-and moonlake `main` at `a0c7628` with
-[CI passing](https://github.com/superbigcup325/moonlake/actions/runs/40330396420).
-The dependency pair at `4de8077` also passed a
-[dispatched nightly](https://github.com/superbigcup325/moonlake/actions/runs/40329274231)
-and its pages workflow deployed. Neither repository has an open issue or pull
-request at this snapshot. These are source and workflow checks; moonlake's
-latest release remains 0.5.0, and its 0.6.0 registry consumer and hosted-page
-acceptance are still separate release checks.
+The upstream check found colenc `main` at `d6a892e` with
+[CI passing](https://github.com/superbigcup325/colenc/actions/runs/40347664183)
+and moonlake `main` at `020be75` with
+[CI passing](https://github.com/superbigcup325/moonlake/actions/runs/40513060636).
+`moon view` confirms 0.1.3 and 0.5.1 as the respective registry latest versions.
+moonlake's release commit `f8e1204` passed
+[Pages](https://github.com/superbigcup325/moonlake/actions/runs/40512431550);
+its verification §47 records registry-consumer acceptance on three targets and
+deployed-page acceptance at exactly 0.5.1. The latest nightly passed on
+`f4e9348`, before the GROUP BY input change; it is not a nightly result for the
+release. Neither repository has an open issue or pull request at this snapshot.
+This follow-up checked source, registry and hosted workflow state; it did not
+repeat the recorded functional or performance acceptance.
 
 | Order | Owner and delivery | Exit |
 |---|---|---|
-| 1 | moonlake: finish the 0.6.0 release preparation | Keep the accepted scope frozen, reconcile current documentation, inspect the final archive and record its source/toolchain identity. Tagging, publication and the release dry run follow that project's release authorization; the registry consumer and hosted-version check follow the relevant external action. No new colenc release is a prerequisite |
-| 2 | moonlake H0: refresh grouped HLL costs against colenc 0.1.2 | Record SQL peak RSS and time against decode-only and exact-count controls, using few large groups and many small groups, including duplicates and NULLs. The current register payload is 16 KiB per p14 sketch; the 0.1.1 consumer's 64 KiB payload and approximately 750-value crossover are historical. Measure the new crossover rather than dividing the old one by four |
-| 3 | moonlake E5: remove input collection before budgeted GROUP BY | First record partition-buffer accounting, skew behavior, ownership and the policy for a group whose exact state exceeds the budget. Then feed scan batches into bounded partition buffers and verify exact answers, cleanup and resource use. This is the next proposed implementation after 0.6.0, with no kernel dependency |
-| 4 | colenc: promote one conditional investigation only when its entry evidence exists | H0 showed the remaining state cost and the sparse HLL state is now in the tree, awaiting a release decision rather than a measurement; FSST reuse waits for repeated small batches with measurable training cost; I0 waits for immutable row identity and a repeated-predicate workload. A measured negative result closes the investigation |
+| 1 | moonlake: release the accepted scope | **Done as 0.5.1** (verification §46–47): source acceptance, final archive, dry run, publication, tag, registry consumer on three targets and exact-version hosted playground acceptance are recorded. No release task remains open in this plan |
+| 2 | moonlake H0: refresh grouped HLL costs | **Done** (moonlake verification §43, re-measured on the released 0.1.3 artifact in §44). It swept 18 shapes against decode-only and exact-count controls, with duplicates and NULLs: the crossover at 1,000 groups stays near 200 distinct values, and the sparse state takes 392.6 MB off the worst shape. The 0.1.1 consumer's 64 KiB payload and approximately 750-value crossover are history |
+| 3 | moonlake E5: remove input collection before budgeted GROUP BY | **Done and shipped in 0.5.1** (verification §45). At 8,000,000 rows and 100 groups, a 4M budget takes native peak RSS from 195 to 63 MB; Parquet-input controls show bounded retained input on native, wasm-gc and js. Group state and the grouped result remain unbounded. The measured `string_agg` cost reaches 18%; runs with more than a thousand files have not been measured |
+| 4 | moonlake E6a: measure a join feeding GROUP BY | **Done in moonlake 0.6.4.** The intermediate-row ownership, budgets and cleanup boundaries are recorded in that project's verification report; no colenc kernel change was required |
+| 5 | moonlake E6b/E6c: compose and verify one measured shape | **Done in moonlake 0.6.4.** Join batches feed the existing aggregation path, with exact and DuckDB answers, memory scaling and three-backend cleanup recorded there. This history does not schedule a colenc rewrite |
+| 6 | colenc: promote one conditional investigation only when its entry evidence exists | 0.1.4 is released; FSST reuse waits for repeated small batches with measurable training cost; I0 waits for immutable row identity and a repeated-predicate workload. Keep the current formats and acceptance contracts. A measured negative result closes the investigation |
 
 The consumer owns the detailed
-[delivery sequence](https://github.com/superbigcup325/moonlake/blob/main/docs/ROADMAP.md#next-delivery-after-colenc-012).
+[post-release sequence](https://github.com/superbigcup325/moonlake/blob/main/docs/ROADMAP.md#next-work-after-051).
 H0 and E5 address different costs: compact sketch state cannot remove retained
 scan input, and streaming scan input cannot bound the number or size of group
-states. Do not bundle speculative kernels into moonlake's accepted release.
+states. E6 addresses a remaining intermediate array, not a process-wide memory
+cap. No new release version is reserved by this plan.
 
 ## Final evidence
 
 | Item | State |
 |---|---|
-| colenc 0.1.3 | [Published](https://github.com/superbigcup325/colenc/releases/tag/v0.1.3) from `a97c230` on 2026-10-26, tagged `v0.1.3`, [CI green on that source](https://github.com/superbigcup325/colenc/actions/runs/40347165504) (check, harness and three test jobs). Archive SHA-256 `9dc5b38f01929f62a8d2c6d7868553114cf7bd3c78e7742c4fa83732a90c5d44`, built with moon 0.1.20261023 (3778465 2026-10-23) |
+| colenc 0.1.4 (current) | [Published](https://github.com/superbigcup325/colenc/releases/tag/v0.1.4) from `d7d0579` on 2026-11-09, tagged `v0.1.4`, with green CI on the release source. Archive SHA-256 `83b21e33311189d964b07206887eee64f48f63409c161c3b82ae22401d6dcb1a`, built with moon 0.1.20261023 (3778465 2026-10-23) |
+| Gate before publication (0.1.4) | `moon info` (no interface change), `moon fmt` and `moon check --deny-warn` clean; 185 tests per target on native, wasm-gc and js; every fixture regenerator in `--check` mode; all byte-diff, round-trip and property harnesses; container interop; all sketch and FSST gates; a clean package archive; the packaged consumer on three targets; and `moon publish --dry-run` returning `202 Accepted` |
+| Registry copy (0.1.4) | `moon view superbigcup325/colenc` reports 0.1.4 as latest, and `python3 harness/check_consumer.py --registry-version 0.1.4` passes on native, wasm-gc and js with a fresh registry and dependency cache |
+| colenc 0.1.3 (previous) | [Published](https://github.com/superbigcup325/colenc/releases/tag/v0.1.3) from `a97c230` on 2026-10-26, tagged `v0.1.3`, [CI green on that source](https://github.com/superbigcup325/colenc/actions/runs/40347165504) (check, harness and three test jobs). Archive SHA-256 `9dc5b38f01929f62a8d2c6d7868553114cf7bd3c78e7742c4fa83732a90c5d44`, built with moon 0.1.20261023 (3778465 2026-10-23) |
 | Gate before publication (0.1.3) | `moon info` (no interface change), `moon fmt --check` and `moon check --deny-warn` clean; 172 tests per target on native, wasm-gc and js; every fixture regenerator in `--check` mode; all byte-diff, round-trip and property harnesses; the container check; the archive consumer on three targets; a clean package archive; and `moon publish --dry-run` returning 202 Accepted |
-| Registry copy (0.1.3) | `moon view superbigcup325/colenc` reports 0.1.3 as latest, and `python3 harness/check_consumer.py --registry-version 0.1.3` passes on native, wasm-gc and js with a fresh registry and dependency cache |
+| Registry copy (0.1.3) | `moon view superbigcup325/colenc` reported 0.1.3 as latest, and `python3 harness/check_consumer.py --registry-version 0.1.3` passed on native, wasm-gc and js with a fresh registry and dependency cache |
 | colenc 0.1.2 (previous) | Published 2026-10-26 from `b1b2b7f`, tagged `v0.1.2`, [CI green on that source](https://github.com/superbigcup325/colenc/actions/runs/40302072598). Archive SHA-256 `ad0d5fb0b49c2a729257c0f3afacdb4e93c9b964c3854df26999d00f3ed1ea1e`, built with moon 0.1.20261016 (1af328f 2026-10-16); 165 tests per target then |
 | Gate before 0.1.2 | `moon info`, `moon fmt --check` and `moon check --deny-warn` clean; 165 tests per target on native, wasm-gc and js; every fixture regenerator in `--check` mode; all byte-diff, round-trip and property harnesses; the container check; and the archive consumer on three targets |
 | Registry copy (0.1.2) | `moon view superbigcup325/colenc` reported 0.1.2 as latest, and `python3 harness/check_consumer.py --registry-version 0.1.2` passed on native, wasm-gc and js with a fresh registry and dependency cache |
-| moonlake | `95c42c6` consumes 0.1.2 with no workspace override, with the acceptance record and the performance pair in `4de8077` and the closing note in `a0c7628`; `main` is pushed, its CI is green and a dispatched nightly passed. It needed no source change: the engine reaches the bitmap through the dedicated entry points and reads HLL registers through `register(index)` |
+| moonlake 0.5.1 (current) | [Published](https://github.com/superbigcup325/moonlake/releases/tag/v0.5.1) from `f8e1204` on 2026-10-27, consuming colenc 0.1.3 without a workspace override. Verification §44–47 records dependency acceptance, the grouped-HLL matrix, E5, source acceptance, the fresh-cache registry consumer on three targets and the deployed page at 0.5.1. Release archive SHA-256 `de0369219c19e3b4a661494f7a86738c2fa410ccec813bc5fd5fbee183158d00` |
+| moonlake adoption of colenc 0.1.2 (historical) | `95c42c6` consumed colenc 0.1.2 with no workspace override; `4de8077` recorded the acceptance and performance pair, and `a0c7628` closed that handoff. The engine already used the dedicated bitmap entry points and `register(index)`, so no source adaptation was needed |
 | The cost K0 was measured on | **Closed.** The 0.1.1 artifact cost about 10% on moonlake's wide CSV scans because the generic dispatch kept the bitmap reachable. Against a 0.1.1 control built in its own worktree, three alternating pairs on a quiet host put the CSV cases 6-11% in 0.1.2's favour in every round: `count(*)` 171.3 to 153.0 ms, the filtered count 188.5 to 170.0, the two-table join 235.4 to 214.8, Q3 266.7 to 249.6 and the fanout join 383.2 to 348.4. The two Parquet cases stay unresolved at 4 ms and 11 ms with in-record spreads up to 73% |
 | Library measurements | The final [scoreboard](scoreboard.md) from `26fb9c0` is unchanged by the release; the release carries the same library code it recorded. Worst encode swing was 14% native and 23% wasm-gc |
 
@@ -103,9 +122,9 @@ the serialized formats stay the same; semantic versioning would call them a
 minor bump, so the changelog carries a migration section at the top of the
 release. The release is authorized.
 
-L0, L1, L2, C1 and C2 ran in order and are done. A moonlake release of 0.6.0
-stays separate and needs its own authorization; conditional investigations stay
-out of this candidate.
+L0, L1, L2, C1 and C2 ran in order and are done. These rows retain the 0.1.2
+delivery history. moonlake subsequently adopted 0.1.3 and released 0.5.1; the
+current work order above supersedes the earlier release-preparation queue.
 
 | Task | Delivery | State |
 |---|---|---|
@@ -193,8 +212,8 @@ end-to-end SQL effect was measured in the consumer through an untracked
 **0.1.3 is that release, and it is published.** The sparse state is in the
 artifact the registry serves, with the byte stream, the interface and the
 estimator unchanged, so a consumer that pins 0.1.2 and upgrades gets the memory
-behavior and nothing else to port. moonlake's upgrade is its own decision and its
-own gate; the final-evidence table records how this version was verified and
+behavior and nothing else to port. moonlake consumes it at `344d739` after its own
+gate; the final-evidence table records how this version was verified and
 published, and `moon view superbigcup325/colenc` is the live check.
 
 ## HLL consumer seam and conditional library work
@@ -208,16 +227,16 @@ Entry points: `sketches/hll.mbt`, `sketches/pkg.generated.mbti`,
   happen in the adapter and must not silently alter the library hash/version.
 - At precision 14 the 16,384 registers are now one byte each in memory (16 KiB
   of payload, previously 64 KiB as machine words), matching the serialized form
-  plus its header. Report memory in addition to serialized size; many small
-  groups can still make dense HLL more expensive than an exact set, because
-  every group pays the full dense state.
+  plus its header. That is the dense representation, not the cost paid by every
+  group in 0.1.3. Small groups start sparse; report live state, promotion costs
+  and process RSS separately from the unchanged serialized size.
 - Adoption is complete, and the sparse state ships in 0.1.3: a sketch
   holds either the dense array or a sorted array of live entries and promotes
   above `min(128, m / 8)` live registers, with the estimator, the merge law and
   the v1 bytes unchanged. The public `registers()` accessor still returns a
   snapshot rather than a live view, and `register(index)` reads one rank without
   copying, in both states. An exact small-set transition remains a separate
-  decision, and a consumer picks the state up only through a new release.
+  decision. moonlake already consumes the published 0.1.3 state.
   The library already accepts precision; a SQL precision option is consumer work.
 - Preserve the distinction between exact register merge laws and statistical
   estimator error. Agreement with another estimator is useful independent
@@ -329,5 +348,5 @@ throughput.
 moonlake's end-to-end baseline is recorded separately at `4de8077`, in its
 `docs/bench-baseline.md` and verification §41, against the published 0.1.2
 dependency and a same-session 0.1.1 control. The library medians above and that
-consumer pair answer different questions. The SQL grouped-HLL crossover still
-needs H0; the library RSS rows do not supply it.
+consumer pair answer different questions. The SQL grouped-HLL crossover is
+moonlake's H0 (its verification §43 and §44); the library RSS rows do not supply it.

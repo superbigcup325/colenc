@@ -18,14 +18,14 @@ The bitmap dispatch separation landed in `9fdd252` (K0). The remaining
 release and registry-consumer work follows the ordered plan in
 [Next steps](NEXT-STEPS.md#release-order-and-ownership). Do not repeat these
 implementations, the earlier bitmap rewrites, or SQL sketch adoption in
-moonlake. Changing its accepted 0.6.0 candidate or dependency requires acceptance
-on the resulting source again.
+moonlake. That project shipped its accepted scope as 0.5.1 with colenc 0.1.3;
+future source or dependency changes require their own affected acceptance gates.
 
 | Task | Implementation | Outcome and boundary |
 |---|---|---|
 | K1: PLAIN word loads | `cf91004`, `c68e39a` | Word loads for all four fixed-width numeric types and count checks without multiplication overflow; the full-width unpacker was not changed |
 | K2: Dictionary budget during construction | `5df03c6` | Early `None` once the dictionary payload would pass the budget; accepted bytes unchanged |
-| K3: Compact HLL state | `d497326` | Dense byte registers, snapshot `registers()` and allocation-free `register(index)`; sparse state deferred |
+| K3: Compact HLL state | `d497326` | Dense byte registers, snapshot `registers()` and allocation-free `register(index)` in 0.1.2; sparse state followed in 0.1.3 |
 | K4: Roaring query APIs | `5163107` | Intersection count, overlap testing and stateless ordered batches; engine adoption still follows I0 |
 | K5: t-digest compression and batch quantiles | `353e692` | Ordered centroid/buffer merge and cached lower scale values; batch queries were later measured and delivered in K7 |
 | K6: Reusable FSST model | `3bb6ca0` | Immutable trained model and `encode_fsst_with`, retaining the existing self-contained frame |
@@ -33,8 +33,9 @@ on the resulting source again.
 
 The [final benchmark record](NEXT-STEPS.md#final-benchmark-record) and
 [scoreboard](scoreboard.md) contain the post-implementation measurements.
-Sparse HLL, consumer FSST reuse and I0 are conditional follow-ups in
-[Next steps](NEXT-STEPS.md#conditional-work-after-consumer-acceptance).
+Consumer FSST reuse and I0 are conditional follow-ups in
+[Next steps](NEXT-STEPS.md#conditional-work-after-consumer-acceptance); the
+sparse HLL state shipped in 0.1.3.
 A negative measured result completes an investigation; it does not justify
 changing an oracle.
 
