@@ -69,6 +69,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   but the unchanged DELTA_LENGTH_BYTE_ARRAY encode regressed from 2.78 to
   2.97 ms (+6.9%), beyond spread, so the production encoder was left untouched.
   `harness/perf families` and `harness/perf delta` now isolate those controls.
+- Verified against the toolchain MoonBit publishes today, `moon 0.1.20261104`
+  (`moonc v0.10.20+65efd5b93`, `moonrun 0.1.20261104`): `moon check
+  --deny-warn`, `moon fmt --check` and `moon info` are clean, 185 tests pass on
+  native, wasm-gc and js, every fixture manifest reproduces and every byte diff
+  still matches, container interop, both sketch suites and the archive consumer
+  pass, `examples/encode_demo` prints the documented shape, and the package
+  archive still carries 68 files with no local-only path. No source, manifest or
+  dependency change was needed. 0.1.3 was verified on `0.1.20261023` and 0.1.2 on
+  `0.1.20261016`; a toolchain older than the last verified release is untested.
 
 ## [0.1.3] - 2026-10-26
 

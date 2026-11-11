@@ -82,6 +82,18 @@ moon test --target native     # and js: backend-differing paths need both
 moon package --list           # what a release archive would contain
 ```
 
+Verified with the toolchain MoonBit publishes today — `moon 0.1.20261104`,
+`moonc v0.10.20+65efd5b93`, `moonrun 0.1.20261104` (`moon version --all`): the
+commands above, the test suite on all three backends, the whole acceptance rig
+and the packaged consumer pass on it, and no source, manifest or dependency
+change was needed to get there. CI installs whatever the toolchain installer
+serves as `latest` on every run rather than pinning a version, so a new release
+is exercised as it lands; a weekly scheduled run covers the case where one
+breaks the tree between pushes. A toolchain older than the last verified
+release is untested. The `js` backend does not preserve a NaN payload, so a
+float column round-tripped there matches on the NaN class and on every other bit
+pattern, not on the payload bits.
+
 ## API
 
 Three layers, each usable on its own: `primitives/` (varints, zigzag, bit
