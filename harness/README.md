@@ -54,6 +54,12 @@ The versions in `requirements.txt` are pinned deliberately. The fixtures are
 byte-compared, so a different pyarrow may change output (run selection,
 dictionary thresholds, the `created_by` string) and every fixture would drift.
 
+The interpreter is pinned to 3.13 for the same reason, one step earlier: each
+pinned judge has to arrive as a wheel. `datasketches` publishes none past
+cp313, so a newer Python builds it from source, and that source does not
+compile here. CI pins the same 3.13 and installs with `--only-binary=:all:` so
+a wheel that goes missing fails the job instead of sneaking in as a build.
+
 ## Generate and verify the reference samples
 
 ```bash
