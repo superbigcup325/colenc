@@ -15,6 +15,7 @@ bytes. Order stability is reported, never asserted: t-digest does not promise it
 import math
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -50,8 +51,7 @@ def generate(distribution, order, size, seed):
 
 
 def run_probe(values, compression, parts=1):
-    path = ROOT / ".internal/tmp/tdigest_input.f64le"
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path = Path(tempfile.gettempdir()) / "colenc-tdigest-input.f64le"
     values.tofile(path)
     quantiles = ",".join(f"{q:g}" for q in QUANTILES)
     completed = subprocess.run(
