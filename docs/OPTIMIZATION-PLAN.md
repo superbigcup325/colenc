@@ -92,6 +92,40 @@ contracts and error offsets unchanged. Three-backend tests, the affected
 reference rigs and the packaged consumer passed. The published artifact remains
 0.1.3, so these changes are unreleased.
 
+## K8. DELTA_BYTE_ARRAY decode without suffix copies
+
+**Entry points:** [delta.mbt](../encoders/delta.mbt), its whitebox tests,
+`harness/check_delta.py` and `harness/perf -- delta`. Unreleased: this lands
+after 0.1.4.
+
+The decoder used to route the suffix stream through
+`decode_delta_length_byte_array`, which returns one freshly allocated `Bytes`
+per suffix, and then copied each suffix again into the value it returned. The
+length stream is decoded either way; what the old path added was one
+allocation and one copy per value on top of the value's own allocation.
+
+The delivery validates the lengths in place — the spans are sequential, so a
+cursor over the validated `lengths` array is enough — and builds each value
+with a single exact-size `FixedArray`, two `fixedarray.blit_from_bytesview`
+calls (prefix from the previous value, suffix from the input view) and
+`unsafe_reinterpret_as_bytes`. Suffix bytes are never materialized on their
+own. The whole suffix stream is still validated before any value is built, so
+a malformed length reports the same error the two-stream decoder reported
+rather than the first prefix error the value walk would reach.
+
+*Outcome:* native release and wasm-gc, `harness/perf -- delta`, three runs per
+side in a `base candidate candidate base base candidate` order on a quiet
+host, medians per side: shared-prefix decode 15.25 to 5.62 ms native (-63.1%)
+and 21.22 to 12.52 ms wasm-gc (-41.0%); the DELTA_LENGTH_BYTE_ARRAY control
+stayed within 2% and encode within 1%. The intermediate version that kept the
+suffix copies and only sized the `Buffer` exactly measured -34.5% native, so
+the second allocation and copy is the bulk of the gain and the zero-fill of
+`FixedArray::make` is cheaper than another `Buffer::to_bytes` copy at these
+value sizes. Decoded values, consumed lengths and typed errors are unchanged:
+`check_delta.py` still matches the reference byte for byte, the container gate
+reads the pages back through both judges, and the suite is 185/185 on native,
+wasm-gc and js with no `.mbti` change.
+
 ## K1. PLAIN word loads
 
 **Entry points:** [plain.mbt](../encoders/plain.mbt),
