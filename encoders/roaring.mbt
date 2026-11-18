@@ -892,7 +892,7 @@ pub fn RoaringBitmap::serialize(
 /// The portable Roaring serialization as a fresh buffer.
 pub fn RoaringBitmap::to_bytes(self : RoaringBitmap) -> Bytes {
   let (cards, sizes, flags, with_runs, total) = self.roaring_serialized_plan()
-  let out = @buffer.Buffer(size_hint=total)
+  let out = @buffer.Buffer(capacity=total)
   self.roaring_write_plan(out, cards, sizes, flags, with_runs)
   out.to_bytes()
 }
