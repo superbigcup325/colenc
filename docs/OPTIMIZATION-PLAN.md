@@ -187,6 +187,46 @@ reference byte for byte, the container gate reads the pages back through both
 judges, and the suite is 185/185 on native, wasm-gc and js with no `.mbti`
 change.
 
+## K11. Decoder outputs sized up front
+
+**Entry points:** [plain.mbt](../encoders/plain.mbt),
+[delta.mbt](../encoders/delta.mbt), [dictionary.mbt](../encoders/dictionary.mbt),
+[fsst.mbt](../encoders/fsst.mbt), their tests, `harness/check_rle.py`,
+`harness/check_dict.py`, `harness/check_delta.py`, `harness/check_fsst.py`,
+`harness/perf -- families` and `harness/bench`. Unreleased: this lands after
+0.1.4.
+
+K10 fixed the hybrid decoder. The same shape was in every other decoder whose
+count is known before its loop: the PLAIN byte-array decoder, the two delta
+byte-array decoders, the two FSST value arrays and the dictionary lookups all
+built their result by pushing into an empty array, and the four numeric
+dictionary lookups allocated with `Array::make(count, 0)` and then overwrote
+every slot.
+
+Each of them now allocates once and writes by index. The allocation differs by
+element type, and that difference is the delivery's whole subtlety: a pointer
+array takes `Array::make(count, b"")`, because a slot that was never written
+would be a reference the collector follows, while a numeric array takes
+`Array::unsafe_make_uninit(count)` under the conditions K10 recorded.
+
+*Outcome:* native release and wasm-gc, `harness/perf -- families`, three runs
+per side in a `base candidate candidate base base candidate` order on a quiet
+host, medians per side: string dictionary decode 912.9 to 703.4 us native
+(-22.9%) and 2888.0 to 2112.6 us wasm-gc (-26.8%); PLAIN string decode 4063.1
+to 3618.2 us native (-11.0%) and 4663.0 to 3402.4 us wasm-gc (-27.0%);
+DELTA_LENGTH_BYTE_ARRAY string decode 4343.9 to 4048.6 us native (-6.8%) and
+6254.2 to 4281.1 us wasm-gc (-31.5%); DELTA_BYTE_ARRAY 5523.2 to 5306.5 us
+native (-3.9%); Int32 dictionary decode 1135.2 to 975.3 us native (-14.1%).
+`harness/bench` on the same trees agrees in sign and rough magnitude on every
+row (string dictionary +25.7% native and +36.8% wasm-gc, PLAIN string +14.4%
+and +21.8%, Int32 dictionary +11.8% and +4.9%), with encoded bytes and ratios
+unchanged on all 42 rows. FSST decode is the one path that does not move beyond
+the swing (-0.4% native, and the two rigs disagree in sign on wasm-gc), which
+fits the shape of that decoder: the value array is a small part of a call that
+spends its time matching symbols. Every fixture still matches byte for byte,
+the container gate reads the pages back through both judges, and the suite is
+185/185 on native, wasm-gc and js with no `.mbti` change.
+
 ## K1. PLAIN word loads
 
 **Entry points:** [plain.mbt](../encoders/plain.mbt),

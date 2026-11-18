@@ -964,6 +964,14 @@ fn bench_families(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
   bench_encoding(
     b,
     sink,
+    "string-lowcard-plain",
+    labels,
+    @colenc_types.Plain,
+    label_bytes,
+  )
+  bench_encoding(
+    b,
+    sink,
     "string-lowcard-deltalen",
     labels,
     @colenc_types.DeltaLength,

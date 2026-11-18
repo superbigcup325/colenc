@@ -431,8 +431,8 @@ pub fn decode_fsst(
       if stored_count != count {
         raise @types.EncodingError::Incomplete(stored_count, count)
       }
-      let values : Array[Bytes] = []
-      for _ in 0..<count {
+      let values : Array[Bytes] = Array::make(count, b"")
+      for index in 0..<count {
         if position + 4 > data.length() {
           raise @types.EncodingError::Truncated(
             position,
@@ -452,7 +452,7 @@ pub fn decode_fsst(
             data.length() - position,
           )
         }
-        values.push(data[position:position + length].to_owned())
+        values[index] = data[position:position + length].to_owned()
         position += length
       }
       (values, position - offset)
@@ -492,8 +492,8 @@ pub fn decode_fsst(
       if stored_count != count {
         raise @types.EncodingError::Incomplete(stored_count, count)
       }
-      let values : Array[Bytes] = []
-      for _ in 0..<count {
+      let values : Array[Bytes] = Array::make(count, b"")
+      for index in 0..<count {
         if position + 4 > data.length() {
           raise @types.EncodingError::Truncated(
             position,
@@ -530,7 +530,7 @@ pub fn decode_fsst(
             raise @types.EncodingError::InvalidIndex(code, symbols.length())
           }
         }
-        values.push(value.to_bytes())
+        values[index] = value.to_bytes()
       }
       (values, position - offset)
     }

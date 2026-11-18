@@ -516,6 +516,20 @@ tracked documents ship in the release archive.
   the caller can read is written, an incomplete stream raises and drops the
   array, and an `Int64` array holds no pointers. The count being known up front
   is what separates this from a decoder that cannot size its output
+- **A pointer array cannot be sized uninitialised** → after the hybrid decoder,
+  the same push-built output was still in the PLAIN byte-array decoder, the two
+  delta byte-array decoders, the two FSST value arrays and the dictionary
+  lookups. Sizing them up front takes string dictionary decode down 22.9%
+  native and 26.8% wasm-gc, PLAIN string decode 11.0% and 27.0%,
+  DELTA_LENGTH_BYTE_ARRAY 6.8% and 31.5%, and Int32 dictionary decode 14.1%
+  native, with `harness/bench` agreeing in sign on every row. The numeric
+  lookups take `Array::unsafe_make_uninit` like the hybrid decoder, but an
+  `Array[Bytes]` cannot: an unwritten slot is a reference the collector would
+  follow, so those take `Array::make(count, b"")` and still skip the growth. An
+  error raised mid-loop drops the array either way, which is what makes both
+  forms safe. FSST decode did not move (its value array is small next to the
+  symbol matching), so the sweep is worth doing for the decoders that allocate
+  one object per value, not for every loop that happens to push
 - **A word load is not a win when the gather around it grows** → both
   BYTE_STREAM_SPLIT decoders assembled a value from one strided byte load per
   plane. Replacing those with one bulk load per plane covering eight values and
