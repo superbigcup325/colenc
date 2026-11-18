@@ -165,6 +165,22 @@ them, not because a release is complete.
    three backends, never a panic, and the accepted outputs and consumed lengths
    stay equal to the release fixtures.
 
+- **Validate a count before allocating from it.** *Done.* A page header
+  supplies the value count and each encoding supplies its own lengths, run
+  headers and block sizes, so a decoder has to reject an input the buffer cannot
+  hold before it allocates from it or computes an offset with it. Every public
+  decoder was audited and the reachable holes closed: `Int32` wrap-around in
+  `count * k` and `offset + length`, a width-zero hybrid run that declares
+  values without carrying a byte, a repeat count and a roaring run length that
+  truncated through an `Int32` conversion, and counts read from a frame header
+  before the first per-value length was read. The PLAIN, BYTE_STREAM_SPLIT, RLE,
+  delta, FSST and roaring decoders changed; no encoded byte did, and the six
+  byte-diff rigs plus the container gate still pass. One residual is recorded
+  instead of fixed: `decode_rle_hybrid` still sizes its output from the caller's
+  count, and a hybrid stream legitimately encodes 2^31 - 1 values in about six
+  bytes, so bounding it is a caller-side page-size policy or an incremental
+  fill, i.e. a contract decision rather than an input check.
+
 ### Features
 
 1. **Extend BYTE_STREAM_SPLIT to INT32 and INT64.** The integer types are

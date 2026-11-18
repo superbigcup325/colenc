@@ -283,7 +283,9 @@ pub fn decode_delta_int64(
   while produced < count {
     let (min_delta, consumed) = read_zigzag(data, pos)
     pos += consumed
-    if pos + header.miniblocks > data.length() {
+    // `pos + miniblocks` wraps for a header that declares more miniblocks than
+    // the input can hold, and the width table below is sized from it.
+    if header.miniblocks > data.length() - pos {
       raise @types.EncodingError::Truncated(
         pos,
         header.miniblocks,
@@ -300,24 +302,35 @@ pub fn decode_delta_int64(
       if width > 64 {
         raise @types.EncodingError::InvalidBitWidth(width)
       }
-      let byte_count = miniblock_size * width / 8
-      if pos + byte_count > data.length() {
-        raise @types.EncodingError::Truncated(
-          pos,
-          byte_count,
-          data.length() - pos,
-        )
+      // `miniblock_size * width` wraps in `Int32` for a block size the input
+      // cannot hold, so the requirement is derived in 64 bits.
+      let byte_count = miniblock_size.to_int64() * width.to_int64() / 8L
+      if byte_count > (data.length() - pos).to_int64() {
+        let need = if byte_count > 2147483647L {
+          2147483647
+        } else {
+          byte_count.to_int()
+        }
+        raise @types.EncodingError::Truncated(pos, need, data.length() - pos)
+      }
+      // A miniblock is unpacked only as far as the caller asked for: its size
+      // comes from the header, so an unclamped unpack would size an array from
+      // the declared block size rather than from the value count.
+      let take = if count - produced < miniblock_size {
+        count - produced
+      } else {
+        miniblock_size
       }
       let unpacked = @primitives.bit_unpack(
-        data[pos:pos + byte_count],
+        data[pos:pos + byte_count.to_int()],
         width,
-        miniblock_size,
+        take,
       ) catch {
         @primitives.PrimitivesError::Truncated(at, need, available) =>
           raise @types.EncodingError::Truncated(at, need, available)
-        _ => raise @types.EncodingError::Truncated(pos, byte_count, 0)
+        _ => raise @types.EncodingError::Truncated(pos, byte_count.to_int(), 0)
       }
-      pos += byte_count
+      pos += byte_count.to_int()
       for value in unpacked {
         if produced < count {
           current = current + (min_delta + value)
@@ -356,7 +369,9 @@ pub fn decode_delta_int32(
   while produced < count {
     let (min_delta, consumed) = read_zigzag(data, pos)
     pos += consumed
-    if pos + header.miniblocks > data.length() {
+    // `pos + miniblocks` wraps for a header that declares more miniblocks than
+    // the input can hold, and the width table below is sized from it.
+    if header.miniblocks > data.length() - pos {
       raise @types.EncodingError::Truncated(
         pos,
         header.miniblocks,
@@ -373,24 +388,35 @@ pub fn decode_delta_int32(
       if width > 32 {
         raise @types.EncodingError::InvalidBitWidth(width)
       }
-      let byte_count = miniblock_size * width / 8
-      if pos + byte_count > data.length() {
-        raise @types.EncodingError::Truncated(
-          pos,
-          byte_count,
-          data.length() - pos,
-        )
+      // `miniblock_size * width` wraps in `Int32` for a block size the input
+      // cannot hold, so the requirement is derived in 64 bits.
+      let byte_count = miniblock_size.to_int64() * width.to_int64() / 8L
+      if byte_count > (data.length() - pos).to_int64() {
+        let need = if byte_count > 2147483647L {
+          2147483647
+        } else {
+          byte_count.to_int()
+        }
+        raise @types.EncodingError::Truncated(pos, need, data.length() - pos)
+      }
+      // A miniblock is unpacked only as far as the caller asked for: its size
+      // comes from the header, so an unclamped unpack would size an array from
+      // the declared block size rather than from the value count.
+      let take = if count - produced < miniblock_size {
+        count - produced
+      } else {
+        miniblock_size
       }
       let unpacked = @primitives.bit_unpack(
-        data[pos:pos + byte_count],
+        data[pos:pos + byte_count.to_int()],
         width,
-        miniblock_size,
+        take,
       ) catch {
         @primitives.PrimitivesError::Truncated(at, need, available) =>
           raise @types.EncodingError::Truncated(at, need, available)
-        _ => raise @types.EncodingError::Truncated(pos, byte_count, 0)
+        _ => raise @types.EncodingError::Truncated(pos, byte_count.to_int(), 0)
       }
-      pos += byte_count
+      pos += byte_count.to_int()
       for value in unpacked {
         if produced < count {
           current = current + (min_delta.to_int() + value.to_int())
@@ -433,7 +459,9 @@ pub fn decode_delta_length_byte_array(
     if length < 0 {
       raise @types.EncodingError::InvalidCount(length)
     }
-    if pos + length > data.length() {
+    // `pos + length` wraps for a decoded length near `Int32::max_value`, which
+    // used to pass this check and hand a negative end to the slice below.
+    if length > data.length() - pos {
       raise @types.EncodingError::Truncated(pos, length, data.length() - pos)
     }
     out[index] = data[pos:pos + length].to_owned()
@@ -506,7 +534,8 @@ pub fn decode_delta_byte_array(
     if length < 0 {
       raise @types.EncodingError::InvalidCount(length)
     }
-    if end + length > data.length() {
+    // `end + length` wraps for a decoded length near `Int32::max_value`.
+    if length > data.length() - end {
       raise @types.EncodingError::Truncated(end, length, data.length() - end)
     }
     end += length

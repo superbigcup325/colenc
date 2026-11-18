@@ -916,7 +916,10 @@ pub fn RoaringBitmap::from_bytes_with_consumed(
   let mut position = 4
   let with_runs = (cookie & 0xFFFF) == ROARING_COOKIE_RUN
   let size = if with_runs {
-    (cookie >> 16) + 1
+    // The cookie's upper half is an unsigned u16 container count. An arithmetic
+    // shift turned a cookie with the top bit set into a negative size, which
+    // panicked inside the flag allocation before any length check ran.
+    ((cookie >> 16) & 0xFFFF) + 1
   } else if (cookie & 0xFFFF) == ROARING_COOKIE_NO_RUN {
     let declared = roaring_read_u32(data, 4)
     position = 8
@@ -926,6 +929,18 @@ pub fn RoaringBitmap::from_bytes_with_consumed(
     declared
   } else {
     raise @types.EncodingError::InvalidTag(cookie & 0xFFFF)
+  }
+  // Every container costs at least its four-byte key/card entry, so a declared
+  // size the input cannot hold is rejected before the flag table is sized from
+  // it. `4 * size` wraps in `Int32` for a hostile size, so the comparison
+  // divides the remaining length and the reported requirement saturates.
+  if size > (data.length() - position) / 4 {
+    let need = if size > 536870911 { 2147483647 } else { size * 4 }
+    raise @types.EncodingError::Truncated(
+      position,
+      need,
+      data.length() - position,
+    )
   }
   let flags : Array[Bool] = Array::make(size, false)
   if with_runs {

@@ -543,6 +543,26 @@ tracked documents ship in the release archive.
   elements" says nothing about what the allocation costs, and the answer differs
   per backend because wasm-gc pays for the object while native pays for the
   bytes
+- **A hostile count is an allocation, and the arithmetic wraps before the check
+  sees it** → an audit of every public decoder found the same two shapes in
+  eight of them: `count * k` or `offset + length` computed in `Int32` before the
+  comparison that was supposed to reject it (2^29 floats and 2^28 doubles went
+  negative, 2^30 and 2^29 went to zero), and an allocation sized from a header
+  field before the first per-value length was read (a five-byte FSST frame asked
+  for 2^31 values, an empty PLAIN byte-array page for a 2^31-entry pointer
+  array). The checks that hold are the ones that never multiply first: compare
+  the count against `data.length() / width`, or the length against
+  `data.length() - pos`, and derive the reported `need` in 64 bits with a
+  saturated conversion. Two more traps came out of the same sweep: a hybrid
+  literal run at bit width zero carries no bytes at all, so its declared group
+  count is an unbounded allocation unless the unpack is clamped to the values
+  the caller asked for, and a length field is unsigned in the format but was
+  converted with `to_int()` — an arithmetic shift of a `u16` with the top bit
+  set produced a negative size and panicked inside `Array::make`. The residual
+  is worth stating in the same breath: `decode_rle_hybrid` still sizes its
+  output from the caller's count, which is correct for a valid stream (a few
+  bytes can encode 2^31 - 1 values) and therefore a policy question, not a
+  check
 - **A word load is not a win when the gather around it grows** → both
   BYTE_STREAM_SPLIT decoders assembled a value from one strided byte load per
   plane. Replacing those with one bulk load per plane covering eight values and

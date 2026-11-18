@@ -109,3 +109,39 @@ test "facade decode surfaces truncation with the offset" {
     _ => abort("expected Truncated(0, 8, 2)")
   }
 }
+
+///|
+test "facade decode refuses hostile counts without allocating" {
+  // A page header can claim any value count. Every family has to reject a count
+  // its handful of bytes cannot hold with a typed error, before an output is
+  // sized from it; the vectors below are the page bodies a malformed file would
+  // carry.
+  let cases : Array[(Bytes, @types.PhysicalType, @types.Encoding, Int32)] = [
+    (b"", @types.Int32, @types.Plain, 2147483647),
+    (b"", @types.Int64, @types.Plain, 536870912),
+    (b"", @types.Float, @types.Plain, 1073741824),
+    (b"", @types.Double, @types.Plain, 268435456),
+    (b"", @types.Bool, @types.Plain, 2147483647),
+    (b"", @types.ByteArray, @types.Plain, 2147483647),
+    (b"\x00\x00\x00\x00", @types.Float, @types.ByteStreamSplit, 536870912),
+    (b"", @types.Double, @types.ByteStreamSplit, 268435456),
+    (b"", @types.Int32, @types.DeltaBinaryPacked, 2147483647),
+    (b"", @types.Int64, @types.DeltaBinaryPacked, 2147483647),
+    (b"", @types.ByteArray, @types.DeltaLength, 2147483647),
+    (b"", @types.ByteArray, @types.DeltaByteArray, 2147483647),
+    (b"\x01\xff\xff\xff\x7f", @types.ByteArray, @types.Fsst, 2147483647),
+  ]
+  for case in cases {
+    let (bytes, ty, encoding, count) = case
+    let error = capture_error(() => {
+      ignore(@colenc.decode_column(bytes, ty, encoding, count))
+    })
+    match error {
+      @types.EncodingError::Truncated(_, _, _) => ()
+      other =>
+        fail(
+          "\{@types.physical_type_name(ty)} \{@types.encoding_name(encoding)}: expected Truncated, got \{@types.EncodingError::message(other)}",
+        )
+    }
+  }
+}

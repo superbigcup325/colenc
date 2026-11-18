@@ -59,3 +59,39 @@ test "byte stream split decode reports truncation" {
     _ => abort("expected InvalidCount(-1)")
   }
 }
+
+///|
+test "byte stream split decode rejects counts whose byte size wraps" {
+  // 2^29 four-byte values wrap to zero and 2^30 to a negative size; both used
+  // to pass the length check and read past the view.
+  let error = capture_error(() => {
+    ignore(decode_byte_stream_split_float(b"\x00\x00\x00\x00", 536870912))
+  })
+  match error {
+    @types.EncodingError::Truncated(0, 2147483647, 4) => ()
+    _ => abort("expected a saturated Truncated")
+  }
+  let error = capture_error(() => {
+    ignore(decode_byte_stream_split_float(b"", 1073741824))
+  })
+  match error {
+    @types.EncodingError::Truncated(0, 2147483647, 0) => ()
+    _ => abort("expected a saturated Truncated")
+  }
+  // 2^28 eight-byte values wrap to zero
+  let error = capture_error(() => {
+    ignore(decode_byte_stream_split_double(b"", 268435456))
+  })
+  match error {
+    @types.EncodingError::Truncated(0, 2147483647, 0) => ()
+    _ => abort("expected a saturated Truncated")
+  }
+  // the largest count that still fits keeps its exact requirement
+  let error = capture_error(() => {
+    ignore(decode_byte_stream_split_float(b"", 268435455))
+  })
+  match error {
+    @types.EncodingError::Truncated(0, 1073741820, 0) => ()
+    _ => abort("expected Truncated(0, 1073741820, 0)")
+  }
+}

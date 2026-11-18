@@ -431,6 +431,17 @@ pub fn decode_fsst(
       if stored_count != count {
         raise @types.EncodingError::Incomplete(stored_count, count)
       }
+      // Every value costs at least its four-byte length prefix, so a count
+      // larger than what is left cannot be satisfied. Without this a hostile
+      // count sized the value array before the first length was read.
+      if count > data.length() - position {
+        let need = if count > 536870911 { 2147483647 } else { count * 4 }
+        raise @types.EncodingError::Truncated(
+          position,
+          need,
+          data.length() - position,
+        )
+      }
       let values : Array[Bytes] = Array::make(count, b"")
       for index in 0..<count {
         if position + 4 > data.length() {
@@ -445,7 +456,8 @@ pub fn decode_fsst(
         if length < 0 {
           raise @types.EncodingError::InvalidCount(length)
         }
-        if position + length > data.length() {
+        // `position + length` wraps for a length near `Int32::max_value`.
+        if length > data.length() - position {
           raise @types.EncodingError::Truncated(
             position,
             length,
@@ -492,6 +504,17 @@ pub fn decode_fsst(
       if stored_count != count {
         raise @types.EncodingError::Incomplete(stored_count, count)
       }
+      // Every value costs at least its four-byte compressed length, so a count
+      // larger than what is left cannot be satisfied; the check keeps a hostile
+      // count from sizing the value array before the first length is read.
+      if count > data.length() - position {
+        let need = if count > 536870911 { 2147483647 } else { count * 4 }
+        raise @types.EncodingError::Truncated(
+          position,
+          need,
+          data.length() - position,
+        )
+      }
       let values : Array[Bytes] = Array::make(count, b"")
       for index in 0..<count {
         if position + 4 > data.length() {
@@ -506,7 +529,9 @@ pub fn decode_fsst(
         if compressed_length < 0 {
           raise @types.EncodingError::InvalidCount(compressed_length)
         }
-        if position + compressed_length > data.length() {
+        // `position + compressed_length` wraps for a length near
+        // `Int32::max_value`.
+        if compressed_length > data.length() - position {
           raise @types.EncodingError::Truncated(
             position,
             compressed_length,
