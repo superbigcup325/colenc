@@ -10,8 +10,10 @@
 **Integration (P5)**: merged into moonlake's `main` — the Parquet reader routed through colenc, a write path added, and the spill format re-encoded (8.08 → 4.86 MiB on the bake-off workload)
 **Release**: `superbigcup325/colenc@0.1.4` is published on mooncakes (2026-11-09, tagged `v0.1.4`). It carries the Roaring portable-stream fixes, measured HLL CPU work, additive typed batch updates and `TDigest::quantiles`, with no serialized format or encoding choice bit changed. **0.1.3** (2026-10-26) added the sparse HyperLogLog state, and **0.1.2** (2026-10-26) shipped the Phase two surface: the Roaring index, the bitmap and key-search rewrites, the `sketches` package (HyperLogLog and t-digest), the bitmap dispatch separation and the K1 to K6 kernel work. The archive consumer check exercises the packaged surface — both sketches, the reusable FSST model, the bitmap query APIs and the generic refusal — on all three backends before and after a publication
 **Phase two (P6)**: the bitmap index landed — E8 Roaring is byte-identical to CRoaring, container shapes and the run-optimisation rule included, judged by pyroaring
-**Follow-through (2026-10-27)**: moonlake consumes the released 0.1.3 at `344d739` and published its accepted scope as 0.5.1 on 2026-10-27. The grouped-HLL cost refresh, sparse-state adoption and budgeted-GROUP-BY input work are complete. The scope previously called 0.6.0 was renumbered by that project's owner; no 0.6.0 publication remains pending. [The follow-through record](NEXT-STEPS.md) carries the current evidence and proposed join-to-aggregation investigation, and [the implementation record](OPTIMIZATION-PLAN.md) retains the completed kernel scope and results. Sparse HLL shipped in 0.1.3 ([delivery record](NEXT-STEPS.md#sparse-hll-state-delivery-record), [cost table](SKETCHES.md#state-cost)); consumer FSST reuse and the Roaring index experiment retain their workload triggers. No new kernel release is a prerequisite for the proposed engine work
+**Follow-through (2026-10-27)**: moonlake consumes the released 0.1.3 at `344d739` and published its accepted scope as 0.5.1 on 2026-10-27. The grouped-HLL cost refresh, sparse-state adoption and budgeted-GROUP-BY input work are complete. The scope previously called 0.6.0 was renumbered by that project's owner; no 0.6.0 publication remains pending. [The follow-through record](NEXT-STEPS.md) carries the current evidence and the join-to-aggregation delivery in 0.6.4, and [the implementation record](OPTIMIZATION-PLAN.md) retains the completed kernel scope and results. Sparse HLL shipped in 0.1.3 ([delivery record](NEXT-STEPS.md#sparse-hll-state-delivery-record), [cost table](SKETCHES.md#state-cost)); consumer FSST reuse and the Roaring index experiment retain their workload triggers. The engine work used the existing kernel
 **Release follow-through (2026-11-09)**: 0.1.4 is published from `d7d0579`, tagged `v0.1.4`, and verified from the registry on all three backends. Issue #7 is closed. PR #2 through #10 are merged and issue #1 is closed. No serialized format or encoding choice bit changed. Issues #8 and #9 remain the consumer-led evidence gates for FSST model reuse and immutable-table Roaring. [Follow-through](NEXT-STEPS.md#post-release-status-2026-11-09) and the [K7 implementation record](OPTIMIZATION-PLAN.md#k7-post-release-cpu-and-query-measurements) carry the evidence and remaining triggers.
+
+**Next work** follows the [post-0.1.4 plan](#8-work-after-014).
 
 ---
 
@@ -133,6 +135,107 @@ Phase two, in progress:
 - Decoding errors are typed errors carrying an offset (able to say "byte N, item M"), never a panic
 - Pre-commit gate: `moon info && moon fmt && moon check --deny-warn && moon test`
 
+## 8. Work after 0.1.4
+
+The moonlake 0.6.4 checkout at `025f3b3` pins colenc 0.1.3. The registry
+comparison and the decoder boundary work do not depend on each other, so either
+can start first; the performance baseline is refreshed before any hot path is
+measured. The consumer-side changes land in moonlake's repository, the kernel
+changes and their fixtures land here. These items are candidates for the next
+release, chosen because the specification and the consumer's read path ask for
+them, not because a release is complete.
+
+### Adoption and correctness
+
+1. **Verify moonlake against colenc 0.1.4.** Build the same moonlake revision
+   with registry copies of 0.1.3 and 0.1.4 on the same toolchain. Run the SQL
+   goldens, Parquet page and spill coverage on native, wasm-gc and js. On
+   native release, compare grouped HLL with the exact and decode-only controls
+   in moonlake's `harness/bench_hll.py`, and compare wide CSV and Parquet scans
+   with moonlake's `harness/bench_release.py`. Record the resolved dependency,
+   the answers or answer fingerprints, time and peak RSS. Adopt 0.1.4 once
+   correctness passes and any reproducible regression is resolved.
+2. **Check decoder sizes before arithmetic.** Cover oversized declarations and
+   truncated bodies in BYTE_STREAM_SPLIT and DELTA_LENGTH_BYTE_ARRAY. The
+   fixed-width PLAIN decoders are the reference: compare the count against the
+   available bytes instead of multiplying first, so `count * 4` and `count * 8`
+   cannot wrap in `decode_byte_stream_split_float` / `_double`, and the running
+   position in `decode_delta_length_byte_array` cannot overflow ahead of its
+   range check. A rejected input is a typed error carrying an offset on all
+   three backends, never a panic, and the accepted outputs and consumed lengths
+   stay equal to the release fixtures.
+
+### Features
+
+1. **Extend BYTE_STREAM_SPLIT to INT32 and INT64.** The integer types are
+   already in `ColBuf`, and moonlake's integer page readers currently accept
+   DELTA_BINARY_PACKED as their extended encoding. Parquet specifies
+   BYTE_STREAM_SPLIT for both integer types.
+   [Parquet encoding specification](https://parquet.apache.org/docs/file-format/data-pages/encodings/)
+
+   The judge is the open question, not the format. The first deliverable is a
+   probe that records what the pinned writer does with integer pages, signed
+   extremes included, and what each judge reads back, because a byte-layer
+   claim is only as good as that record. If the pinned DuckDB refuses integer
+   BYTE_STREAM_SPLIT, the container layer has no judge until an upgrade, and
+   that upgrade is verified on its own against the current fixture and
+   container jobs, moving the pin in `harness/requirements.txt` in the same
+   step.
+
+   Then extend the encoder, decoder and facade, the fixtures
+   (`harness/make_bss_cases.py` and `harness/check_bss.py`), the E6 row in the
+   family table and the README table, and require round trips on three
+   backends, exact bytes against PyArrow and two-way container interop.
+   Exercise both integer types in the moonlake Parquet reader with the packaged
+   candidate.
+2. **Decode dictionary indices for a cached dictionary.** moonlake decodes the
+   index stream separately for each Parquet data page. colenc exposes the
+   two-stream decoder, which also reads the dictionary values. Compare that
+   reader with moonlake's per-page path before adding an index-only entry point
+   in `encoders/`. Cover a one-entry page at bit width 1 (what a writer emits),
+   a synthetic width-0 stream (the hybrid allows it, no writer produces one),
+   repeated and literal runs, and truncated or out-of-range indices. Check the
+   existing two-stream API against its fixtures. Switch the moonlake reader
+   after the corpus and error checks pass and multi-page time and peak RSS meet
+   or beat the control within measured spread.
+
+### Performance
+
+- **Refresh the page-encoding baseline.** The [scoreboard](scoreboard.md) was
+  measured at `26fb9c0`. Run `python3 harness/scoreboard.py` on the current
+  code and record revision, toolchain, input shapes, medians and spread for
+  native and wasm-gc. Use equal inputs and the existing answer checks for the
+  baseline and each candidate.
+- **Measure temporary suffix copies in DELTA_BYTE_ARRAY decode.** The decoder
+  materializes every suffix before reconstructing the final values. Profile
+  their allocation cost on cases from `harness/perf -- delta`. If it is
+  material, try reconstructing owned values directly from validated suffix
+  views. Time shared-prefix and no-prefix inputs with
+  `moon run --target native --release harness/perf -- delta` and
+  `--target wasm-gc`, with DELTA_LENGTH_BYTE_ARRAY as a control. Check decoded
+  values, consumed lengths and typed errors. Alternate paired runs and require
+  a gain beyond spread on the target workload, with the controls within their
+  measured spread.
+
+### Work with prerequisites
+
+- **FSST reuse (#8)** and **immutable-table Roaring (#9)** keep their entry
+  evidence and stop conditions in the [conditional work
+  table](NEXT-STEPS.md#conditional-work-after-consumer-acceptance); this
+  section does not restate them. Both are consumer-led, so neither schedules a
+  kernel change before that evidence exists.
+- **ALP** is a Parquet preview encoding for floating-point pages. Its status
+  and a writer that emits it are not verified here yet, so it is assessed only
+  once an independent writer and a DuckDB reader can exercise the same pages,
+  and it enters the family table and the acceptance system before any
+  implementation starts. Compare page size and CPU against PLAIN and
+  BYTE_STREAM_SPLIT on a representative workload.
+  [Parquet encoding specification](https://parquet.apache.org/docs/file-format/data-pages/encodings/)
+
+Release candidates use the relevant [acceptance gates](#4-the-acceptance-system)
+and the packaged consumer on native, wasm-gc and js. Record inconclusive and
+negative experiments with their controls so they can inform the next choice.
+
 ---
 
 *This document is the public roadmap; it is updated as stages progress*
@@ -144,6 +247,7 @@ The kernel work in the [implementation record](OPTIMIZATION-PLAN.md) is done and
 costs recorded in the [final record](NEXT-STEPS.md#final-benchmark-record).
 Updating moonlake's end-to-end baseline against the actual registry dependency
 is done: that project recorded the pair at `4de8077`, and the wide CSV cases came
-out 6-11% faster than the 0.1.1 control in every round. The separate
+out 6-11% faster than the 0.1.1 control in every round. That pair is the 0.1.1
+control; the 0.1.3 to 0.1.4 comparison is [§8 item 1](#8-work-after-014). The separate
 [PLAIN probe](OPTIMIZATION-PLAN.md#exploratory-plain-record) measured a kernel
 candidate, not a release or consumer acceptance result.
