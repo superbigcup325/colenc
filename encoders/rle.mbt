@@ -167,14 +167,36 @@ pub fn encode_rle_hybrid(
 }
 
 ///|
-/// Read a hybrid stream until `count` values are produced or the input ends.
-/// Returns the values and how many bytes the runs occupied.
-pub fn decode_rle_hybrid(
+/// One run of a hybrid stream: a literal run of at most 504 unpacked values, or
+/// a value repeated some number of times. A caller that only needs the values
+/// can ignore the split; the dictionary decoder uses it to write straight into
+/// its own output instead of building a whole index array first.
+priv enum HybridRun {
+  Literals(Array[Int64], Int32)
+  Repeat(Int64, Int32)
+}
+
+///|
+/// Walks a hybrid stream run by run. `filled` counts the values handed out so
+/// far, which is what stops the walk at the same point `decode_rle_hybrid`
+/// stops and keeps its consumed length.
+priv struct HybridWalk {
+  data : BytesView
+  bit_width : Int32
+  count : Int32
+  mut pos : Int32
+  mut filled : Int32
+}
+
+///|
+/// Validates the arguments the same way `decode_rle_hybrid` does, so a caller
+/// that walks the stream itself reports the same errors in the same order.
+fn hybrid_walk(
   data : BytesView,
   bit_width : Int32,
   count : Int32,
-  offset~ : Int32 = 0,
-) -> (Array[Int64], Int32) raise @types.EncodingError {
+  offset : Int32,
+) -> HybridWalk raise @types.EncodingError {
   if bit_width < 0 || bit_width > 64 {
     raise @types.EncodingError::InvalidBitWidth(bit_width)
   }
@@ -184,73 +206,114 @@ pub fn decode_rle_hybrid(
   if offset < 0 || offset > data.length() {
     raise @types.EncodingError::Truncated(offset, 1, 0)
   }
-  let out : Array[Int64] = Array::unsafe_make_uninit(count)
-  let mut filled = 0
-  let mut pos = offset
-  while filled < count && pos < data.length() {
-    let (header, consumed) = @primitives.read_uleb128(data, offset=pos) catch {
+  { data, bit_width, count, pos: offset, filled: 0, }
+}
+
+///|
+/// The next run, or `None` when the walk has produced `count` values or reached
+/// the end of the input.
+fn HybridWalk::next(self : HybridWalk) -> HybridRun? raise @types.EncodingError {
+  if self.filled >= self.count || self.pos >= self.data.length() {
+    return None
+  }
+  let data = self.data
+  let (header, consumed) = @primitives.read_uleb128(data, offset=self.pos) catch {
+    @primitives.PrimitivesError::Truncated(at, need, available) =>
+      raise @types.EncodingError::Truncated(at, need, available)
+    _ =>
+      raise @types.EncodingError::Truncated(
+        self.pos,
+        1,
+        data.length() - self.pos,
+      )
+  }
+  self.pos += consumed
+  if (header & 1UL) == 1UL {
+    let groups = (header >> 1).to_int()
+    let produced = groups * 8
+    let byte_count = groups * self.bit_width
+    if self.pos + byte_count > data.length() {
+      raise @types.EncodingError::Truncated(
+        self.pos,
+        byte_count,
+        data.length() - self.pos,
+      )
+    }
+    let values = @primitives.bit_unpack(
+      data[self.pos:self.pos + byte_count],
+      self.bit_width,
+      produced,
+    ) catch {
       @primitives.PrimitivesError::Truncated(at, need, available) =>
         raise @types.EncodingError::Truncated(at, need, available)
-      _ => raise @types.EncodingError::Truncated(pos, 1, data.length() - pos)
+      _ => raise @types.EncodingError::Truncated(self.pos, byte_count, 0)
     }
-    pos += consumed
-    if (header & 1UL) == 1UL {
-      let groups = (header >> 1).to_int()
-      let produced = groups * 8
-      let byte_count = groups * bit_width
-      if pos + byte_count > data.length() {
-        raise @types.EncodingError::Truncated(
-          pos,
-          byte_count,
-          data.length() - pos,
-        )
-      }
-      let values = @primitives.bit_unpack(
-        data[pos:pos + byte_count],
-        bit_width,
-        produced,
-      ) catch {
-        @primitives.PrimitivesError::Truncated(at, need, available) =>
-          raise @types.EncodingError::Truncated(at, need, available)
-        _ => raise @types.EncodingError::Truncated(pos, byte_count, 0)
-      }
-      pos += byte_count
-      let take = if count - filled < produced {
-        count - filled
-      } else {
-        produced
-      }
-      for index in 0..<take {
-        out[filled + index] = values[index]
-      }
-      filled += take
+    self.pos += byte_count
+    let take = if self.count - self.filled < produced {
+      self.count - self.filled
     } else {
-      let repeats = (header >> 1).to_int()
-      let byte_count = (bit_width + 7) / 8
-      if pos + byte_count > data.length() {
-        raise @types.EncodingError::Truncated(
-          pos,
-          byte_count,
-          data.length() - pos,
-        )
+      produced
+    }
+    self.filled += take
+    Some(HybridRun::Literals(values, take))
+  } else {
+    let repeats = (header >> 1).to_int()
+    let byte_count = (self.bit_width + 7) / 8
+    if self.pos + byte_count > data.length() {
+      raise @types.EncodingError::Truncated(
+        self.pos,
+        byte_count,
+        data.length() - self.pos,
+      )
+    }
+    let mut value = 0UL
+    for index in 0..<byte_count {
+      value = value |
+        (data[self.pos + index].to_int().to_uint64() << (index * 8))
+    }
+    self.pos += byte_count
+    let take = if self.count - self.filled < repeats {
+      self.count - self.filled
+    } else {
+      repeats
+    }
+    self.filled += take
+    Some(HybridRun::Repeat(value.reinterpret_as_int64(), take))
+  }
+}
+
+///|
+/// Read a hybrid stream until `count` values are produced or the input ends.
+/// Returns the values and how many bytes the runs occupied.
+pub fn decode_rle_hybrid(
+  data : BytesView,
+  bit_width : Int32,
+  count : Int32,
+  offset~ : Int32 = 0,
+) -> (Array[Int64], Int32) raise @types.EncodingError {
+  let out : Array[Int64] = Array::unsafe_make_uninit(count)
+  let mut filled = 0
+  let walk = hybrid_walk(data, bit_width, count, offset)
+  while true {
+    match walk.next() {
+      None => break
+      Some(HybridRun::Literals(values, take)) => {
+        for index in 0..<take {
+          out[filled + index] = values[index]
+        }
+        filled += take
       }
-      let mut value = 0UL
-      for index in 0..<byte_count {
-        value = value | (data[pos + index].to_int().to_uint64() << (index * 8))
-      }
-      pos += byte_count
-      let take = if count - filled < repeats { count - filled } else { repeats }
-      let repeated = value.reinterpret_as_int64()
-      for _ in 0..<take {
-        out[filled] = repeated
-        filled += 1
-      }
+      Some(HybridRun::Repeat(value, take)) =>
+        for _ in 0..<take {
+          out[filled] = value
+          filled += 1
+        }
     }
   }
   if filled < count {
     raise @types.EncodingError::Incomplete(filled, count)
   }
-  (out, pos - offset)
+  (out, walk.pos - offset)
 }
 
 ///|

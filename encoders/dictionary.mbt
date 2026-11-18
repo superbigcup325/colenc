@@ -247,81 +247,226 @@ pub fn encode_dictionary(
 }
 
 ///|
-fn lookup_int32(
+/// The five functions below walk the index stream and write the looked-up value
+/// straight into the output, so a dictionary decode no longer builds the
+/// `count`-sized index array the two-step version needed. Each one reports the
+/// errors `decode_rle_hybrid` reported, in the same order: the walk validates
+/// its arguments first, then the runs are read, then an index is rejected.
+fn pick_int32(
   dictionary : Array[Int32],
-  positions : Array[Int64],
-) -> Array[Int32] raise @types.EncodingError {
-  let out : Array[Int32] = Array::unsafe_make_uninit(positions.length())
-  for index in 0..<positions.length() {
-    let position = positions[index].to_int()
-    if position < 0 || position >= dictionary.length() {
-      raise @types.EncodingError::InvalidIndex(position, dictionary.length())
-    }
-    out[index] = dictionary[position]
+  position : Int64,
+) -> Int32 raise @types.EncodingError {
+  let index = position.to_int()
+  if index < 0 || index >= dictionary.length() {
+    raise @types.EncodingError::InvalidIndex(index, dictionary.length())
   }
-  out
+  dictionary[index]
 }
 
 ///|
-fn lookup_int64(
+fn pick_int64(
   dictionary : Array[Int64],
-  positions : Array[Int64],
-) -> Array[Int64] raise @types.EncodingError {
-  let out : Array[Int64] = Array::unsafe_make_uninit(positions.length())
-  for index in 0..<positions.length() {
-    let position = positions[index].to_int()
-    if position < 0 || position >= dictionary.length() {
-      raise @types.EncodingError::InvalidIndex(position, dictionary.length())
-    }
-    out[index] = dictionary[position]
+  position : Int64,
+) -> Int64 raise @types.EncodingError {
+  let index = position.to_int()
+  if index < 0 || index >= dictionary.length() {
+    raise @types.EncodingError::InvalidIndex(index, dictionary.length())
   }
-  out
+  dictionary[index]
 }
 
 ///|
-fn lookup_float(
+fn pick_float(
   dictionary : Array[Float],
-  positions : Array[Int64],
-) -> Array[Float] raise @types.EncodingError {
-  let out : Array[Float] = Array::unsafe_make_uninit(positions.length())
-  for index in 0..<positions.length() {
-    let position = positions[index].to_int()
-    if position < 0 || position >= dictionary.length() {
-      raise @types.EncodingError::InvalidIndex(position, dictionary.length())
-    }
-    out[index] = dictionary[position]
+  position : Int64,
+) -> Float raise @types.EncodingError {
+  let index = position.to_int()
+  if index < 0 || index >= dictionary.length() {
+    raise @types.EncodingError::InvalidIndex(index, dictionary.length())
   }
-  out
+  dictionary[index]
 }
 
 ///|
-fn lookup_double(
+fn pick_double(
   dictionary : Array[Double],
-  positions : Array[Int64],
-) -> Array[Double] raise @types.EncodingError {
-  let out : Array[Double] = Array::unsafe_make_uninit(positions.length())
-  for index in 0..<positions.length() {
-    let position = positions[index].to_int()
-    if position < 0 || position >= dictionary.length() {
-      raise @types.EncodingError::InvalidIndex(position, dictionary.length())
+  position : Int64,
+) -> Double raise @types.EncodingError {
+  let index = position.to_int()
+  if index < 0 || index >= dictionary.length() {
+    raise @types.EncodingError::InvalidIndex(index, dictionary.length())
+  }
+  dictionary[index]
+}
+
+///|
+fn pick_byte_array(
+  dictionary : Array[Bytes],
+  position : Int64,
+) -> Bytes raise @types.EncodingError {
+  let index = position.to_int()
+  if index < 0 || index >= dictionary.length() {
+    raise @types.EncodingError::InvalidIndex(index, dictionary.length())
+  }
+  dictionary[index]
+}
+
+///|
+fn decode_indices_int32(
+  dictionary : Array[Int32],
+  walk : HybridWalk,
+) -> Array[Int32] raise @types.EncodingError {
+  let count = walk.count
+  let out : Array[Int32] = Array::unsafe_make_uninit(count)
+  let mut filled = 0
+  while true {
+    match walk.next() {
+      None => break
+      Some(HybridRun::Literals(batch, take)) => {
+        for index in 0..<take {
+          out[filled + index] = pick_int32(dictionary, batch[index])
+        }
+        filled += take
+      }
+      Some(HybridRun::Repeat(value, take)) => {
+        let picked = pick_int32(dictionary, value)
+        for _ in 0..<take {
+          out[filled] = picked
+          filled += 1
+        }
+      }
     }
-    out[index] = dictionary[position]
+  }
+  if filled < count {
+    raise @types.EncodingError::Incomplete(filled, count)
   }
   out
 }
 
 ///|
-fn lookup_byte_arrays(
-  dictionary : Array[Bytes],
-  positions : Array[Int64],
-) -> Array[Bytes] raise @types.EncodingError {
-  let out : Array[Bytes] = Array::make(positions.length(), b"")
-  for index in 0..<positions.length() {
-    let position = positions[index].to_int()
-    if position < 0 || position >= dictionary.length() {
-      raise @types.EncodingError::InvalidIndex(position, dictionary.length())
+fn decode_indices_int64(
+  dictionary : Array[Int64],
+  walk : HybridWalk,
+) -> Array[Int64] raise @types.EncodingError {
+  let count = walk.count
+  let out : Array[Int64] = Array::unsafe_make_uninit(count)
+  let mut filled = 0
+  while true {
+    match walk.next() {
+      None => break
+      Some(HybridRun::Literals(batch, take)) => {
+        for index in 0..<take {
+          out[filled + index] = pick_int64(dictionary, batch[index])
+        }
+        filled += take
+      }
+      Some(HybridRun::Repeat(value, take)) => {
+        let picked = pick_int64(dictionary, value)
+        for _ in 0..<take {
+          out[filled] = picked
+          filled += 1
+        }
+      }
     }
-    out[index] = dictionary[position]
+  }
+  if filled < count {
+    raise @types.EncodingError::Incomplete(filled, count)
+  }
+  out
+}
+
+///|
+fn decode_indices_float(
+  dictionary : Array[Float],
+  walk : HybridWalk,
+) -> Array[Float] raise @types.EncodingError {
+  let count = walk.count
+  let out : Array[Float] = Array::unsafe_make_uninit(count)
+  let mut filled = 0
+  while true {
+    match walk.next() {
+      None => break
+      Some(HybridRun::Literals(batch, take)) => {
+        for index in 0..<take {
+          out[filled + index] = pick_float(dictionary, batch[index])
+        }
+        filled += take
+      }
+      Some(HybridRun::Repeat(value, take)) => {
+        let picked = pick_float(dictionary, value)
+        for _ in 0..<take {
+          out[filled] = picked
+          filled += 1
+        }
+      }
+    }
+  }
+  if filled < count {
+    raise @types.EncodingError::Incomplete(filled, count)
+  }
+  out
+}
+
+///|
+fn decode_indices_double(
+  dictionary : Array[Double],
+  walk : HybridWalk,
+) -> Array[Double] raise @types.EncodingError {
+  let count = walk.count
+  let out : Array[Double] = Array::unsafe_make_uninit(count)
+  let mut filled = 0
+  while true {
+    match walk.next() {
+      None => break
+      Some(HybridRun::Literals(batch, take)) => {
+        for index in 0..<take {
+          out[filled + index] = pick_double(dictionary, batch[index])
+        }
+        filled += take
+      }
+      Some(HybridRun::Repeat(value, take)) => {
+        let picked = pick_double(dictionary, value)
+        for _ in 0..<take {
+          out[filled] = picked
+          filled += 1
+        }
+      }
+    }
+  }
+  if filled < count {
+    raise @types.EncodingError::Incomplete(filled, count)
+  }
+  out
+}
+
+///|
+fn decode_indices_byte_array(
+  dictionary : Array[Bytes],
+  walk : HybridWalk,
+) -> Array[Bytes] raise @types.EncodingError {
+  let count = walk.count
+  let out : Array[Bytes] = Array::make(count, b"")
+  let mut filled = 0
+  while true {
+    match walk.next() {
+      None => break
+      Some(HybridRun::Literals(batch, take)) => {
+        for index in 0..<take {
+          out[filled + index] = pick_byte_array(dictionary, batch[index])
+        }
+        filled += take
+      }
+      Some(HybridRun::Repeat(value, take)) => {
+        let picked = pick_byte_array(dictionary, value)
+        for _ in 0..<take {
+          out[filled] = picked
+          filled += 1
+        }
+      }
+    }
+  }
+  if filled < count {
+    raise @types.EncodingError::Incomplete(filled, count)
   }
   out
 }
@@ -346,27 +491,29 @@ pub fn decode_dictionary(
   if width < 0 || width > 32 {
     raise @types.EncodingError::InvalidBitWidth(width)
   }
-  let (positions, _) = decode_rle_hybrid(indices[1:], width, count)
+  // The walk validates the stream's arguments before the dictionary page is
+  // decoded, which is the order the two-step version reported errors in.
+  let walk = hybrid_walk(indices[1:], width, count, 0)
   match ty {
     Int32 => {
       let values = decode_int32(dictionary, dictionary_size)
-      @types.ColBuf::Int32s(lookup_int32(values, positions))
+      @types.ColBuf::Int32s(decode_indices_int32(values, walk))
     }
     Int64 => {
       let values = decode_int64(dictionary, dictionary_size)
-      @types.ColBuf::Int64s(lookup_int64(values, positions))
+      @types.ColBuf::Int64s(decode_indices_int64(values, walk))
     }
     Float => {
       let values = decode_float(dictionary, dictionary_size)
-      @types.ColBuf::Floats(lookup_float(values, positions))
+      @types.ColBuf::Floats(decode_indices_float(values, walk))
     }
     Double => {
       let values = decode_double(dictionary, dictionary_size)
-      @types.ColBuf::Doubles(lookup_double(values, positions))
+      @types.ColBuf::Doubles(decode_indices_double(values, walk))
     }
     ByteArray => {
       let values = decode_byte_arrays(dictionary, dictionary_size)
-      @types.ColBuf::ByteArrays(lookup_byte_arrays(values, positions))
+      @types.ColBuf::ByteArrays(decode_indices_byte_array(values, walk))
     }
     Bool => raise @types.EncodingError::TypeMismatch(Bool, Dictionary)
   }

@@ -247,6 +247,21 @@ them, not because a release is complete.
   +25.7% native and +36.8% wasm-gc, PLAIN string +14.4% and +21.8%), with
   encoded bytes and ratios unchanged on all 42 rows; FSST decode did not move
   beyond the rigs' swing. Every fixture still matches byte for byte.
+- **Look dictionary indices up inside the run walk.** *Done, and the win is
+  wasm-gc only.* `decode_dictionary` decoded the index stream into a
+  `count`-sized `Array[Int64]` and then walked that array again, so a 500k-value
+  page allocated 4 MB and read it back. The run walker is now a type of its own
+  (`HybridWalk` / `HybridRun`, which `decode_rle_hybrid` also loops over) and the
+  dictionary decode writes the looked-up value straight out. On `harness/perf --
+  families`, wasm-gc dictionary decode went 4052.3 to 3317.4 us for 500k Int32
+  values (-18.1%) and 2110.9 to 1973.4 us for 200k strings (-6.5%), and
+  `harness/bench` agrees (+12.6% and +7.3% MB/s). Native did not move: the perf
+  rig reads -0.0% and -5.2% while the bench reads -2.8% and -5.6% MB/s, i.e. the
+  two rigs disagree in sign inside the swing, so native stays unresolved rather
+  than claimed. The likely reason is that a 4 MB intermediate fits this host's
+  last-level cache, so the traffic the fusion removes was already cheap; a
+  column large enough to spill it is the measurement that would settle it, and
+  `harness/perf -- families` only goes to 500k values.
 - **Read the BYTE_STREAM_SPLIT planes a word at a time.** *Tried, measured, and
   closed.* Replacing the per-plane byte loads with one bulk load covering eight
   values and assembling each value from register shifts made decode 43% slower

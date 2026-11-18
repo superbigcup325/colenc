@@ -227,6 +227,40 @@ spends its time matching symbols. Every fixture still matches byte for byte,
 the container gate reads the pages back through both judges, and the suite is
 185/185 on native, wasm-gc and js with no `.mbti` change.
 
+## K12. Dictionary indices looked up inside the run walk
+
+**Entry points:** [dictionary.mbt](../encoders/dictionary.mbt),
+[rle.mbt](../encoders/rle.mbt),
+[dictionary_wbtest.mbt](../encoders/dictionary_wbtest.mbt),
+`harness/check_dict.py`, `harness/check_rle.py`, `harness/perf -- families` and
+`harness/bench`. Unreleased: this lands after 0.1.4.
+
+`decode_dictionary` decoded the index stream with `decode_rle_hybrid` into a
+`count`-sized `Array[Int64]` and then walked that array to build the output, so
+a 500k-value page paid a 4 MB allocation plus a write and a read of it for
+values it used once.
+
+The delivery splits the run walk out of `decode_rle_hybrid` into a `HybridWalk`
+that hands out one `HybridRun` at a time (a literal run of at most 504 unpacked
+values, or a repeated value with its count). `decode_rle_hybrid` is now a thin
+loop over it, so the hybrid decode and the dictionary decode share one walker
+and cannot drift apart, and the dictionary decode writes each looked-up value
+straight into its output.
+
+*Outcome:* wasm-gc only, and native unresolved. `harness/perf -- families`,
+three runs per side interleaved `base candidate candidate base base candidate`,
+medians per side: wasm-gc dictionary decode 4052.3 to 3317.4 us for 500k Int32
+values (-18.1%) and 2110.9 to 1973.4 us for 200k strings (-6.5%), with
+`harness/bench` agreeing in sign (+12.6% and +7.3% MB/s). Native reads -0.0% and
+-5.2% on the perf rig but -2.8% and -5.6% MB/s on the bench, so the two rigs
+disagree in sign inside the swing and native is recorded as unresolved, not as a
+win. The hypothesis the change was built on was that the intermediate array's
+traffic dominates; a 4 MB array fits this host's last-level cache, which is the
+most likely reason native does not see it. Pinning that down needs a case large
+enough to spill the cache, which the rig does not have yet. Every fixture still
+matches byte for byte, the container gate passes, and the suite is 190/190 on
+native, wasm-gc and js with no `.mbti` change.
+
 ## K1. PLAIN word loads
 
 **Entry points:** [plain.mbt](../encoders/plain.mbt),

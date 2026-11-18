@@ -530,6 +530,19 @@ tracked documents ship in the release archive.
   forms safe. FSST decode did not move (its value array is small next to the
   symbol matching), so the sweep is worth doing for the decoders that allocate
   one object per value, not for every loop that happens to push
+- **An intermediate array that fits in cache costs nothing to remove** →
+  `decode_dictionary` built a `count`-sized `Array[Int64]` of indices and walked
+  it a second time; fusing the lookup into the run walk (`HybridWalk` /
+  `HybridRun`, shared with `decode_rle_hybrid`) is a clear wasm-gc win (-18.1%
+  time on 500k Int32 values, -6.5% on 200k strings, the bench agreeing at
+  +12.6% / +7.3% MB/s) and does nothing measurable on native, where the two rigs
+  even disagree in sign inside the swing. A 4 MB array fits a laptop's
+  last-level cache, so the traffic being removed was already cheap; the same
+  rewrite would only show on native for a column big enough to spill. The
+  lesson is to size the hypothesis before the rewrite: "it allocates `count`
+  elements" says nothing about what the allocation costs, and the answer differs
+  per backend because wasm-gc pays for the object while native pays for the
+  bytes
 - **A word load is not a win when the gather around it grows** → both
   BYTE_STREAM_SPLIT decoders assembled a value from one strided byte load per
   plane. Replacing those with one bulk load per plane covering eight values and
