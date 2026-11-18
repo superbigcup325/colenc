@@ -489,6 +489,22 @@ tracked documents ship in the release archive.
   while at 20000 prefix-heavy values it was 14% smaller. The model is immutable
   and nothing detects that the data drifted away from it; a caller that reuses a
   model owns that decision
+- **A value rebuilt from a second copy pays for two allocations** →
+  `decode_delta_byte_array` decoded the suffix stream through
+  `decode_delta_length_byte_array`, which allocated and copied every suffix,
+  and then copied each suffix again into the value it returned. The lengths are
+  already decoded and the spans are sequential, so validating them with a
+  cursor and building each value with one exact-size `FixedArray`, two
+  `blit_from_bytesview` calls and `unsafe_reinterpret_as_bytes` takes
+  shared-prefix decode on `harness/perf -- delta` from 15.25 to 5.62 ms native
+  (-63.1%) and 21.22 to 12.52 ms wasm-gc (-41.0%), with the
+  DELTA_LENGTH_BYTE_ARRAY control within 2% and encode unchanged. The
+  intermediate version shows where the money is: keeping the suffix copies and
+  only sizing the `Buffer` exactly is -34.5% native, so the second allocation
+  and copy is the bulk of the win, and at these value sizes the zero-fill in
+  `FixedArray::make` is cheaper than another `Buffer::to_bytes` copy. The
+  reinterpret is safe for the same reason the roaring arrays are: the array is
+  fully written before it escapes and a `Byte` array holds no pointers
 
 ## Command reference
 

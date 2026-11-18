@@ -477,30 +477,54 @@ pub fn encode_delta_byte_array(
 }
 
 ///|
+/// DELTA_BYTE_ARRAY: prefix lengths as delta-packed int32, then the suffixes as
+/// a DELTA_LENGTH_BYTE_ARRAY stream.
+///
+/// The suffix bytes stay views into `data`: each value is allocated once at its
+/// exact size and the prefix and suffix are copied straight into it. Decoding
+/// the suffix stream through `decode_delta_length_byte_array` first would
+/// allocate and copy every suffix only to copy it again into the value.
 pub fn decode_delta_byte_array(
   data : BytesView,
   count : Int32,
   offset~ : Int32 = 0,
 ) -> (Array[Bytes], Int32) raise @types.EncodingError {
   let (prefixes, prefix_len) = decode_delta_int32(data, count, offset~)
-  let (suffixes, suffix_len) = decode_delta_length_byte_array(
+  let suffix_offset = offset + prefix_len
+  let (lengths, lengths_len) = decode_delta_int32(
     data,
     count,
-    offset=offset + prefix_len,
+    offset=suffix_offset,
   )
+  // The whole suffix stream is validated before any value is built, so a
+  // malformed length still reports the error the two-stream decoder reported
+  // rather than the first prefix error the value walk would reach.
+  let mut end = suffix_offset + lengths_len
+  for length in lengths {
+    if length < 0 {
+      raise @types.EncodingError::InvalidCount(length)
+    }
+    if end + length > data.length() {
+      raise @types.EncodingError::Truncated(end, length, data.length() - end)
+    }
+    end += length
+  }
   let values : Array[Bytes] = []
   let mut previous : Bytes = b""
+  let mut start = suffix_offset + lengths_len
   for index in 0..<count {
     let prefix = prefixes[index]
     if prefix < 0 || prefix > previous.length() {
       raise @types.EncodingError::InvalidIndex(prefix, previous.length())
     }
-    let buffer = Buffer()
-    buffer.write_bytes(previous[0:prefix])
-    buffer.write_bytes(suffixes[index])
-    let value = buffer.to_bytes()
+    let length = lengths[index]
+    let body : FixedArray[Byte] = FixedArray::make(prefix + length, b'\x00')
+    body.blit_from_bytesview(0, previous[0:prefix])
+    body.blit_from_bytesview(prefix, data[start:start + length])
+    let value = body.unsafe_reinterpret_as_bytes()
     values.push(value)
     previous = value
+    start += length
   }
-  (values, prefix_len + suffix_len)
+  (values, end - offset)
 }

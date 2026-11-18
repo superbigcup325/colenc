@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- `decode_delta_byte_array` keeps the suffix bytes as views into the input and
+  builds each value with one allocation at its exact size, instead of decoding
+  the suffix stream into a fresh `Bytes` per value and copying it again into
+  the returned value. Decoded values, consumed lengths and typed errors are
+  unchanged, the encoder and its reference bytes are untouched. On
+  `harness/perf -- delta`, shared-prefix decode went from 15.25 to 5.62 ms
+  native (-63.1%) and 21.22 to 12.52 ms wasm-gc (-41.0%), with the
+  DELTA_LENGTH_BYTE_ARRAY control within 2%.
+
 ## [0.1.4] - 2026-11-08
 
 ### Added

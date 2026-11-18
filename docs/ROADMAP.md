@@ -201,21 +201,24 @@ them, not because a release is complete.
 
 ### Performance
 
-- **Refresh the page-encoding baseline.** The [scoreboard](scoreboard.md) was
-  measured at `26fb9c0`. Run `python3 harness/scoreboard.py` on the current
-  code and record revision, toolchain, input shapes, medians and spread for
-  native and wasm-gc. Use equal inputs and the existing answer checks for the
-  baseline and each candidate.
-- **Measure temporary suffix copies in DELTA_BYTE_ARRAY decode.** The decoder
-  materializes every suffix before reconstructing the final values. Profile
-  their allocation cost on cases from `harness/perf -- delta`. If it is
-  material, try reconstructing owned values directly from validated suffix
-  views. Time shared-prefix and no-prefix inputs with
-  `moon run --target native --release harness/perf -- delta` and
-  `--target wasm-gc`, with DELTA_LENGTH_BYTE_ARRAY as a control. Check decoded
-  values, consumed lengths and typed errors. Alternate paired runs and require
-  a gain beyond spread on the target workload, with the controls within their
-  measured spread.
+- **Refresh the page-encoding baseline.** *Done.* `docs/scoreboard.md` was
+  regenerated at `938c3be` on `moon 0.1.20261117`, median of three rounds, with
+  the worst round-to-round encode swing at native 11% and wasm-gc 15%. Encoded
+  bytes and compression ratios were identical on all 42 rows, so no choice bit
+  or format moved and only the timing columns changed with the toolchain.
+- **Measure temporary suffix copies in DELTA_BYTE_ARRAY decode.** *Done, and the
+  copies were material.* The decoder materialized every suffix and then copied
+  it again into the value. Validating the length stream in place — the lengths
+  are already decoded and the spans are sequential, so a cursor is enough — and
+  building each value with one exact-size allocation plus two blits takes
+  shared-prefix decode on `harness/perf -- delta` from 15.25 to 5.62 ms native
+  (-63.1%) and 21.22 to 12.52 ms wasm-gc (-41.0%). The
+  DELTA_LENGTH_BYTE_ARRAY control stayed within 2% and encode did not move, so
+  the gain belongs to the target path; decoded values, consumed lengths and
+  typed errors are unchanged, and the delta fixtures still match byte for byte.
+  Sizing the buffer exactly while keeping the suffix copies is only -34.5%
+  native, which is how much of the win comes from the second allocation rather
+  than from buffer growth.
 
 ### Work with prerequisites
 
