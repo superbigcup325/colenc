@@ -516,6 +516,26 @@ tracked documents ship in the release archive.
   the caller can read is written, an incomplete stream raises and drops the
   array, and an `Int64` array holds no pointers. The count being known up front
   is what separates this from a decoder that cannot size its output
+- **A word load is not a win when the gather around it grows** → both
+  BYTE_STREAM_SPLIT decoders assembled a value from one strided byte load per
+  plane. Replacing those with one bulk load per plane covering eight values and
+  extracting bytes with shifts made decode 43% slower on native and wasm-gc at
+  250k, 500k and 1M values, and `harness/perf -- families` and `harness/bench`
+  agreed on the same trees. Extracting byte `slot` of plane `plane` costs a
+  checked array load, a shift, a mask, a second shift and an or, so eight
+  values need 64 of those, while the byte loads it removed were already the
+  cheaper half. The decoders are unchanged; the shape that could still win is a
+  SWAR byte-matrix transpose, which stays unbuilt. The experiment did leave a
+  `float-bss` case in `harness/perf -- families`, because the float decode had
+  no dataset case of its own and only the property test covered it
+- **The two throughput rigs report microseconds, not MB/s** → `harness/perf`
+  prints `@bench` summaries whose `median` is microseconds per call, and
+  `harness/bench` prints milliseconds per phase that `harness/scoreboard.py`
+  converts to MB/s. Reading a perf median as a rate inverts the sign of the
+  result: a candidate that went 2500.3 to 3571.7 us is 43% *slower*, not 43%
+  faster, and that misreading survived two A/B rounds before a second rig
+  disagreed with it. Cross-check a perf number against `harness/bench` on the
+  same trees before writing it into a document
 
 ## Command reference
 

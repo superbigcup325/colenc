@@ -230,6 +230,17 @@ them, not because a release is complete.
   200k strings 1047.3 to 913.5 us native (-12.8%) and 3640.4 to 2882.6 us
   wasm-gc (-20.8%). Every other family case stayed inside its spread, encode did
   not move, and the RLE and dictionary fixtures still match byte for byte.
+- **Read the BYTE_STREAM_SPLIT planes a word at a time.** *Tried, measured, and
+  closed.* Replacing the per-plane byte loads with one bulk load covering eight
+  values and assembling each value from register shifts made decode 43% slower
+  on native and wasm-gc at 250k, 500k and 1M values, in both `harness/perf --
+  families` and `harness/bench`. The extraction loop costs more than the loads
+  it saves: eight values need 64 shift/mask/index steps, while the byte loads
+  it removed were already cheap. The decoders are unchanged. A byte-matrix
+  transpose (SWAR) is the shape that could still win, and it stays unbuilt
+  until a workload asks for it. The `float-bss` case added to
+  `harness/perf -- families` does stay: the float decode had no dataset case of
+  its own before.
 
 ### Work with prerequisites
 

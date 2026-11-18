@@ -126,6 +126,35 @@ value sizes. Decoded values, consumed lengths and typed errors are unchanged:
 reads the pages back through both judges, and the suite is 185/185 on native,
 wasm-gc and js with no `.mbti` change.
 
+## K9. BYTE_STREAM_SPLIT decode with word loads inside the gather (closed)
+
+**Entry points:** [byte_stream_split.mbt](../encoders/byte_stream_split.mbt), its
+whitebox and property tests, `harness/check_bss.py`, `harness/perf -- families`
+and `harness/bench`. Unreleased: measured after 0.1.4, and not shipped.
+
+Both decoders assembled a value from one strided byte load per plane, so a
+double paid eight checked byte loads and a float four. The candidate replaced
+those with one bulk load per plane covering eight values (32 bits covering four
+for float) and assembled each value with register shifts, on the theory that
+the byte loads were the cost.
+
+*Outcome: negative, and both rigs agree.* `harness/perf -- families` on 500k
+values and `harness/bench` at 250k, 500k and 1M values report decode time up
+about 43% on native and wasm-gc at every size, and the two rigs agree to
+within a percent on the same trees (perf 2500.3 to 3571.7 us and bench 2.47 to
+3.59 ms at 500k doubles). The float path is up 34.7% native and 5.8% wasm-gc.
+Encode is unchanged. The arithmetic explains it: extracting byte `slot` of
+plane `plane` costs a checked array load, a shift, a mask, a second shift and
+an or, so eight values need 64 of those, while the eight byte loads per value
+the old loop paid were already the cheaper half of the work. The production
+decoders are unchanged.
+
+Two things survive the negative result. `harness/perf -- families` gained a
+`float-bss` case, because the float path had no dataset case of its own and
+only the property test could have caught a float regression. And the candidate
+that could still win is a real byte-matrix transpose (SWAR masks over eight
+words, about three stages per word rather than a shift per byte); this
+measurement does not justify writing it, so it stays unbuilt.
 ## K10. Hybrid decode output sized up front
 
 **Entry points:** [rle.mbt](../encoders/rle.mbt), its whitebox and property
