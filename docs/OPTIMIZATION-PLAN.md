@@ -126,6 +126,38 @@ value sizes. Decoded values, consumed lengths and typed errors are unchanged:
 reads the pages back through both judges, and the suite is 185/185 on native,
 wasm-gc and js with no `.mbti` change.
 
+## K10. Hybrid decode output sized up front
+
+**Entry points:** [rle.mbt](../encoders/rle.mbt), its whitebox and property
+tests, `harness/check_rle.py`, `harness/check_dict.py`, `harness/perf --
+families` and `harness/bench`. Unreleased: this lands after 0.1.4.
+
+`decode_rle_hybrid` is the shared stream reader: dictionary indices,
+RLE-encoded booleans and the V1 level sections all decode through it. It built
+its `Array[Int64]` by pushing one value at a time from an empty array, so a
+500k-value column paid the geometric growth (about twice the final size in
+copies) plus a push per value, and that array is what the caller then reads.
+
+The delivery allocates the exact count once and writes by index, tracking how
+many slots are filled so the loop and the `Incomplete` error keep their
+meaning. `Array::unsafe_make_uninit` is safe here for the reason the roaring
+container bodies are: every slot a caller can read has been written, an
+incomplete stream raises and drops the array instead of exposing it, and an
+`Int64` array holds no pointers the collector could follow.
+
+*Outcome:* native release and wasm-gc, `harness/perf -- families`, three runs
+per side in a `base candidate candidate base base candidate` order on a quiet
+host, medians per side: boolean RLE decode 1029.9 to 736.2 us native (-28.5%)
+and 4460.5 to 3054.9 us wasm-gc (-31.5%); dictionary decode of 500k Int32
+values 1374.7 to 1109.0 us native (-19.3%) and 5712.9 to 4195.2 us wasm-gc
+(-26.6%); dictionary decode of 200k strings 1047.3 to 913.5 us native (-12.8%)
+and 3640.4 to 2882.6 us wasm-gc (-20.8%). Every other family case stayed inside
+its spread and encode did not move. Decoded values, consumed lengths and typed
+errors are unchanged: `check_rle.py` and `check_dict.py` still match the
+reference byte for byte, the container gate reads the pages back through both
+judges, and the suite is 185/185 on native, wasm-gc and js with no `.mbti`
+change.
+
 ## K1. PLAIN word loads
 
 **Entry points:** [plain.mbt](../encoders/plain.mbt),

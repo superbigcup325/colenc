@@ -219,6 +219,17 @@ them, not because a release is complete.
   Sizing the buffer exactly while keeping the suffix copies is only -34.5%
   native, which is how much of the win comes from the second allocation rather
   than from buffer growth.
+- **Size the RLE hybrid decode output before filling it.** *Done.*
+  `decode_rle_hybrid` pushed one value at a time into an empty array, so a large
+  column paid the geometric growth (about twice the final size in copies) plus a
+  push per value. It now allocates the exact count once and writes by index. The
+  path is shared, so on `harness/perf -- families` three decoders moved at once:
+  boolean RLE decode 1029.9 to 736.2 us native (-28.5%) and 4460.5 to 3054.9 us
+  wasm-gc (-31.5%); dictionary decode of 500k Int32 values 1374.7 to 1109.0 us
+  native (-19.3%) and 5712.9 to 4195.2 us wasm-gc (-26.6%); dictionary decode of
+  200k strings 1047.3 to 913.5 us native (-12.8%) and 3640.4 to 2882.6 us
+  wasm-gc (-20.8%). Every other family case stayed inside its spread, encode did
+  not move, and the RLE and dictionary fixtures still match byte for byte.
 
 ### Work with prerequisites
 

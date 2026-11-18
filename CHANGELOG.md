@@ -16,6 +16,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `harness/perf -- delta`, shared-prefix decode went from 15.25 to 5.62 ms
   native (-63.1%) and 21.22 to 12.52 ms wasm-gc (-41.0%), with the
   DELTA_LENGTH_BYTE_ARRAY control within 2%.
+- `decode_rle_hybrid` allocates its output at the exact count and writes by
+  index instead of pushing one value at a time from an empty array, which drops
+  the geometric growth and the per-value push. Decoded values, consumed lengths
+  and typed errors are unchanged, and the encoder and its reference bytes are
+  untouched. The path is shared by dictionary indices, RLE-encoded booleans and
+  the V1 level sections, so on `harness/perf -- families` three decoders moved
+  at once: boolean RLE 1029.9 to 736.2 us native (-28.5%) and 4460.5 to
+  3054.9 us wasm-gc (-31.5%); dictionary decode of 500k Int32 values 1374.7 to
+  1109.0 us native (-19.3%) and 5712.9 to 4195.2 us wasm-gc (-26.6%); dictionary
+  decode of 200k strings 1047.3 to 913.5 us native (-12.8%) and 3640.4 to
+  2882.6 us wasm-gc (-20.8%).
 
 ## [0.1.4] - 2026-11-08
 
