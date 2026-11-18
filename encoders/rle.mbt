@@ -229,35 +229,62 @@ fn HybridWalk::next(self : HybridWalk) -> HybridRun? raise @types.EncodingError 
   }
   self.pos += consumed
   if (header & 1UL) == 1UL {
-    let groups = (header >> 1).to_int()
-    let produced = groups * 8
-    let byte_count = groups * self.bit_width
-    if self.pos + byte_count > data.length() {
+    // `groups * 8` and `groups * bit_width` wrap in `Int32`, and a wrapped
+    // negative byte count used to pass the length check and reach the slice.
+    // Both are derived in 64 bits and compared against what is left first.
+    let groups = (header >> 1).reinterpret_as_int64()
+    if groups > 268435455L {
+      // 2^28 - 1 groups is already 2^31 - 8 values: no page can ask for it.
       raise @types.EncodingError::Truncated(
         self.pos,
-        byte_count,
+        2147483647,
         data.length() - self.pos,
       )
     }
-    let values = @primitives.bit_unpack(
-      data[self.pos:self.pos + byte_count],
-      self.bit_width,
-      produced,
-    ) catch {
-      @primitives.PrimitivesError::Truncated(at, need, available) =>
-        raise @types.EncodingError::Truncated(at, need, available)
-      _ => raise @types.EncodingError::Truncated(self.pos, byte_count, 0)
+    let produced = (groups * 8L).to_int()
+    let byte_count = groups * self.bit_width.to_int64()
+    if byte_count > (data.length() - self.pos).to_int64() {
+      let need = if byte_count > 2147483647L {
+        2147483647
+      } else {
+        byte_count.to_int()
+      }
+      raise @types.EncodingError::Truncated(
+        self.pos,
+        need,
+        data.length() - self.pos,
+      )
     }
-    self.pos += byte_count
     let take = if self.count - self.filled < produced {
       self.count - self.filled
     } else {
       produced
     }
+    // Only the values the caller asked for are unpacked. At bit width zero a
+    // run carries no bytes at all, so its declared length is otherwise an
+    // unbounded allocation for a stream of a few bytes.
+    let values = @primitives.bit_unpack(
+      data[self.pos:self.pos + byte_count.to_int()],
+      self.bit_width,
+      take,
+    ) catch {
+      @primitives.PrimitivesError::Truncated(at, need, available) =>
+        raise @types.EncodingError::Truncated(at, need, available)
+      _ =>
+        raise @types.EncodingError::Truncated(self.pos, byte_count.to_int(), 0)
+    }
+    self.pos += byte_count.to_int()
     self.filled += take
     Some(HybridRun::Literals(values, take))
   } else {
-    let repeats = (header >> 1).to_int()
+    // A repeat count above `Int32` max cannot describe a page, and the
+    // truncating conversion would silently decode a shorter run instead of
+    // reporting the malformed header.
+    let repeats = (header >> 1).reinterpret_as_int64()
+    if repeats > 2147483647L {
+      raise @types.EncodingError::Corrupt(self.pos)
+    }
+    let repeat_count = repeats.to_int()
     let byte_count = (self.bit_width + 7) / 8
     if self.pos + byte_count > data.length() {
       raise @types.EncodingError::Truncated(
@@ -272,10 +299,10 @@ fn HybridWalk::next(self : HybridWalk) -> HybridRun? raise @types.EncodingError 
         (data[self.pos + index].to_int().to_uint64() << (index * 8))
     }
     self.pos += byte_count
-    let take = if self.count - self.filled < repeats {
+    let take = if self.count - self.filled < repeat_count {
       self.count - self.filled
     } else {
-      repeats
+      repeat_count
     }
     self.filled += take
     Some(HybridRun::Repeat(value.reinterpret_as_int64(), take))
@@ -347,7 +374,9 @@ pub fn decode_bool_rle(
   if length < 0 {
     raise @types.EncodingError::InvalidCount(length)
   }
-  if 4 + length > data.length() {
+  // `4 + length` wraps for a length near `Int32::max_value`, which used to
+  // pass this check and hand a negative end to the slice.
+  if length > data.length() - 4 {
     raise @types.EncodingError::Truncated(4, length, data.length() - 4)
   }
   let (values, _) = decode_rle_hybrid(data[4:4 + length], 1, count)

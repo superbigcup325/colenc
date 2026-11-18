@@ -655,3 +655,38 @@ test "roaring: an unsorted input still inserts one id at a time" {
   assert_eq(bitmap.to_bytes(), incremental.to_bytes())
   check_container_invariants(bitmap)
 }
+
+///|
+test "roaring: a declared container count the input cannot hold is refused" {
+  // The flag table was sized from the declared count before any length check,
+  // so an eight-byte stream could ask for 2^31 containers.
+  let error = capture_error(() => {
+    ignore(RoaringBitmap::from_bytes(b"\x3a\x30\x00\x00\xff\xff\xff\x7f"))
+  })
+  match error {
+    @types.EncodingError::Truncated(8, 2147483647, 0) => ()
+    _ => abort("expected Truncated(8, 2147483647, 0)")
+  }
+  // and `4 * size` wrapped for 2^29, which passed the table check
+  let error = capture_error(() => {
+    ignore(RoaringBitmap::from_bytes(b"\x3a\x30\x00\x00\x00\x00\x00\x20"))
+  })
+  match error {
+    @types.EncodingError::Truncated(8, 2147483647, 0) => ()
+    _ => abort("expected Truncated(8, 2147483647, 0)")
+  }
+}
+
+///|
+test "roaring: a run cookie with the top bit set is refused, not a panic" {
+  // The upper half of the cookie is an unsigned u16 container count. Read with
+  // an arithmetic shift it came out negative and `Array::make` panicked before
+  // any length check could reject it.
+  let error = capture_error(() => {
+    ignore(RoaringBitmap::from_bytes(b"\x3b\x30\x00\x80"))
+  })
+  match error {
+    @types.EncodingError::Truncated(4, 131076, 0) => ()
+    _ => abort("expected Truncated(4, 131076, 0)")
+  }
+}

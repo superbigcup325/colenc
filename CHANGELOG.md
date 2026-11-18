@@ -54,6 +54,25 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   rigs disagree in sign there, so it is recorded as unresolved rather than as a
   win.
 
+### Fixed
+
+- Every public decoder validates the value count and the lengths it reads before
+  it sizes an allocation from them or computes an offset with them, so a
+  malformed page raises a typed error instead of panicking, reading out of
+  bounds, or allocating from a header field. The reachable holes were `Int32`
+  wrap-around in `count * k` and `offset + length` (PLAIN booleans and byte
+  arrays, both BYTE_STREAM_SPLIT decoders, the RLE hybrid's run byte count, the
+  delta miniblock width table and byte count, both FSST framings, the roaring
+  container tables), a width-zero hybrid run that declared values without
+  carrying a byte, a repeat count and a roaring run length that truncated
+  through an `Int32` conversion, and counts taken from a frame header before the
+  first per-value length was read. No encoded byte changes: the RLE, dictionary,
+  delta, BYTE_STREAM_SPLIT, FSST and both roaring fixtures still match. Thirteen
+  new tests feed the hostile count or length with a handful of bytes and assert
+  the typed error; each one fails with the fix reverted. One residual is
+  documented rather than fixed: `decode_rle_hybrid` still sizes its output from
+  the caller's count, which a valid hybrid stream can make large in a few bytes.
+
 ## [0.1.4] - 2026-11-08
 
 ### Added

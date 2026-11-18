@@ -308,3 +308,55 @@ test "plain decode rejects negative counts" {
     _ => abort("expected InvalidCount(-1)")
   }
 }
+
+///|
+test "plain bool decode rejects counts whose bit length wraps" {
+  // `(count + 7) / 8` wraps for a count above 2147483640, so the requirement
+  // went negative, passed the length check, and the bit loop indexed past the
+  // buffer. The count is now compared with what the bytes can hold.
+  let error = capture_error(() => ignore(decode_bool(b"", 2147483647)))
+  match error {
+    @types.EncodingError::Truncated(0, 2147483647, 0) => ()
+    _ => abort("expected a saturated Truncated")
+  }
+  let error = capture_error(() => ignore(decode_bool(b"\x00", 2147483641)))
+  match error {
+    @types.EncodingError::Truncated(0, 2147483647, 1) => ()
+    _ => abort("expected a saturated Truncated")
+  }
+  // the boundary keeps its exact requirement: eight values fit one byte
+  let eight = decode_bool(b"\xff", 8) catch { _ => [] }
+  assert_eq(eight.length(), 8)
+  let error = capture_error(() => ignore(decode_bool(b"\x00", 9)))
+  match error {
+    @types.EncodingError::Truncated(0, 2, 1) => ()
+    _ => abort("expected Truncated(0, 2, 1)")
+  }
+}
+
+///|
+test "plain byte array decode rejects a count the buffer cannot hold" {
+  // Every value costs at least its four-byte length prefix, so this count used
+  // to size a 2^31-entry pointer array before the first length was read.
+  let error = capture_error(() => ignore(decode_byte_arrays(b"", 2147483647)))
+  match error {
+    @types.EncodingError::Truncated(0, 2147483647, 0) => ()
+    _ => abort("expected a saturated Truncated")
+  }
+  let error = capture_error(() => {
+    ignore(decode_byte_arrays(b"\x00\x00\x00\x00", 5))
+  })
+  match error {
+    @types.EncodingError::Truncated(0, 20, 4) => ()
+    _ => abort("expected Truncated(0, 20, 4)")
+  }
+  // `offset + length` wraps for a length near Int32 max: the second value used
+  // to come back as an empty byte array instead of being refused.
+  let error = capture_error(() => {
+    ignore(decode_byte_arrays(b"\x01\x00\x00\x00a\xff\xff\xff\x7f", 2))
+  })
+  match error {
+    @types.EncodingError::Truncated(9, 2147483647, 0) => ()
+    _ => abort("expected Truncated(9, 2147483647, 0)")
+  }
+}

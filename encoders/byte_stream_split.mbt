@@ -41,8 +41,11 @@ pub fn decode_byte_stream_split_float(
   if count < 0 {
     raise @types.EncodingError::InvalidCount(count)
   }
-  let need = count * 4
-  if need > data.length() {
+  // `count * 4` wraps in `Int32` (2^29 values to zero, 2^30 to a negative
+  // size), so the comparison divides the view length instead and the reported
+  // requirement saturates.
+  if count > data.length() / 4 {
+    let need = if count > 536870911 { 2147483647 } else { count * 4 }
     raise @types.EncodingError::Truncated(0, need, data.length())
   }
   let out = Array::make(count, Float(0.0))
@@ -64,8 +67,10 @@ pub fn decode_byte_stream_split_double(
   if count < 0 {
     raise @types.EncodingError::InvalidCount(count)
   }
-  let need = count * 8
-  if need > data.length() {
+  // `count * 8` wraps in `Int32` once `count` passes 2^28 - 1, so the check
+  // compares the count with `data.length() / 8` and never multiplies first.
+  if count > data.length() / 8 {
+    let need = if count > 268435455 { 2147483647 } else { count * 8 }
     raise @types.EncodingError::Truncated(0, need, data.length())
   }
   let out = Array::make(count, 0.0)

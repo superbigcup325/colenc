@@ -163,3 +163,66 @@ test "rle rejects invalid widths" {
     _ => abort("expected InvalidBitWidth(-1)")
   }
 }
+
+///|
+test "rle hybrid decode rejects a run whose byte count wraps" {
+  // A literal run of 2^25 groups at bit width 64 needs 2^31 bytes: the product
+  // wrapped to a negative byte count, passed the length check and reached the
+  // slice. The requirement is derived in 64 bits now.
+  let error = capture_error(() => {
+    ignore(decode_rle_hybrid(b"\x81\x80\x80\x20", 64, 4))
+  })
+  match error {
+    @types.EncodingError::Truncated(4, 2147483647, 0) => ()
+    _ => abort("expected a saturated Truncated")
+  }
+  // 2^28 groups is 2^31 values, which no page can ask for: `groups * 8` used
+  // to wrap as well.
+  let error = capture_error(() => {
+    ignore(decode_rle_hybrid(b"\x81\x80\x80\x80\x02", 1, 4))
+  })
+  match error {
+    @types.EncodingError::Truncated(5, 2147483647, 0) => ()
+    _ => abort("expected a saturated Truncated")
+  }
+}
+
+///|
+test "rle hybrid decode unpacks only the values it was asked for" {
+  // At bit width zero a literal run carries no bytes, so its declared length is
+  // not bounded by the stream: 2^27 groups is 2^30 values from five bytes. The
+  // unpack used to size an array of 2^30 `Int64` values before the caller's
+  // count was consulted; it now unpacks the eight values requested.
+  let (values, consumed) = decode_rle_hybrid(b"\x81\x80\x80\x80\x01", 0, 8) catch {
+    _ => ([], 0)
+  }
+  assert_eq(values.length(), 8)
+  assert_eq(values[7], 0L)
+  assert_eq(consumed, 5)
+}
+
+///|
+test "rle hybrid decode rejects a repeat count that does not fit" {
+  // header >> 1 = 2^31 repeats: the truncating conversion used to turn that
+  // into a negative run and report a short stream instead of a malformed one.
+  let error = capture_error(() => {
+    ignore(decode_rle_hybrid(b"\x80\x80\x80\x80\x10", 1, 1))
+  })
+  match error {
+    @types.EncodingError::Corrupt(5) => ()
+    _ => abort("expected Corrupt(5)")
+  }
+}
+
+///|
+test "bool rle decode rejects a length field that would wrap" {
+  // `4 + length` wraps for a length near Int32 max: the stream used to be cut
+  // to an empty slice and reported as incomplete instead of truncated.
+  let error = capture_error(() => {
+    ignore(decode_bool_rle(b"\xff\xff\xff\x7f\x00\x00", 1))
+  })
+  match error {
+    @types.EncodingError::Truncated(4, 2147483647, 2) => ()
+    _ => abort("expected Truncated(4, 2147483647, 2)")
+  }
+}

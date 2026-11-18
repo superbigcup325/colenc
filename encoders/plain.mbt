@@ -167,6 +167,15 @@ pub fn decode_byte_arrays(
   if count < 0 {
     raise @types.EncodingError::InvalidCount(count)
   }
+  // Every value costs at least its four-byte length prefix, so a count larger
+  // than the buffer can never be satisfied. The bound is the weak one (`count`
+  // against the byte length, not against `length / 4`) so that the per-value
+  // errors below keep pointing at the length or the body they rejected, while
+  // a hostile count still cannot size `out` before a single length is read.
+  if count > data.length() {
+    let need = if count > 536870911 { 2147483647 } else { count * 4 }
+    raise @types.EncodingError::Truncated(0, need, data.length())
+  }
   let out : Array[Bytes] = Array::make(count, b"")
   let mut offset = 0
   for index in 0..<count {
@@ -178,7 +187,9 @@ pub fn decode_byte_arrays(
     if length < 0 {
       raise @types.EncodingError::InvalidCount(length)
     }
-    if offset + length > data.length() {
+    // `offset + length` wraps for a length near `Int32::max_value`, which used
+    // to pass this check and hand a negative end to the slice below.
+    if length > data.length() - offset {
       raise @types.EncodingError::Truncated(
         offset,
         length,
@@ -199,8 +210,11 @@ pub fn decode_bool(
   if count < 0 {
     raise @types.EncodingError::InvalidCount(count)
   }
-  let need = (count + 7) / 8
-  if need > data.length() {
+  // `(count + 7) / 8` wraps once `count` passes `Int32::max_value - 7`, so the
+  // count is compared with what the buffer holds and the requirement saturates;
+  // no addition happens before the check.
+  if count.to_int64() > data.length().to_int64() * 8L {
+    let need = if count > 2147483640 { 2147483647 } else { (count + 7) / 8 }
     raise @types.EncodingError::Truncated(0, need, data.length())
   }
   let out = Array::make(count, false)

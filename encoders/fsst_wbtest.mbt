@@ -96,3 +96,35 @@ test "fsst bounds table building on large inputs" {
   let raw = 4 + values.length() * 4 + values.length() * 2048
   assert_true(bytes.length() <= raw + 1)
 }
+
+///|
+test "fsst decode refuses a count the buffer cannot hold" {
+  // Both framings store the value count, and a hostile one used to size the
+  // value array before the first per-value length was read.
+  let error = capture_error(() => {
+    ignore(decode_fsst(b"\x01\xff\xff\xff\x7f", 2147483647))
+  })
+  match error {
+    @types.EncodingError::Truncated(5, 2147483647, 0) => ()
+    _ => abort("expected Truncated(5, 2147483647, 0)")
+  }
+  // mode 0 with an empty symbol table, then the same stored count
+  let error = capture_error(() => {
+    ignore(decode_fsst(b"\x00\x00\xff\xff\xff\x7f", 2147483647))
+  })
+  match error {
+    @types.EncodingError::Truncated(6, 2147483647, 0) => ()
+    _ => abort("expected Truncated(6, 2147483647, 0)")
+  }
+  // `position + length` wraps for a stored length near Int32 max, which used to
+  // hand back an empty value and a negative consumed count.
+  let error = capture_error(() => {
+    ignore(
+      decode_fsst(b"\x01\x02\x00\x00\x00\x01\x00\x00\x00a\xff\xff\xff\x7f", 2),
+    )
+  })
+  match error {
+    @types.EncodingError::Truncated(14, 2147483647, 0) => ()
+    _ => abort("expected Truncated(14, 2147483647, 0)")
+  }
+}

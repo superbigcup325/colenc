@@ -132,3 +132,73 @@ test "delta decode reports truncation and count mismatches" {
     _ => abort("expected Incomplete(3, 4)")
   }
 }
+
+///|
+test "delta decode rejects a block the input cannot hold" {
+  // miniblock_size 2^30 at bit width zero: the unpack used to size 2^30 values
+  // from the header before the value count was consulted. Only the one value
+  // the caller asked for is unpacked now.
+  let (values, consumed) = decode_delta_int64(
+    b"\x80\x80\x80\x80\x04\x01\x02\x00\x00\x00", 2,
+  ) catch {
+    _ => ([], 0)
+  }
+  assert_eq(values, [0L, 0L])
+  assert_eq(consumed, 10)
+
+  // `miniblock_size * width` wraps in Int32 for the same header at width 64,
+  // which used to reach the unpack with an empty slice and read past it.
+  let error = capture_error(() => {
+    ignore(decode_delta_int64(b"\x80\x80\x80\x80\x02\x01\x02\x00\x00\x40", 2))
+  })
+  match error {
+    @types.EncodingError::Truncated(10, 2147483647, 0) => ()
+    _ => abort("expected a saturated Truncated")
+  }
+
+  // `pos + miniblocks` wraps for 2^31 - 2 miniblocks, and the width table was
+  // sized from it before the comparison could reject it.
+  let error = capture_error(() => {
+    ignore(
+      decode_delta_int64(
+        b"\xfe\xff\xff\xff\x07\xfe\xff\xff\xff\x07\x02\x00\x00", 2,
+      ),
+    )
+  })
+  match error {
+    @types.EncodingError::Truncated(13, 2147483646, 0) => ()
+    _ => abort("expected Truncated(13, 2147483646, 0)")
+  }
+}
+
+///|
+test "delta byte array decoders reject lengths that would wrap" {
+  // A decoded length of Int32 max made `pos + length` negative, so the value
+  // came back empty and the consumed count negative instead of raising.
+  let out = @buffer.Buffer()
+  encode_delta_int32([2147483647], out) catch {
+    _ => ()
+  }
+  let error = capture_error(() => {
+    ignore(decode_delta_length_byte_array(out.to_bytes(), 1))
+  })
+  match error {
+    @types.EncodingError::Truncated(9, 2147483647, 0) => ()
+    _ => abort("expected Truncated(9, 2147483647, 0)")
+  }
+
+  let out = @buffer.Buffer()
+  encode_delta_int32([0], out) catch {
+    _ => ()
+  }
+  encode_delta_int32([2147483647], out) catch {
+    _ => ()
+  }
+  let error = capture_error(() => {
+    ignore(decode_delta_byte_array(out.to_bytes(), 1))
+  })
+  match error {
+    @types.EncodingError::Truncated(14, 2147483647, 0) => ()
+    _ => abort("expected Truncated(14, 2147483647, 0)")
+  }
+}
