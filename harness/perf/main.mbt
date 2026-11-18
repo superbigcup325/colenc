@@ -1264,7 +1264,7 @@ fn bench_candidates(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
     b,
     label("alloc", "u16-two-bytes-hinted", WIDE_COUNT * 2, WIDE_COUNT),
     fn() {
-      let out = Buffer(size_hint=WIDE_COUNT * 2)
+      let out = Buffer(capacity=WIDE_COUNT * 2)
       for value in byte_values {
         out.write_byte((value & 0xFF).to_byte())
         out.write_byte(((value >> 8) & 0xFF).to_byte())
@@ -1289,7 +1289,7 @@ fn bench_candidates(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
         scratch[index * 2] = (value & 0xFF).to_byte()
         scratch[index * 2 + 1] = ((value >> 8) & 0xFF).to_byte()
       }
-      let out = Buffer(size_hint=WIDE_COUNT * 2)
+      let out = Buffer(capacity=WIDE_COUNT * 2)
       out.write_bytes(Bytes::from_array(scratch))
       sink.val = sink.val + out.length()
     },
