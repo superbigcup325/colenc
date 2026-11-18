@@ -905,6 +905,9 @@ fn bench_families(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
   let doubles = @colenc_types.ColBuf::Doubles(
     Array::makei(n, fn(i) { i.to_double() / 7.0 }),
   )
+  let floats = @colenc_types.ColBuf::Floats(
+    Array::makei(n, fn(i) { Float::from_double(i.to_double() / 7.0) }),
+  )
   let label_values = Array::makei(STR_COUNT, fn(i) {
     @utf8.encode("label-\{(i % 16).to_string()}")
   })
@@ -948,6 +951,14 @@ fn bench_families(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
     doubles,
     @colenc_types.ByteStreamSplit,
     n * 8,
+  )
+  bench_encoding(
+    b,
+    sink,
+    "float-bss",
+    floats,
+    @colenc_types.ByteStreamSplit,
+    n * 4,
   )
   bench_dictionary(b, sink, "string-lowcard-dict", labels, label_bytes)
   bench_encoding(
