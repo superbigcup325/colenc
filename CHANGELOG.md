@@ -27,6 +27,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   1109.0 us native (-19.3%) and 5712.9 to 4195.2 us wasm-gc (-26.6%); dictionary
   decode of 200k strings 1047.3 to 913.5 us native (-12.8%) and 3640.4 to
   2882.6 us wasm-gc (-20.8%).
+- Every decoder whose count is known before its loop now allocates its output
+  once instead of pushing into an empty array: the PLAIN byte-array decoder, the
+  two delta byte-array decoders, the two FSST value arrays, the dictionary
+  lookups and the four dictionary lookups over numeric types. Pointer arrays
+  take `Array::make(count, b"")` because an uninitialised slot would hand the
+  collector a reference that was never written; the numeric lookups take
+  `Array::unsafe_make_uninit(count)` because the creating loop writes every
+  slot. Decoded values, consumed lengths and typed errors are unchanged and the
+  encoders and their reference bytes are untouched. On `harness/perf --
+  families`, string dictionary decode went 912.9 to 703.4 us native (-22.9%)
+  and 2888.0 to 2112.6 us wasm-gc (-26.8%); PLAIN string decode 4063.1 to
+  3618.2 us native (-11.0%) and 4663.0 to 3402.4 us wasm-gc (-27.0%);
+  DELTA_LENGTH_BYTE_ARRAY string decode 4343.9 to 4048.6 us native (-6.8%) and
+  6254.2 to 4281.1 us wasm-gc (-31.5%); Int32 dictionary decode 1135.2 to
+  975.3 us native (-14.1%).
 
 ## [0.1.4] - 2026-11-08
 

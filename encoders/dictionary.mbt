@@ -251,7 +251,7 @@ fn lookup_int32(
   dictionary : Array[Int32],
   positions : Array[Int64],
 ) -> Array[Int32] raise @types.EncodingError {
-  let out = Array::make(positions.length(), 0)
+  let out : Array[Int32] = Array::unsafe_make_uninit(positions.length())
   for index in 0..<positions.length() {
     let position = positions[index].to_int()
     if position < 0 || position >= dictionary.length() {
@@ -267,7 +267,7 @@ fn lookup_int64(
   dictionary : Array[Int64],
   positions : Array[Int64],
 ) -> Array[Int64] raise @types.EncodingError {
-  let out = Array::make(positions.length(), 0L)
+  let out : Array[Int64] = Array::unsafe_make_uninit(positions.length())
   for index in 0..<positions.length() {
     let position = positions[index].to_int()
     if position < 0 || position >= dictionary.length() {
@@ -283,7 +283,7 @@ fn lookup_float(
   dictionary : Array[Float],
   positions : Array[Int64],
 ) -> Array[Float] raise @types.EncodingError {
-  let out = Array::make(positions.length(), Float(0.0))
+  let out : Array[Float] = Array::unsafe_make_uninit(positions.length())
   for index in 0..<positions.length() {
     let position = positions[index].to_int()
     if position < 0 || position >= dictionary.length() {
@@ -299,7 +299,7 @@ fn lookup_double(
   dictionary : Array[Double],
   positions : Array[Int64],
 ) -> Array[Double] raise @types.EncodingError {
-  let out = Array::make(positions.length(), 0.0)
+  let out : Array[Double] = Array::unsafe_make_uninit(positions.length())
   for index in 0..<positions.length() {
     let position = positions[index].to_int()
     if position < 0 || position >= dictionary.length() {
@@ -315,13 +315,13 @@ fn lookup_byte_arrays(
   dictionary : Array[Bytes],
   positions : Array[Int64],
 ) -> Array[Bytes] raise @types.EncodingError {
-  let out : Array[Bytes] = []
+  let out : Array[Bytes] = Array::make(positions.length(), b"")
   for index in 0..<positions.length() {
     let position = positions[index].to_int()
     if position < 0 || position >= dictionary.length() {
       raise @types.EncodingError::InvalidIndex(position, dictionary.length())
     }
-    out.push(dictionary[position])
+    out[index] = dictionary[position]
   }
   out
 }

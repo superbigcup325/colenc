@@ -167,9 +167,9 @@ pub fn decode_byte_arrays(
   if count < 0 {
     raise @types.EncodingError::InvalidCount(count)
   }
-  let out : Array[Bytes] = []
+  let out : Array[Bytes] = Array::make(count, b"")
   let mut offset = 0
-  for _ in 0..<count {
+  for index in 0..<count {
     if offset + 4 > data.length() {
       raise @types.EncodingError::Truncated(offset, 4, data.length() - offset)
     }
@@ -185,7 +185,7 @@ pub fn decode_byte_arrays(
         data.length() - offset,
       )
     }
-    out.push(data[offset:offset + length].to_owned())
+    out[index] = data[offset:offset + length].to_owned()
     offset += length
   }
   out

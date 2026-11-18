@@ -230,6 +230,23 @@ them, not because a release is complete.
   200k strings 1047.3 to 913.5 us native (-12.8%) and 3640.4 to 2882.6 us
   wasm-gc (-20.8%). Every other family case stayed inside its spread, encode did
   not move, and the RLE and dictionary fixtures still match byte for byte.
+- **Size every decoder output before filling it.** *Done.* The same growth
+  pattern the hybrid decoder had was still in every decoder whose count is known
+  before its loop: the PLAIN byte-array decoder, the two delta byte-array
+  decoders, the two FSST value arrays, the dictionary lookups and the numeric
+  dictionary lookups. All of them now allocate once and write by index, with
+  `Array::make(count, b"")` for pointer arrays and
+  `Array::unsafe_make_uninit(count)` where the loop writes every slot of a
+  numeric array. On `harness/perf -- families`, string dictionary decode went
+  912.9 to 703.4 us native (-22.9%) and 2888.0 to 2112.6 us wasm-gc (-26.8%);
+  PLAIN string decode 4063.1 to 3618.2 us native (-11.0%) and 4663.0 to
+  3402.4 us wasm-gc (-27.0%); DELTA_LENGTH_BYTE_ARRAY string decode 4343.9 to
+  4048.6 us native (-6.8%) and 6254.2 to 4281.1 us wasm-gc (-31.5%); Int32
+  dictionary decode 1135.2 to 975.3 us native (-14.1%). `harness/bench` on the
+  same trees agrees in sign on every one of those rows (string dictionary
+  +25.7% native and +36.8% wasm-gc, PLAIN string +14.4% and +21.8%), with
+  encoded bytes and ratios unchanged on all 42 rows; FSST decode did not move
+  beyond the rigs' swing. Every fixture still matches byte for byte.
 - **Read the BYTE_STREAM_SPLIT planes a word at a time.** *Tried, measured, and
   closed.* Replacing the per-plane byte loads with one bulk load covering eight
   values and assembling each value from register shifts made decode 43% slower

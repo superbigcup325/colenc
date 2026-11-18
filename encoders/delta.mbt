@@ -426,8 +426,9 @@ pub fn decode_delta_length_byte_array(
   offset~ : Int32 = 0,
 ) -> (Array[Bytes], Int32) raise @types.EncodingError {
   let (lengths, lengths_len) = decode_delta_int32(data, count, offset~)
-  let out : Array[Bytes] = []
+  let out : Array[Bytes] = Array::make(lengths.length(), b"")
   let mut pos = offset + lengths_len
+  let mut index = 0
   for length in lengths {
     if length < 0 {
       raise @types.EncodingError::InvalidCount(length)
@@ -435,7 +436,8 @@ pub fn decode_delta_length_byte_array(
     if pos + length > data.length() {
       raise @types.EncodingError::Truncated(pos, length, data.length() - pos)
     }
-    out.push(data[pos:pos + length].to_owned())
+    out[index] = data[pos:pos + length].to_owned()
+    index += 1
     pos += length
   }
   (out, pos - offset)
@@ -509,7 +511,7 @@ pub fn decode_delta_byte_array(
     }
     end += length
   }
-  let values : Array[Bytes] = []
+  let values : Array[Bytes] = Array::make(count, b"")
   let mut previous : Bytes = b""
   let mut start = suffix_offset + lengths_len
   for index in 0..<count {
@@ -522,7 +524,7 @@ pub fn decode_delta_byte_array(
     body.blit_from_bytesview(0, previous[0:prefix])
     body.blit_from_bytesview(prefix, data[start:start + length])
     let value = body.unsafe_reinterpret_as_bytes()
-    values.push(value)
+    values[index] = value
     previous = value
     start += length
   }
