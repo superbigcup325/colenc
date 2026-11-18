@@ -505,6 +505,17 @@ tracked documents ship in the release archive.
   `FixedArray::make` is cheaper than another `Buffer::to_bytes` copy. The
   reinterpret is safe for the same reason the roaring arrays are: the array is
   fully written before it escapes and a `Byte` array holds no pointers
+- **A decoder that pushes one value at a time pays for growth and for the push**
+  → `decode_rle_hybrid` returned an `Array[Int64]` built by `push` from an empty
+  array, so a 500k-value column copied about twice its final size in geometric
+  growth and paid a push per value. The count is known before the loop starts,
+  so allocate it once and write by index: boolean RLE decode -28.5% native and
+  -31.5% wasm-gc, dictionary decode -19.3% / -26.6% on 500k Int32 values and
+  -12.8% / -20.8% on 200k strings. `Array::unsafe_make_uninit` is the right
+  allocation here, under the same conditions as the roaring bodies: every slot
+  the caller can read is written, an incomplete stream raises and drops the
+  array, and an `Int64` array holds no pointers. The count being known up front
+  is what separates this from a decoder that cannot size its output
 
 ## Command reference
 

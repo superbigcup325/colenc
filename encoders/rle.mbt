@@ -184,9 +184,10 @@ pub fn decode_rle_hybrid(
   if offset < 0 || offset > data.length() {
     raise @types.EncodingError::Truncated(offset, 1, 0)
   }
-  let out : Array[Int64] = []
+  let out : Array[Int64] = Array::unsafe_make_uninit(count)
+  let mut filled = 0
   let mut pos = offset
-  while out.length() < count && pos < data.length() {
+  while filled < count && pos < data.length() {
     let (header, consumed) = @primitives.read_uleb128(data, offset=pos) catch {
       @primitives.PrimitivesError::Truncated(at, need, available) =>
         raise @types.EncodingError::Truncated(at, need, available)
@@ -214,14 +215,15 @@ pub fn decode_rle_hybrid(
         _ => raise @types.EncodingError::Truncated(pos, byte_count, 0)
       }
       pos += byte_count
-      let take = if count - out.length() < produced {
-        count - out.length()
+      let take = if count - filled < produced {
+        count - filled
       } else {
         produced
       }
       for index in 0..<take {
-        out.push(values[index])
+        out[filled + index] = values[index]
       }
+      filled += take
     } else {
       let repeats = (header >> 1).to_int()
       let byte_count = (bit_width + 7) / 8
@@ -237,18 +239,16 @@ pub fn decode_rle_hybrid(
         value = value | (data[pos + index].to_int().to_uint64() << (index * 8))
       }
       pos += byte_count
-      let take = if count - out.length() < repeats {
-        count - out.length()
-      } else {
-        repeats
-      }
+      let take = if count - filled < repeats { count - filled } else { repeats }
+      let repeated = value.reinterpret_as_int64()
       for _ in 0..<take {
-        out.push(value.reinterpret_as_int64())
+        out[filled] = repeated
+        filled += 1
       }
     }
   }
-  if out.length() < count {
-    raise @types.EncodingError::Incomplete(out.length(), count)
+  if filled < count {
+    raise @types.EncodingError::Incomplete(filled, count)
   }
   (out, pos - offset)
 }
