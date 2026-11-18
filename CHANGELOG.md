@@ -42,6 +42,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   DELTA_LENGTH_BYTE_ARRAY string decode 4343.9 to 4048.6 us native (-6.8%) and
   6254.2 to 4281.1 us wasm-gc (-31.5%); Int32 dictionary decode 1135.2 to
   975.3 us native (-14.1%).
+- `decode_dictionary` looks each index up inside the run walk instead of
+  decoding the index stream into a `count`-sized `Array[Int64]` and walking that
+  array again. The run walker is now a type of its own (`HybridWalk` /
+  `HybridRun`) that `decode_rle_hybrid` also loops over, so the two decoders
+  cannot drift apart. Decoded values, consumed lengths and typed errors are
+  unchanged and no encoder is touched. On `harness/perf -- families`, wasm-gc
+  dictionary decode went 4052.3 to 3317.4 us for 500k Int32 values (-18.1%) and
+  2110.9 to 1973.4 us for 200k strings (-6.5%), and `harness/bench` agrees
+  (+12.6% and +7.3% MB/s). Native did not move beyond the rigs' swing: the two
+  rigs disagree in sign there, so it is recorded as unresolved rather than as a
+  win.
 
 ## [0.1.4] - 2026-11-08
 

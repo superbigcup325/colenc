@@ -278,3 +278,144 @@ test "dictionary under budget is unchanged by the early exit" {
     None => abort("expected a dictionary")
   }
 }
+
+///|
+/// The fused index walk writes looked-up values straight out of the run walker.
+/// This pins it against the two-step decode it replaced: unpack the indices into
+/// an array, then look each one up.
+test "fused dictionary decode matches a two-step decode" {
+  let int32_cases : Array[Array[Int32]] = [
+    Array::makei(1500, fn(i) { i % 16 }), // several literal runs, partial tail
+    Array::makei(64, fn(_) { 7 }), // one repeated run
+    Array::makei(9, fn(i) { i % 3 }), // shorter than one literal run
+    [42], // a single value
+    [], // empty
+  ]
+  for values in int32_cases {
+    let column = @types.ColBuf::Int32s(values)
+    let encoding = match encode_dictionary(column) {
+      Some(encoding) => encoding
+      None => abort("expected a dictionary")
+    }
+    let count = column.value_count()
+    let got = decode_dictionary(
+      encoding.dictionary,
+      encoding.indices,
+      Int32,
+      count,
+      encoding.dictionary_size,
+    ) catch {
+      error => abort(@types.EncodingError::message(error))
+    }
+    let (positions, _) = decode_rle_hybrid(
+      encoding.indices[1:],
+      encoding.bit_width,
+      count,
+    ) catch {
+      error => abort(@types.EncodingError::message(error))
+    }
+    let distinct = decode_int32(encoding.dictionary, encoding.dictionary_size) catch {
+      error => abort(@types.EncodingError::message(error))
+    }
+    let want : Array[Int32] = Array::make(positions.length(), 0)
+    for index in 0..<positions.length() {
+      want[index] = distinct[positions[index].to_int()]
+    }
+    match got {
+      Int32s(have) => assert_eq(have, want)
+      _ => abort("expected int32 values")
+    }
+  }
+}
+
+///|
+test "fused dictionary decode of strings matches a two-step decode" {
+  let pool : Array[Bytes] = [b"alpha", b"beta", b"gamma", b"delta", b"epsilon"]
+  let values = Array::makei(700, fn(i) { pool[(i % 5).to_int()] })
+  let column = @types.ColBuf::ByteArrays(values)
+  let encoding = match encode_dictionary(column) {
+    Some(encoding) => encoding
+    None => abort("expected a dictionary")
+  }
+  let count = column.value_count()
+  let got = decode_dictionary(
+    encoding.dictionary,
+    encoding.indices,
+    ByteArray,
+    count,
+    encoding.dictionary_size,
+  ) catch {
+    error => abort(@types.EncodingError::message(error))
+  }
+  let (positions, _) = decode_rle_hybrid(
+    encoding.indices[1:],
+    encoding.bit_width,
+    count,
+  ) catch {
+    error => abort(@types.EncodingError::message(error))
+  }
+  let distinct = decode_byte_arrays(
+    encoding.dictionary,
+    encoding.dictionary_size,
+  ) catch {
+    error => abort(@types.EncodingError::message(error))
+  }
+  let want : Array[Bytes] = Array::make(positions.length(), b"")
+  for index in 0..<positions.length() {
+    want[index] = distinct[positions[index].to_int()]
+  }
+  match got {
+    ByteArrays(have) => assert_eq(have, want)
+    _ => abort("expected byte arrays")
+  }
+}
+
+///|
+/// An index past the end of the dictionary is still rejected with the same
+/// error, and it is rejected from inside the run walk rather than from a second
+/// pass over an index array.
+test "fused dictionary decode rejects an out-of-range index" {
+  // width 4, one literal run of one group: indices 0..7, with 15 in slot 1
+  let indices = b"\x04\x03\x00\x0f\x00\x00\x00\x00\x00"
+  let dictionary = b"\x0a\x00\x00\x00\x0b\x00\x00\x00"
+  let result = decode_dictionary(dictionary, indices, Int32, 8, 2) catch {
+    @types.EncodingError::InvalidIndex(index, size) => {
+      assert_eq(index, 15)
+      assert_eq(size, 2)
+      return
+    }
+    error => abort(@types.EncodingError::message(error))
+  }
+  ignore(result)
+  abort("expected InvalidIndex")
+}
+
+///|
+test "fused dictionary decode reports a truncated index stream" {
+  let dictionary = b"\x0a\x00\x00\x00\x0b\x00\x00\x00"
+  // width 4, literal run header claiming one group (4 bytes) with 2 present
+  let indices = b"\x04\x03\x00\x0f"
+  let result = decode_dictionary(dictionary, indices, Int32, 8, 2) catch {
+    @types.EncodingError::Truncated(_, _, _) => return
+    error => abort(@types.EncodingError::message(error))
+  }
+  ignore(result)
+  abort("expected Truncated")
+}
+
+///|
+test "fused dictionary decode reports an incomplete index stream" {
+  let dictionary = b"\x0a\x00\x00\x00\x0b\x00\x00\x00"
+  // width 1, a repeated run of two zeros: two values, eight asked for
+  let indices = b"\x01\x04\x00"
+  let result = decode_dictionary(dictionary, indices, Int32, 8, 2) catch {
+    @types.EncodingError::Incomplete(got, want) => {
+      assert_eq(got, 2)
+      assert_eq(want, 8)
+      return
+    }
+    error => abort(@types.EncodingError::message(error))
+  }
+  ignore(result)
+  abort("expected Incomplete")
+}
