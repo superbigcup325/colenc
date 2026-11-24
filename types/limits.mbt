@@ -18,3 +18,23 @@
 /// one-byte values can hold, so a real page stays far below it, while the worst
 /// allocation an untrusted header can force is 128 MiB.
 pub const DEFAULT_MAX_VALUES : Int32 = 16777216
+
+///|
+/// The count above which a decoder walks the stream before it allocates.
+///
+/// The ceiling above bounds the worst case, but the output is still sized from
+/// the count before the stream is read, so a body that claims the count and
+/// ends short pays for it first. Walking the runs or miniblocks once without
+/// unpacking and only then allocating removes that, at the cost of a second
+/// pass over the run and block headers: measured on `harness/perf -- families`,
+/// the DELTA_BINARY_PACKED decoders lost 17% to 27% of their decode time at
+/// 500k values when the pass ran unconditionally, which is the same 20% the
+/// last three decode PRs bought back.
+///
+/// So the pass runs only where the allocation is worth protecting. At 2^20
+/// values the output is at least 4 MiB and at most 8 MiB, which is above any
+/// page a writer produces: the in-tree consumer writes 4096-value pages, and a
+/// 1 MiB Parquet page holds at most about 1M one-byte values. Below the
+/// threshold the allocation is a few megabytes at worst and the single-pass
+/// path stays, so a real page decodes exactly as fast as it did before.
+pub const PREVALIDATE_ABOVE : Int32 = 1048576

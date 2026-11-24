@@ -314,6 +314,87 @@ fn HybridWalk::next(self : HybridWalk) -> HybridRun? raise @types.EncodingError 
 }
 
 ///|
+/// Walks a hybrid stream without unpacking and returns how many values it can
+/// produce, raising the same errors `HybridWalk::next` would.
+///
+/// This is a second copy of the run walk on purpose. Folding the two together
+/// (a shared `step` returning the run's byte range, with the decode unpacking
+/// from it) reads better and was measured: it cost 4% to 7% of
+/// DELTA_BINARY_PACKED decode and about 1% of boolean RLE decode even when the
+/// validation never ran, because the decode loop then paid an extra call and an
+/// extra struct per run. The hot loop keeps its inlined form and this pass is
+/// only reached above `PREVALIDATE_ABOVE`, where a second walk over a few
+/// thousand headers is noise next to the values themselves. A test decodes a
+/// stream just above the threshold and truncates it, so a divergence between
+/// the two walks shows up as a failure rather than as a silent gap.
+fn hybrid_produced(
+  data : BytesView,
+  bit_width : Int32,
+  count : Int32,
+  offset : Int32,
+) -> Int32 raise @types.EncodingError {
+  let mut pos = offset
+  let mut filled = 0
+  while filled < count && pos < data.length() {
+    let (header, consumed) = @primitives.read_uleb128(data, offset=pos) catch {
+      @primitives.PrimitivesError::Truncated(at, need, available) =>
+        raise @types.EncodingError::Truncated(at, need, available)
+      _ => raise @types.EncodingError::Truncated(pos, 1, data.length() - pos)
+    }
+    pos += consumed
+    if (header & 1UL) == 1UL {
+      let groups = (header >> 1).reinterpret_as_int64()
+      if groups > 268435455L {
+        raise @types.EncodingError::Truncated(
+          pos,
+          2147483647,
+          data.length() - pos,
+        )
+      }
+      let produced = (groups * 8L).to_int()
+      let byte_count = groups * bit_width.to_int64()
+      if byte_count > (data.length() - pos).to_int64() {
+        let need = if byte_count > 2147483647L {
+          2147483647
+        } else {
+          byte_count.to_int()
+        }
+        raise @types.EncodingError::Truncated(pos, need, data.length() - pos)
+      }
+      let take = if count - filled < produced {
+        count - filled
+      } else {
+        produced
+      }
+      pos += byte_count.to_int()
+      filled += take
+    } else {
+      let repeats = (header >> 1).reinterpret_as_int64()
+      if repeats > 2147483647L {
+        raise @types.EncodingError::Corrupt(pos)
+      }
+      let repeat_count = repeats.to_int()
+      let byte_count = (bit_width + 7) / 8
+      if pos + byte_count > data.length() {
+        raise @types.EncodingError::Truncated(
+          pos,
+          byte_count,
+          data.length() - pos,
+        )
+      }
+      pos += byte_count
+      let take = if count - filled < repeat_count {
+        count - filled
+      } else {
+        repeat_count
+      }
+      filled += take
+    }
+  }
+  filled
+}
+
+///|
 /// Read a hybrid stream until `count` values are produced or the input ends.
 /// Returns the values and how many bytes the runs occupied.
 pub fn decode_rle_hybrid(
@@ -327,6 +408,16 @@ pub fn decode_rle_hybrid(
   // anything is allocated: `unsafe_make_uninit(-1)` is a runtime abort, not a
   // typed error, and a page header supplies this count.
   let walk = hybrid_walk(data, bit_width, count, offset, max_values~)
+  if count > @types.PREVALIDATE_ABOVE {
+    // Above the threshold the output is big enough to be worth a second walk
+    // over the runs, so a stream that ends short is refused before the output
+    // exists instead of allocating the requested count first. The walk above
+    // has already validated the arguments, which is why this comes after it.
+    let produced = hybrid_produced(data, bit_width, count, offset)
+    if produced < count {
+      raise @types.EncodingError::Incomplete(produced, count)
+    }
+  }
   let out : Array[Int64] = Array::unsafe_make_uninit(count)
   let mut filled = 0
   while true {

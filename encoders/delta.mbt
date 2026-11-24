@@ -265,6 +265,65 @@ fn read_delta_header(
 }
 
 ///|
+/// Walks the blocks of a DELTA_BINARY_PACKED stream without unpacking, raising
+/// the same errors the decoder would. A second copy of the block arithmetic for
+/// the same reason `hybrid_produced` is one: sharing it with the decode loop
+/// cost 4% to 7% of decode time even when this pass never ran, because every
+/// miniblock then went through a call and a returned struct. Only reached above
+/// `PREVALIDATE_ABOVE`, and a test decodes a stream just above the threshold so
+/// the two copies cannot drift apart unnoticed.
+fn delta_probe(
+  data : BytesView,
+  count : Int32,
+  start : Int32,
+  header : DeltaHeader,
+  max_width : Int32,
+) -> Unit raise @types.EncodingError {
+  let miniblock_size = header.block_size / header.miniblocks
+  let mut pos = start
+  let mut produced = 1
+  while produced < count {
+    let (_, consumed) = read_zigzag(data, pos)
+    pos += consumed
+    // `pos + miniblocks` wraps for a header that declares more miniblocks than
+    // the input can hold, and the width table is indexed from it.
+    if header.miniblocks > data.length() - pos {
+      raise @types.EncodingError::Truncated(
+        pos,
+        header.miniblocks,
+        data.length() - pos,
+      )
+    }
+    let widths_at = pos
+    pos += header.miniblocks
+    for block_index in 0..<header.miniblocks {
+      let width = data[widths_at + block_index].to_int()
+      if width > max_width {
+        raise @types.EncodingError::InvalidBitWidth(width)
+      }
+      // `miniblock_size * width` wraps in `Int32` for a block size the input
+      // cannot hold, so the requirement is derived in 64 bits.
+      let byte_count = miniblock_size.to_int64() * width.to_int64() / 8L
+      if byte_count > (data.length() - pos).to_int64() {
+        let need = if byte_count > 2147483647L {
+          2147483647
+        } else {
+          byte_count.to_int()
+        }
+        raise @types.EncodingError::Truncated(pos, need, data.length() - pos)
+      }
+      let take = if count - produced < miniblock_size {
+        count - produced
+      } else {
+        miniblock_size
+      }
+      pos += byte_count.to_int()
+      produced += take
+    }
+  }
+}
+
+///|
 /// Decode DELTA_BINARY_PACKED int64 values. Returns the values and the bytes
 /// consumed; the stream is read block by block, and unused miniblocks of the
 /// last block carry a width byte but no data.
@@ -292,6 +351,11 @@ pub fn decode_delta_int64(
   // as it grew. `unsafe_make_uninit` is safe here because every slot is
   // written below (slot 0 with the header value, the rest by the block walk)
   // and a raise drops the array instead of handing it back half-filled.
+  // Above the threshold the output is big enough to be worth walking the blocks
+  // twice, so a stream that ends short is refused before the output exists.
+  if count > @types.PREVALIDATE_ABOVE {
+    delta_probe(data, count, offset + header_len, header, 64)
+  }
   let values : Array[Int64] = Array::unsafe_make_uninit(count)
   values[0] = header.first
   let mut produced = 1
@@ -382,6 +446,9 @@ pub fn decode_delta_int32(
   }
   // Same as the 64-bit path: the count is known up front, so the output is
   // allocated once instead of grown by pushes.
+  if count > @types.PREVALIDATE_ABOVE {
+    delta_probe(data, count, offset + header_len, header, 32)
+  }
   let values : Array[Int32] = Array::unsafe_make_uninit(count)
   values[0] = header.first.to_int()
   let mut produced = 1

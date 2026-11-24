@@ -341,3 +341,77 @@ test "delta decode refuses a count above the ceiling" {
     _ => abort("expected TooManyValues(3, 2) through the length stream")
   }
 }
+
+///|
+test "delta decode refuses a short stream before allocating" {
+  // The header declares 2^31 - 1 values and the count is at the ceiling, so the
+  // ceiling check passes; the body ends at byte 9. The output used to be
+  // allocated (128 MiB of `Int64`) before the first block was read.
+  let error = capture_error(() => {
+    ignore(
+      decode_delta_int64(
+        b"\x80\x01\x04\xff\xff\xff\xff\x07\x00",
+        @types.DEFAULT_MAX_VALUES,
+      ),
+    )
+  })
+  match error {
+    @types.EncodingError::Truncated(9, 1, 0) => ()
+    _ => abort("expected Truncated(9, 1, 0)")
+  }
+  let error = capture_error(() => {
+    ignore(
+      decode_delta_int32(
+        b"\x80\x01\x04\xff\xff\xff\xff\x07\x00",
+        @types.DEFAULT_MAX_VALUES,
+      ),
+    )
+  })
+  match error {
+    @types.EncodingError::Truncated(9, 1, 0) => ()
+    _ => abort("expected Truncated(9, 1, 0)")
+  }
+}
+
+///|
+test "delta prefix decode returns the same prefix as the full decode" {
+  // Same guard as the hybrid: the walk stops inside the block that produces the
+  // last requested value and still consumes the rest of that block's width
+  // bytes, so a prefix decode must return exactly the first `n` values.
+  let values = Array::makei(300, fn(i) { i.to_int64() * 7L - 100L })
+  let out = @buffer.Buffer()
+  encode_delta_int64(values[:], out) catch {
+    _ => ()
+  }
+  let bytes = out.to_bytes()
+  for n in [1, 2, 3, 127, 128, 129, 255, 256, 257, 299, 300] {
+    let (got, _) = decode_delta_int64(bytes, n) catch { _ => ([], 0) }
+    assert_eq(got.length(), n)
+    for index in 0..<n {
+      assert_eq(got[index], values[index])
+    }
+  }
+}
+
+///|
+test "delta validation pass round trips just above the threshold" {
+  // Same guard as the hybrid: the pass only runs above `PREVALIDATE_ABOVE`.
+  let count = @types.PREVALIDATE_ABOVE + 1
+  let values = Array::makei(count, fn(i) { i.to_int64() })
+  let out = @buffer.Buffer()
+  encode_delta_int64(values[:], out) catch {
+    _ => ()
+  }
+  let bytes = out.to_bytes()
+  let (got, _) = decode_delta_int64(bytes, count) catch { _ => ([], 0) }
+  assert_eq(got.length(), count)
+  assert_eq(got[count - 1], values[count - 1])
+  // Half the stream: the pass sees the end before the output is sized.
+  let error = capture_error(() => {
+    ignore(decode_delta_int64(bytes[:bytes.length() / 2], count))
+  })
+  match error {
+    @types.EncodingError::Truncated(_, _, _) => ()
+    _ => abort("expected Truncated")
+  }
+}

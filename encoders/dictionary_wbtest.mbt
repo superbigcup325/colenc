@@ -514,3 +514,27 @@ test "dictionary decode refuses a count above the ceiling" {
     _ => abort("expected TooManyValues(3, 2)")
   }
 }
+
+///|
+test "dictionary decode validates the index stream before the dictionary page" {
+  // The order is arguments, index stream, dictionary page, then the lookups.
+  // A short index stream is a stream problem, and it is found before the
+  // dictionary page is decoded, so it is also found before any lookup writes
+  // into an output sized from `count`.
+  let error = capture_error(() => {
+    ignore(decode_dictionary(b"\x07\x00\x00\x00", b"\x01\x04\x05", Int32, 4, 1))
+  })
+  match error {
+    @types.EncodingError::Incomplete(2, 4) => ()
+    _ => abort("expected Incomplete(2, 4)")
+  }
+  // A malformed dictionary page is still reported when the index stream is
+  // sound: the stream check does not mask it.
+  let error = capture_error(() => {
+    ignore(decode_dictionary(b"", b"\x01\x04\x05", Int32, 2, 1))
+  })
+  match error {
+    @types.EncodingError::Truncated(0, 4, 0) => ()
+    _ => abort("expected Truncated(0, 4, 0)")
+  }
+}
