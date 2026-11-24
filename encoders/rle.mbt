@@ -184,6 +184,11 @@ priv struct HybridWalk {
   data : BytesView
   bit_width : Int32
   count : Int32
+  /// The ceiling the caller gave, carried through so the per-run unpack inside
+  /// `next` judges its own count against the same limit. Without it the
+  /// primitive's default would refuse a run a caller had explicitly raised the
+  /// ceiling for, and the catch below would report that as a truncated stream.
+  max_values : Int32
   mut pos : Int32
   mut filled : Int32
 }
@@ -210,7 +215,7 @@ fn hybrid_walk(
   if offset < 0 || offset > data.length() {
     raise @types.EncodingError::Truncated(offset, 1, 0)
   }
-  { data, bit_width, count, pos: offset, filled: 0, }
+  { data, bit_width, count, max_values, pos: offset, filled: 0, }
 }
 
 ///|
@@ -271,6 +276,7 @@ fn HybridWalk::next(self : HybridWalk) -> HybridRun? raise @types.EncodingError 
       data[self.pos:self.pos + byte_count.to_int()],
       self.bit_width,
       take,
+      max_values=self.max_values,
     ) catch {
       @primitives.PrimitivesError::Truncated(at, need, available) =>
         raise @types.EncodingError::Truncated(at, need, available)

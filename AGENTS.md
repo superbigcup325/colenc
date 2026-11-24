@@ -687,11 +687,15 @@ tracked documents ship in the release archive.
   needs `ceil(take * width / 8)`. They agree only when a miniblock's payload is
   a whole number of bytes — which the writer guarantees by padding every
   miniblock to its full size, and which a header is free to violate:
-  `block_size = 12, miniblocks = 1` at width 1 made the probe accept a stream
-  the decode then refused with `need 2, available 1`, and by then
-  `Array::unsafe_make_uninit(count)` had already run, so the 128 MiB the pass
-  exists to prevent was paid anyway (a 4.2 MB body reaches the ceiling's worth
-  of values at that shape). Both readers now check
+  `block_size = 12, miniblocks = 1` at width 1, a count of 13, made the probe
+  accept a stream the decode then refused with `need 2, available 1`, and by
+  then `Array::unsafe_make_uninit(count)` had already run, so the 128 MiB the
+  pass exists to prevent was paid anyway (a 4.2 MB body reaches the ceiling's
+  worth of values at that shape). The count matters: the decode unpacks
+  `take = min(count - produced, miniblock_size)` values, and a shorter take can
+  fit the floor charge exactly, which is why the first version of the regression
+  test used a count of 3 and passed on the *unfixed* tree — a drift test has to
+  drive `take` to the miniblock size, or it proves nothing. Both readers now check
   `(miniblock_size % 8) * width % 8 == 0` and raise `Corrupt` — one compare per
   miniblock on the real path, since the remainder is hoisted out of the loop.
   The check sits at the miniblock, not in `read_delta_header`, because a header
@@ -713,7 +717,12 @@ tracked documents ship in the release archive.
   `types.DEFAULT_MAX_VALUES` on purpose, because `types` declares no imports and
   the primitive cannot borrow its ceiling, so the two values have to move
   together. Both library callers already clamp what they ask for, which is why
-  no in-tree path could reach it and no cheap test caught it
+  no in-tree path could reach it and no cheap test caught it. The decoders also
+  forward their own ceiling into the primitive (`HybridWalk` carries it for the
+  hybrid): with the primitive's default, a caller who raises `max_values` to
+  decode more than 2^24 values in one page would have the per-run unpack refuse
+  a count it had just allowed, and the decoder's catch-all would report that as
+  a truncated stream rather than as the ceiling it is
 - **A ceiling that is only tested at its default value is not tested** →
   deleting all six `max_values~` forwards in `facade.mbt` left the suite at
   225 passed, because `facade_test` exercised the default ceiling and the

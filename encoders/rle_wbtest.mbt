@@ -434,3 +434,13 @@ test "bool rle judges the count before the length prefix" {
       )
   }
 }
+
+///|
+test "the primitive and model ceilings are the same number" {
+  // `primitives` cannot import `types` (that package declares no imports, which
+  // is what keeps consumer types out of the public API), so the ceiling exists
+  // twice. A primitives ceiling smaller than the model's would make the per-run
+  // unpack inside `HybridWalk::next` refuse a count the caller had explicitly
+  // allowed, and the catch there would report it as a truncated stream.
+  assert_eq(@primitives.DEFAULT_MAX_VALUES, @types.DEFAULT_MAX_VALUES)
+}

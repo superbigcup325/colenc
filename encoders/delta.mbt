@@ -426,6 +426,7 @@ pub fn decode_delta_int64(
         data[pos:pos + byte_count.to_int()],
         width,
         take,
+        max_values~,
       ) catch {
         @primitives.PrimitivesError::Truncated(at, need, available) =>
           raise @types.EncodingError::Truncated(at, need, available)
@@ -524,6 +525,7 @@ pub fn decode_delta_int32(
         data[pos:pos + byte_count.to_int()],
         width,
         take,
+        max_values~,
       ) catch {
         @primitives.PrimitivesError::Truncated(at, need, available) =>
           raise @types.EncodingError::Truncated(at, need, available)

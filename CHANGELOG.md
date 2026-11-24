@@ -37,13 +37,26 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `delta_probe` charged a miniblock `floor(miniblock_size * width / 8)` bytes
   while the decode loop handed the same slice to `bit_unpack`, which needs
   `ceil(take * width / 8)`. The two agree only when a miniblock's payload is a
-  whole number of bytes, so a header with `block_size = 12, miniblocks = 1` let
-  the validation pass accept a stream the decode then refused with `need 2,
-  available 1` — after the output had been allocated, which is the case the pass
-  exists to remove. Both readers now refuse such a miniblock with `Corrupt`
-  before it is unpacked. No writer produces that shape (parquet-cpp writes a
-  block of 128 or 256 with four miniblocks), so no accepted stream changes and
-  every reference byte diff still matches.
+  whole number of bytes, and a take shorter than the miniblock hides the
+  difference: with `block_size = 12, miniblocks = 1`, width 1 and a count of 13
+  the take is the whole miniblock, and the validation pass accepted a stream the
+  decode then refused with `need 2, available 1` — after the output had been
+  allocated, which is the case the pass exists to remove. Both readers now
+  refuse such a miniblock with `Corrupt` before it is unpacked, whatever the
+  take, because the format defines a miniblock's payload as
+  `miniblock_size * width / 8` bytes and that is only a whole number when the
+  size is a multiple of eight. This is the one narrowing in the change: a
+  header whose miniblock size is not a multiple of eight used to decode when the
+  take happened to fit the floor charge, and is refused now. No conforming
+  writer produces one — the Parquet spec requires the miniblock size to be a
+  multiple of 32, and parquet-cpp writes 32 or 64 — so every reference byte diff
+  still matches.
+- `bit_unpack` judges its `max_values` ceiling with the other arguments, before
+  it derives the byte requirement, so a count above the ceiling answers
+  `TooManyValues` instead of `Truncated`. The decoders forward their own ceiling
+  into it (`HybridWalk` carries it): with the primitive's default the per-run
+  unpack would have refused a count the caller had explicitly allowed, and the
+  decoder's catch-all would have reported that as a truncated stream.
 - `decode_dictionary` judges the physical type and the count ceiling before the
   index stream. The type used to be the last arm of the `match`, which was only
   correct while the index walk was lazy; once the walk became unconditional a
