@@ -318,9 +318,12 @@ pub fn decode_rle_hybrid(
   count : Int32,
   offset~ : Int32 = 0,
 ) -> (Array[Int64], Int32) raise @types.EncodingError {
+  // The walk validates `bit_width`, `count` and `offset` before anything is
+  // allocated: `unsafe_make_uninit(-1)` is a runtime abort, not a typed error,
+  // and a page header supplies this count.
+  let walk = hybrid_walk(data, bit_width, count, offset)
   let out : Array[Int64] = Array::unsafe_make_uninit(count)
   let mut filled = 0
-  let walk = hybrid_walk(data, bit_width, count, offset)
   while true {
     match walk.next() {
       None => break

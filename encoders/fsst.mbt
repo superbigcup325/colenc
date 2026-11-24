@@ -411,6 +411,12 @@ pub fn decode_fsst(
   if count < 0 {
     raise @types.EncodingError::InvalidCount(count)
   }
+  // A negative offset reached the mode byte as `data[-1]` and panicked; the
+  // other offset-taking decoders reject it with a typed error, so this one does
+  // too. An offset past the end is caught by the mode-byte check below.
+  if offset < 0 {
+    raise @types.EncodingError::Truncated(offset, 1, 0)
+  }
   let mut position = offset
   if position >= data.length() {
     raise @types.EncodingError::Truncated(position, 1, 0)

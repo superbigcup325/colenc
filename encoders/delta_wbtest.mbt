@@ -228,3 +228,62 @@ test "delta byte array decoders reject lengths that would wrap" {
     _ => abort("expected Truncated(14, 2147483647, 0)")
   }
 }
+
+///|
+test "delta header rejects a field wider than Int32 instead of truncating" {
+  // count declares 2^32 + 3 values; `to_int` used to truncate it to 3, so the
+  // decoder answered `Incomplete have=3 want=5` for a header it should refuse.
+  let error = capture_error(() => {
+    ignore(decode_delta_int64(b"\x80\x01\x04\x83\x80\x80\x80\x10\x00", 5))
+  })
+  match error {
+    @types.EncodingError::Corrupt(0) => ()
+    _ => abort("expected Corrupt(0)")
+  }
+  // block_size declares 2^32 + 128, which used to read back as a valid 128.
+  let error = capture_error(() => {
+    ignore(decode_delta_int64(b"\x80\x81\x80\x80\x10\x04\x01\x00", 1))
+  })
+  match error {
+    @types.EncodingError::Corrupt(0) => ()
+    _ => abort("expected Corrupt(0)")
+  }
+}
+
+///|
+test "delta int32 decode rejects a block the input cannot hold" {
+  // The int64 decoder has this test; the int32 copy is a separate function with
+  // its own copy of both guards, and neither was covered: reverting either one
+  // to the old `Int32` arithmetic left the suite green.
+  let (values, consumed) = decode_delta_int32(
+    b"\x80\x80\x80\x80\x04\x01\x02\x00\x00\x00", 2,
+  ) catch {
+    _ => ([], 0)
+  }
+  assert_eq(values, [0, 0])
+  assert_eq(consumed, 10)
+
+  // `miniblock_size * width` at width 32: 2^29 * 32 / 8 is 2^31 bytes, which
+  // wrapped in Int32 and reached the unpack with an empty slice.
+  let error = capture_error(() => {
+    ignore(decode_delta_int32(b"\x80\x80\x80\x80\x02\x01\x02\x00\x00\x20", 2))
+  })
+  match error {
+    @types.EncodingError::Truncated(10, 2147483647, 0) => ()
+    _ => abort("expected a saturated Truncated")
+  }
+
+  // `pos + miniblocks` wraps for 2^31 - 2 miniblocks, and the width table was
+  // sized from it before the comparison could reject it.
+  let error = capture_error(() => {
+    ignore(
+      decode_delta_int32(
+        b"\xfe\xff\xff\xff\x07\xfe\xff\xff\xff\x07\x02\x00\x00", 2,
+      ),
+    )
+  })
+  match error {
+    @types.EncodingError::Truncated(13, 2147483646, 0) => ()
+    _ => abort("expected Truncated(13, 2147483646, 0)")
+  }
+}
