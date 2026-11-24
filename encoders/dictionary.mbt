@@ -337,6 +337,8 @@ fn decode_indices_int32(
       }
     }
   }
+  // `probe.produced()` established this; the check stays as the guard that
+  // would catch the two passes diverging.
   if filled < count {
     raise @types.EncodingError::Incomplete(filled, count)
   }
@@ -492,13 +494,23 @@ pub fn decode_dictionary(
   if width < 0 || width > 32 {
     raise @types.EncodingError::InvalidBitWidth(width)
   }
-  // The walk validates its *arguments* before the dictionary page is decoded,
-  // which is the order the two-step version reported them in. A malformed run
-  // inside the stream is a different matter: the two-step version decoded the
-  // whole index stream before the dictionary page and before any lookup, so it
-  // reported a stream error where the fused walk reports the bad index it
-  // reaches first. Both are typed errors; only the reported offset can differ.
+  // The index stream is validated before the dictionary page is decoded and
+  // before any lookup. Two reasons: the output the lookups write into is sized
+  // from `count`, so the stream has to prove it can produce that many values
+  // first, and a stream that ends short is a stream problem rather than an
+  // index problem. The order is therefore arguments, index stream, dictionary
+  // page, then the lookups.
+  // Unconditional, unlike the RLE and delta paths: the index walk is what makes
+  // the error order deterministic (stream, then dictionary page, then lookups),
+  // and `harness/perf -- families` measured no change in dictionary decode time
+  // because the per-value lookups dominate the extra pass.
+  // `hybrid_walk` validates `count` and the ceiling here; it builds the walk
+  // without allocating, so the order stays arguments, stream, page, lookups.
   let walk = hybrid_walk(indices[1:], width, count, 0, max_values~)
+  let produced = hybrid_produced(indices[1:], width, count, 0)
+  if produced < count {
+    raise @types.EncodingError::Incomplete(produced, count)
+  }
   match ty {
     Int32 => {
       let values = decode_int32(dictionary, dictionary_size)

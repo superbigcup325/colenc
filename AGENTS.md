@@ -589,11 +589,39 @@ tracked documents ship in the release archive.
   of one-byte values can hold, so a real page stays far below it, and the worst
   allocation an untrusted header can force is 128 MiB of `Int64`. The ceiling is
   a policy, not a format limit: a caller that legitimately decodes more passes a
-  larger `max_values~`. What it does not do is make the allocation proportional
-  to the input for a *truncated* stream below the ceiling (a count of 2^24 over a
-  four-byte body still allocates 128 MiB before `Incomplete`); bounding that
-  would need a validation pass before the allocation, which was not built
-  because the ceiling already caps the damage
+  larger `max_values~`. The ceiling bounds the worst case but does not make the
+  allocation proportional to the stream, which is the separate entry below
+- **The stream can be walked twice cheaper than the output can be allocated
+  once, but not for free** → the ceiling bounds the worst case, yet the output
+  was still allocated from the count before the stream was read, so a four-byte
+  body claiming the ceiling's worth of values cost 128 MiB of `Int64` and only
+  then reported `Incomplete`. Measured as address space with a throwaway native
+  probe: the old code needs a 192 MiB `ulimit -v` for that call on the RLE path
+  and dies at 64 MiB, while walking the stream first runs in the runtime's own
+  48 MiB floor; the delta header is 192 -> 48 MiB and the dictionary index
+  stream 128 -> 48 MiB. Two things had to be priced before this was worth
+  having. First the pass itself: walking the runs or miniblocks a second time
+  cost +27.4% on int32 low-cardinality delta decode, +22.5% on int64 monotonic,
+  +17.4% on int32 random, +6.1% on boolean RLE and +4.8% on DELTA_BYTE_ARRAY
+  when it ran unconditionally, which is the same 20% the three decode PRs
+  before it bought back, so it is gated behind `types.PREVALIDATE_ABOVE` (2^20
+  values, at least 4 MiB of output — above any page a writer produces, since
+  the in-tree consumer writes 4096-value pages and a 1 MiB page holds about 1M
+  one-byte values). Then the shape of the code: folding the two walks together,
+  one `step` returning the run's byte range with the decode unpacking from it
+  and the same for miniblocks, reads better and still cost 3.8% to 7.1% of delta
+  decode and 1.4% of boolean RLE decode *with the pass switched off*, because
+  the hot loop then paid a call and a returned struct per run. So both hot loops
+  keep their inlined form and the pass is a separate copy (`hybrid_produced`,
+  `delta_probe`), guarded by a test that decodes a stream just above the
+  threshold and then truncates it, so the two copies cannot drift apart
+  unnoticed. What the gate leaves is an allocation of at most 8 MiB that a short
+  stream can still force, and one behavioural change: `decode_dictionary`
+  validates its index stream unconditionally (measured inside the noise there,
+  because the per-value lookups dominate), which makes its error order
+  deterministic — arguments, index stream, dictionary page, lookups — where the
+  interleaved walk reported whichever of a short stream and a bad index it
+  reached first
 - **A public primitive is part of the decode surface** → the hardening sweep
   covered the `encoders/` decoders and stopped at the package boundary, so
   `primitives.bit_unpack` kept `need = (bit_width * count + 7) / 8` in `Int32`:

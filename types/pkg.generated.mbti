@@ -4,6 +4,8 @@ package "superbigcup325/colenc/types"
 // Values
 pub const DEFAULT_MAX_VALUES : Int32 = 16777216
 
+pub const PREVALIDATE_ABOVE : Int32 = 1048576
+
 pub fn encoding_name(Encoding) -> String
 
 pub fn physical_type_name(PhysicalType) -> String

@@ -325,3 +325,80 @@ test "bool rle decode refuses a count above the ceiling" {
     _ => abort("expected TooManyValues")
   }
 }
+
+///|
+test "rle hybrid decode refuses a short stream before allocating" {
+  // The count sits exactly on the ceiling, so it passes that check, and the
+  // stream is empty: the output used to be allocated (128 MiB of `Int64`) and
+  // only then did the walk discover the stream ends immediately.
+  let error = capture_error(() => {
+    ignore(decode_rle_hybrid(b"", 1, @types.DEFAULT_MAX_VALUES))
+  })
+  match error {
+    @types.EncodingError::Incomplete(0, count) =>
+      assert_eq(count, @types.DEFAULT_MAX_VALUES)
+    _ => abort("expected Incomplete(0, DEFAULT_MAX_VALUES)")
+  }
+  // A stream that does produce the values still decodes, and the validation
+  // pass leaves the consumed length alone.
+  let (values, consumed) = decode_rle_hybrid(b"\x10\x01", 1, 3) catch {
+    _ => ([], 0)
+  }
+  assert_eq(values, [1L, 1L, 1L])
+  assert_eq(consumed, 2)
+}
+
+///|
+test "rle hybrid prefix decode returns the same prefix as the full decode" {
+  // The walk clamps a run to the values that are left, and the validation pass
+  // has to clamp at exactly the same point or the two passes disagree. Every
+  // prefix count below lands inside a run of a different shape.
+  let values = Array::makei(1000, fn(i) {
+    if i < 300 {
+      5L
+    } else if i < 700 {
+      i.to_int64() % 7L
+    } else {
+      9L
+    }
+  })
+  let out = Buffer()
+  encode_rle_hybrid(values[:], 4, out) catch {
+    _ => ()
+  }
+  let bytes = out.to_bytes()
+  for n in [1, 2, 8, 63, 64, 300, 301, 504, 505, 700, 999, 1000] {
+    let (got, _) = decode_rle_hybrid(bytes, 4, n) catch { _ => ([], 0) }
+    assert_eq(got.length(), n)
+    for index in 0..<n {
+      assert_eq(got[index], values[index])
+    }
+  }
+}
+
+///|
+test "hybrid validation pass round trips just above the threshold" {
+  // The validation pass only runs above `PREVALIDATE_ABOVE`, so this is the
+  // test that reaches it: a valid stream decodes exactly, and a short one is
+  // refused by the pass instead of by the decode loop after the allocation.
+  let count = @types.PREVALIDATE_ABOVE + 1
+  let values = Array::make(count, 1L)
+  let out = Buffer()
+  encode_rle_hybrid(values[:], 1, out) catch {
+    _ => ()
+  }
+  let bytes = out.to_bytes()
+  let (got, _) = decode_rle_hybrid(bytes, 1, count) catch { _ => ([], 0) }
+  assert_eq(got.length(), count)
+  assert_eq(got[count - 1], 1L)
+  let error = capture_error(() => {
+    ignore(decode_rle_hybrid(b"\x10\x01", 1, count))
+  })
+  match error {
+    @types.EncodingError::Incomplete(produced, requested) => {
+      assert_eq(produced, 8)
+      assert_eq(requested, count)
+    }
+    _ => abort("expected Incomplete(8, count)")
+  }
+}

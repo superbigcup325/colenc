@@ -100,6 +100,21 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   documented rather than fixed: `decode_rle_hybrid`, both DELTA_BINARY_PACKED
   decoders and the dictionary index decoders still size their output from the
   caller's count, which a valid stream can make large in a few bytes.
+- The decoders that size an output from the value count walk the stream once
+  without unpacking before they allocate when the count is above
+  `PREVALIDATE_ABOVE` (2^20), so a body that claims the count and ends short is
+  refused without paying for the output first (`hybrid_produced` behind
+  `decode_rle_hybrid` and `decode_bool_rle`, `delta_probe` behind both
+  `DELTA_BINARY_PACKED` decoders). A four-byte body claiming 2^24 values needed
+  192 MiB of address space before and now runs in the runtime's 48 MiB floor;
+  the delta header is 192 -> 48 MiB and the dictionary index stream 128 -> 48
+  MiB. The pass is a second copy of the run and block walk rather than a shared
+  one, and it is gated, both because the measurement said so: unconditional it
+  cost +17% to +27% of delta decode, and a shared walk cost a further 3.8% to
+  7.1% with the pass switched off. `decode_dictionary` validates its index
+  stream unconditionally, which also fixes the order it reports errors in
+  (arguments, index stream, dictionary page, lookups). Decoded values, consumed
+  lengths and encoded bytes are unchanged.
 - A value count above `DEFAULT_MAX_VALUES` (2^24) is refused by the decoders
   listed under Added instead of being decoded. Every count at or below the
   ceiling behaves exactly as before, and no encoded byte changes.
