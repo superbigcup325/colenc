@@ -589,7 +589,7 @@ tracked documents ship in the release archive.
   in one loop over the count, so grepping for "push into an empty array" found
   the byte-array decoders and not them. Sizing the output once took int64
   monotonic delta decode from 1008.0 to 502.9 us native (-50.1%) and int32
-  low-cardinality from 1571.6 to 1005.2 us (-36.0%), a year after the same
+  low-cardinality from 1571.6 to 1005.2 us (-36.0%), six days after the same
   pattern was fixed one file over. When a sweep is by code shape, enumerate the
   functions it should cover from the public surface, not from the hits
 - **A destination passed as a parameter costs the checks a fresh array did not**
