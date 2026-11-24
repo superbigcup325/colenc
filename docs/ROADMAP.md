@@ -263,6 +263,24 @@ them, not because a release is complete.
   +25.7% native and +36.8% wasm-gc, PLAIN string +14.4% and +21.8%), with
   encoded bytes and ratios unchanged on all 42 rows; FSST decode did not move
   beyond the rigs' swing. Every fixture still matches byte for byte.
+- **Size the delta decode output before filling it.** *Done.* The two
+  `DELTA_BINARY_PACKED` decoders were the last ones still building their result
+  by pushing one value at a time from an empty array — the sweep that sized
+  every other decoder output missed them because the push sits inside a block
+  walk — and each miniblock's `bit_unpack` allocated a fresh array that was read
+  once and dropped. The count is known before the first block is read, so the
+  output is allocated once and written by index, and the bit unpackers no longer
+  zero-fill the arrays their loops overwrite. On `harness/perf -- families`,
+  native: int64 monotonic delta decode 1008.0 to 502.9 us (-50.1%), int32
+  low-cardinality delta 1571.6 to 1005.2 us (-36.0%), int32 random delta 2331.2
+  to 1770.6 us (-24.0%), DELTA_BYTE_ARRAY -9.3%, DELTA_LENGTH_BYTE_ARRAY -5.7%,
+  boolean RLE -2.6%; wasm-gc -50.6%, -35.7%, -24.1%, -14.4%, -18.1% and -6.4%.
+  `harness/bench` agrees in sign and magnitude on the same trees, no encoder
+  moved beyond the swing, and every fixture still matches byte for byte. Reusing
+  one scratch array through a new `bit_unpack_into` would take another 8-10% off
+  the int32 decoder but costs 5-11% on the hybrid literal-run path, because the
+  destination becomes a parameter whose bounds the compiler can no longer
+  elide; that variant is recorded in the implementation record and not shipped.
 - **Look dictionary indices up inside the run walk.** *Done, and the win is
   wasm-gc only.* `decode_dictionary` decoded the index stream into a
   `count`-sized `Array[Int64]` and then walked that array again, so a 500k-value

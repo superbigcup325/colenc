@@ -261,6 +261,67 @@ enough to spill the cache, which the rig does not have yet. Every fixture still
 matches byte for byte, the container gate passes, and the suite is 190/190 on
 native, wasm-gc and js with no `.mbti` change.
 
+## K13. Delta binary-packed decode output sized up front
+
+**Entry points:** [delta.mbt](../encoders/delta.mbt),
+[bits.mbt](../primitives/bits.mbt), their whitebox and property tests,
+`harness/check_delta.py`, `harness/check_rle.py`, `harness/check_dict.py`,
+`harness/perf -- families` and `harness/bench`. Unreleased: this lands after
+0.1.4.
+
+K10 sized the hybrid decode output and K11 swept every other decoder whose count
+is known before its loop, both delta byte-array decoders included. The two
+`DELTA_BINARY_PACKED` decoders were missed because their push sat inside a
+block walk rather than in one loop over the count: `decode_delta_int64` and
+`decode_delta_int32` built their result by pushing one value at a time from an
+empty array, so a 500k-value column paid the geometric growth (about twice the
+final size in copies) plus a push per value, and every miniblock's `bit_unpack`
+allocated a fresh array that was read once and dropped.
+
+The delivery allocates the output at the caller's count once and writes by
+index. `Array::unsafe_make_uninit` is safe here for the reason K10 recorded:
+slot 0 takes the header value, the block walk writes every other slot, and a
+raise drops the array instead of handing it back half-filled. The three
+`bit_unpack` unpackers stop zero-filling the arrays their loops overwrite, which
+also reaches the hybrid decoder's literal runs.
+
+*Outcome:* native release and wasm-gc, `harness/perf -- families`, four runs per
+side native and three per side wasm-gc in a `base candidate candidate base base
+candidate` order on a quiet host, medians per side. Native: int64 monotonic
+delta decode 1008.0 to 502.9 us (-50.1%), int32 low-cardinality delta 1571.6 to
+1005.2 us (-36.0%), int32 random delta 2331.2 to 1770.6 us (-24.0%),
+DELTA_BYTE_ARRAY of 200k shared-prefix strings 5454.7 to 4945.7 us (-9.3%),
+DELTA_LENGTH_BYTE_ARRAY 4207.7 to 3967.1 us (-5.7%), boolean RLE 735.7 to 716.5
+us (-2.6%). wasm-gc: 3388.7 to 1674.9 us (-50.6%), 3404.4 to 2189.7 (-35.7%),
+4689.9 to 3561.0 (-24.1%), 12628.6 to 10810.4 (-14.4%), 4457.0 to 3649.7
+(-18.1%), boolean RLE 3261.7 to 3051.9 (-6.4%). Every other family case stayed
+inside its spread and no encoder moved beyond the swing. `harness/bench` on the
+same trees agrees in sign and magnitude on the delta rows (int64 monotonic
+2.04 to 1.00 ms, int32 low-cardinality 3.18 to 2.04 ms, DELTA_BYTE_ARRAY 5.43
+to 5.00 ms, boolean RLE 1.64 to 1.54 ms) with encoded bytes and ratios unchanged
+on all 42 rows. `check_delta.py`, `check_rle.py` and `check_dict.py` still match
+the reference byte for byte, the container gate reads the pages back through
+both judges, and the suite is 204/204 on native, wasm-gc and js with no `.mbti`
+change.
+
+Two further candidates were measured and are not shipped. Both add
+`bit_unpack_into(data, width, count, out)` so the 32-bit decoder can reuse one
+scratch array instead of allocating per miniblock, and both win where they are
+used: unpacking straight into the output span took int32 low-cardinality delta
+decode from 1004.3 to 926.1 us (-7.8%) and the random case from 1783.2 to
+1709.5 us (-4.1%), while the scratch form took the same two rows to 920.0 us
+(-8.9%) and 1664.0 us (-7.2%). The cost lands on every hybrid literal run,
+because the destination is then a parameter whose length the compiler cannot
+prove: boolean RLE decode 714.1 to 786.8 us (+10.2%) for the in-place form and
+724.0 to 802.2 us (+10.8%) for the scratch form, Int32 dictionary decode
+985.8 to 1080.7 us (+9.6%) and 1012.3 to 1063.9 us (+5.1%), string dictionary
+decode 674.1 to 705.3 us (+4.6%); `#inline` on the three unpackers did not
+recover it. Unpacking in place also cost the 64-bit monotonic case 17.2%
+(505.3 to 592.0 us), because the raw deltas then need a second pass over the
+whole output array instead of one pass over a 1 KB scratch. Keeping both shapes
+would mean duplicating three bounds-checked hot loops for 10% on one decoder, so
+`bit_unpack` keeps its own dispatch and the variant stays unbuilt.
+
 ## K1. PLAIN word loads
 
 **Entry points:** [plain.mbt](../encoders/plain.mbt),
