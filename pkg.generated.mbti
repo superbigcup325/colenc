@@ -7,9 +7,9 @@ import {
 }
 
 // Values
-pub fn decode_column(BytesView, @types.PhysicalType, @types.Encoding, Int32) -> @types.ColBuf raise @types.EncodingError
+pub fn decode_column(BytesView, @types.PhysicalType, @types.Encoding, Int32, max_values? : Int32) -> @types.ColBuf raise @types.EncodingError
 
-pub fn decode_dictionary(BytesView, BytesView, @types.PhysicalType, Int32, Int32) -> @types.ColBuf raise @types.EncodingError
+pub fn decode_dictionary(BytesView, BytesView, @types.PhysicalType, Int32, Int32, max_values? : Int32) -> @types.ColBuf raise @types.EncodingError
 
 pub fn decode_roaring_column(BytesView, @types.PhysicalType, Int32) -> @types.ColBuf raise @types.EncodingError
 

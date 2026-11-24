@@ -272,9 +272,13 @@ pub fn decode_delta_int64(
   data : BytesView,
   count : Int32,
   offset~ : Int32 = 0,
+  max_values~ : Int32 = @types.DEFAULT_MAX_VALUES,
 ) -> (Array[Int64], Int32) raise @types.EncodingError {
   if count < 0 {
     raise @types.EncodingError::InvalidCount(count)
+  }
+  if count > max_values {
+    raise @types.EncodingError::TooManyValues(count, max_values)
   }
   let (header, header_len) = read_delta_header(data, offset)
   if count > header.count {
@@ -361,9 +365,13 @@ pub fn decode_delta_int32(
   data : BytesView,
   count : Int32,
   offset~ : Int32 = 0,
+  max_values~ : Int32 = @types.DEFAULT_MAX_VALUES,
 ) -> (Array[Int32], Int32) raise @types.EncodingError {
   if count < 0 {
     raise @types.EncodingError::InvalidCount(count)
+  }
+  if count > max_values {
+    raise @types.EncodingError::TooManyValues(count, max_values)
   }
   let (header, header_len) = read_delta_header(data, offset)
   if count > header.count {
@@ -462,8 +470,14 @@ pub fn decode_delta_length_byte_array(
   data : BytesView,
   count : Int32,
   offset~ : Int32 = 0,
+  max_values~ : Int32 = @types.DEFAULT_MAX_VALUES,
 ) -> (Array[Bytes], Int32) raise @types.EncodingError {
-  let (lengths, lengths_len) = decode_delta_int32(data, count, offset~)
+  let (lengths, lengths_len) = decode_delta_int32(
+    data,
+    count,
+    offset~,
+    max_values~,
+  )
   let out : Array[Bytes] = Array::make(lengths.length(), b"")
   let mut pos = offset + lengths_len
   let mut index = 0
@@ -530,13 +544,20 @@ pub fn decode_delta_byte_array(
   data : BytesView,
   count : Int32,
   offset~ : Int32 = 0,
+  max_values~ : Int32 = @types.DEFAULT_MAX_VALUES,
 ) -> (Array[Bytes], Int32) raise @types.EncodingError {
-  let (prefixes, prefix_len) = decode_delta_int32(data, count, offset~)
+  let (prefixes, prefix_len) = decode_delta_int32(
+    data,
+    count,
+    offset~,
+    max_values~,
+  )
   let suffix_offset = offset + prefix_len
   let (lengths, lengths_len) = decode_delta_int32(
     data,
     count,
     offset=suffix_offset,
+    max_values~,
   )
   // The whole suffix stream is validated before any value is built, so a
   // malformed length still reports the error the two-stream decoder reported

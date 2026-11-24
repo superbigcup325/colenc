@@ -458,3 +458,59 @@ test "fused dictionary decode fills every repeated run for each numeric type" {
     }
   }
 }
+
+///|
+test "dictionary decode refuses a count above the ceiling" {
+  // A dictionary repeat run declares 2^31 - 1 indices in six bytes, so the count
+  // is the only thing that bounds the output: before the ceiling this sized an
+  // 8 GiB index output from a two-byte index stream.
+  let dictionary : Bytes = b"\x07\x00\x00\x00"
+  let indices : Bytes = b"\x01\x04\x05"
+  let error = capture_error(() => {
+    ignore(decode_dictionary(dictionary, indices, Int32, 2147483647, 1))
+  })
+  match error {
+    @types.EncodingError::TooManyValues(count, limit) => {
+      assert_eq(count, 2147483647)
+      assert_eq(limit, @types.DEFAULT_MAX_VALUES)
+    }
+    _ => abort("expected TooManyValues")
+  }
+
+  // The boundary is inclusive, and the knob reaches the fused walk.
+  let column = @types.ColBuf::Int32s([7, 7, 7])
+  let encoding = match encode_dictionary(column) {
+    Some(encoding) => encoding
+    None => abort("expected a dictionary")
+  }
+  let got = decode_dictionary(
+    encoding.dictionary,
+    encoding.indices,
+    Int32,
+    3,
+    encoding.dictionary_size,
+    max_values=3,
+  ) catch {
+    _ => abort("the inclusive boundary must decode")
+  }
+  match got {
+    Int32s(values) => assert_eq(values, [7, 7, 7])
+    _ => abort("expected int32 values")
+  }
+  let error = capture_error(() => {
+    ignore(
+      decode_dictionary(
+        encoding.dictionary,
+        encoding.indices,
+        Int32,
+        3,
+        encoding.dictionary_size,
+        max_values=2,
+      ),
+    )
+  })
+  match error {
+    @types.EncodingError::TooManyValues(3, 2) => ()
+    _ => abort("expected TooManyValues(3, 2)")
+  }
+}

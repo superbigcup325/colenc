@@ -116,6 +116,7 @@ pub fn decode_column(
   ty : @types.PhysicalType,
   encoding : @types.Encoding,
   count : Int32,
+  max_values~ : Int32 = @types.DEFAULT_MAX_VALUES,
 ) -> @types.ColBuf raise @types.EncodingError {
   match encoding {
     Plain =>
@@ -130,22 +131,29 @@ pub fn decode_column(
       }
     Rle =>
       match ty {
-        Bool => @types.ColBuf::Bools(@encoders.decode_bool_rle(data, count))
+        Bool =>
+          @types.ColBuf::Bools(
+            @encoders.decode_bool_rle(data, count, max_values~),
+          )
         _ => raise @types.EncodingError::TypeMismatch(ty, Rle)
       }
     DeltaBinaryPacked =>
       match ty {
         Int32 =>
-          @types.ColBuf::Int32s(@encoders.decode_delta_int32(data, count).0)
+          @types.ColBuf::Int32s(
+            @encoders.decode_delta_int32(data, count, max_values~).0,
+          )
         Int64 =>
-          @types.ColBuf::Int64s(@encoders.decode_delta_int64(data, count).0)
+          @types.ColBuf::Int64s(
+            @encoders.decode_delta_int64(data, count, max_values~).0,
+          )
         _ => raise @types.EncodingError::TypeMismatch(ty, DeltaBinaryPacked)
       }
     DeltaLength =>
       match ty {
         ByteArray =>
           @types.ColBuf::ByteArrays(
-            @encoders.decode_delta_length_byte_array(data, count).0,
+            @encoders.decode_delta_length_byte_array(data, count, max_values~).0,
           )
         _ => raise @types.EncodingError::TypeMismatch(ty, DeltaLength)
       }
@@ -153,7 +161,7 @@ pub fn decode_column(
       match ty {
         ByteArray =>
           @types.ColBuf::ByteArrays(
-            @encoders.decode_delta_byte_array(data, count).0,
+            @encoders.decode_delta_byte_array(data, count, max_values~).0,
           )
         _ => raise @types.EncodingError::TypeMismatch(ty, DeltaByteArray)
       }
@@ -223,6 +231,14 @@ pub fn decode_dictionary(
   ty : @types.PhysicalType,
   count : Int32,
   dictionary_size : Int32,
+  max_values~ : Int32 = @types.DEFAULT_MAX_VALUES,
 ) -> @types.ColBuf raise @types.EncodingError {
-  @encoders.decode_dictionary(dictionary, indices, ty, count, dictionary_size)
+  @encoders.decode_dictionary(
+    dictionary,
+    indices,
+    ty,
+    count,
+    dictionary_size,
+    max_values~,
+  )
 }

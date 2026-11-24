@@ -114,6 +114,14 @@ let back = @colenc.decode_column(
 )
 ```
 
+`decode_column` and the per-family decoders take an optional `max_values`
+ceiling, defaulting to `@colenc_types.DEFAULT_MAX_VALUES` (2^24). A page header
+supplies the value count, and the RLE hybrid, the delta family and the
+dictionary indices can each describe 2^31 - 1 values in a few bytes, which is a
+valid stream: the ceiling is what keeps an untrusted header from asking for a
+16 GiB output. Raise it per call when a caller really decodes more than that in
+one page; the error is `EncodingError::TooManyValues(count, limit)`.
+
 Dictionary encoding has two output streams (dictionary page plus indices), so it
 uses `encode_dictionary` / `decode_dictionary` instead of `encode_column`.
 Column buffers are dense value arrays: NULL handling (definition levels) belongs

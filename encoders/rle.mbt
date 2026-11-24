@@ -196,12 +196,16 @@ fn hybrid_walk(
   bit_width : Int32,
   count : Int32,
   offset : Int32,
+  max_values~ : Int32 = @types.DEFAULT_MAX_VALUES,
 ) -> HybridWalk raise @types.EncodingError {
   if bit_width < 0 || bit_width > 64 {
     raise @types.EncodingError::InvalidBitWidth(bit_width)
   }
   if count < 0 {
     raise @types.EncodingError::InvalidCount(count)
+  }
+  if count > max_values {
+    raise @types.EncodingError::TooManyValues(count, max_values)
   }
   if offset < 0 || offset > data.length() {
     raise @types.EncodingError::Truncated(offset, 1, 0)
@@ -317,11 +321,12 @@ pub fn decode_rle_hybrid(
   bit_width : Int32,
   count : Int32,
   offset~ : Int32 = 0,
+  max_values~ : Int32 = @types.DEFAULT_MAX_VALUES,
 ) -> (Array[Int64], Int32) raise @types.EncodingError {
-  // The walk validates `bit_width`, `count` and `offset` before anything is
-  // allocated: `unsafe_make_uninit(-1)` is a runtime abort, not a typed error,
-  // and a page header supplies this count.
-  let walk = hybrid_walk(data, bit_width, count, offset)
+  // The walk validates `bit_width`, `count`, `offset` and the ceiling before
+  // anything is allocated: `unsafe_make_uninit(-1)` is a runtime abort, not a
+  // typed error, and a page header supplies this count.
+  let walk = hybrid_walk(data, bit_width, count, offset, max_values~)
   let out : Array[Int64] = Array::unsafe_make_uninit(count)
   let mut filled = 0
   while true {
@@ -369,6 +374,7 @@ pub fn encode_bool_rle(
 pub fn decode_bool_rle(
   data : BytesView,
   count : Int32,
+  max_values~ : Int32 = @types.DEFAULT_MAX_VALUES,
 ) -> Array[Bool] raise @types.EncodingError {
   if data.length() < 4 {
     raise @types.EncodingError::Truncated(0, 4, data.length())
@@ -382,6 +388,6 @@ pub fn decode_bool_rle(
   if length > data.length() - 4 {
     raise @types.EncodingError::Truncated(4, length, data.length() - 4)
   }
-  let (values, _) = decode_rle_hybrid(data[4:4 + length], 1, count)
+  let (values, _) = decode_rle_hybrid(data[4:4 + length], 1, count, max_values~)
   Array::makei(count, fn(index) { values[index] != 0L })
 }

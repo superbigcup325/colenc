@@ -287,3 +287,57 @@ test "delta int32 decode rejects a block the input cannot hold" {
     _ => abort("expected Truncated(13, 2147483646, 0)")
   }
 }
+
+///|
+test "delta decode refuses a count above the ceiling" {
+  // The header declares 2^31 - 1 values and the body is nine bytes, which is a
+  // legal stream: a block whose deltas are all zero and whose miniblocks carry
+  // width zero produces `block_size` values from no data at all. Before the
+  // ceiling this call allocated 16 GiB.
+  let header = b"\x80\x01\x04\xff\xff\xff\xff\x07\x00"
+  let error = capture_error(() => ignore(decode_delta_int64(header, 2147483647)))
+  match error {
+    @types.EncodingError::TooManyValues(count, limit) => {
+      assert_eq(count, 2147483647)
+      assert_eq(limit, @types.DEFAULT_MAX_VALUES)
+    }
+    _ => abort("expected TooManyValues")
+  }
+  let error = capture_error(() => ignore(decode_delta_int32(header, 2147483647)))
+  match error {
+    @types.EncodingError::TooManyValues(count, _) =>
+      assert_eq(count, 2147483647)
+    _ => abort("expected TooManyValues")
+  }
+
+  // The boundary is inclusive, and the knob reaches the two byte-array
+  // families that decode a length stream through this decoder.
+  let out = @buffer.Buffer()
+  encode_delta_int64([1L, 2L, 3L], out)
+  let (values, _) = decode_delta_int64(out.to_bytes(), 3, max_values=3) catch {
+    _ => ([], 0)
+  }
+  assert_eq(values, [1L, 2L, 3L])
+  let error = capture_error(() => {
+    ignore(decode_delta_int64(out.to_bytes(), 3, max_values=2))
+  })
+  match error {
+    @types.EncodingError::TooManyValues(count, limit) => {
+      assert_eq(count, 3)
+      assert_eq(limit, 2)
+    }
+    _ => abort("expected TooManyValues(3, 2)")
+  }
+  let strings : Array[Bytes] = [b"a", b"b", b"c"]
+  let strings_out = @buffer.Buffer()
+  encode_delta_length_byte_array(strings, strings_out)
+  let error = capture_error(() => {
+    ignore(
+      decode_delta_length_byte_array(strings_out.to_bytes(), 3, max_values=2),
+    )
+  })
+  match error {
+    @types.EncodingError::TooManyValues(3, 2) => ()
+    _ => abort("expected TooManyValues(3, 2) through the length stream")
+  }
+}

@@ -11,7 +11,7 @@ pub const DEFAULT_DICTIONARY_BYTE_LIMIT : Int32 = 1048576
 
 pub fn decode_bool(BytesView, Int32) -> Array[Bool] raise @types.EncodingError
 
-pub fn decode_bool_rle(BytesView, Int32) -> Array[Bool] raise @types.EncodingError
+pub fn decode_bool_rle(BytesView, Int32, max_values? : Int32) -> Array[Bool] raise @types.EncodingError
 
 pub fn decode_byte_arrays(BytesView, Int32) -> Array[Bytes] raise @types.EncodingError
 
@@ -19,15 +19,15 @@ pub fn decode_byte_stream_split_double(BytesView, Int32) -> Array[Double] raise 
 
 pub fn decode_byte_stream_split_float(BytesView, Int32) -> Array[Float] raise @types.EncodingError
 
-pub fn decode_delta_byte_array(BytesView, Int32, offset? : Int32) -> (Array[Bytes], Int32) raise @types.EncodingError
+pub fn decode_delta_byte_array(BytesView, Int32, offset? : Int32, max_values? : Int32) -> (Array[Bytes], Int32) raise @types.EncodingError
 
-pub fn decode_delta_int32(BytesView, Int32, offset? : Int32) -> (Array[Int32], Int32) raise @types.EncodingError
+pub fn decode_delta_int32(BytesView, Int32, offset? : Int32, max_values? : Int32) -> (Array[Int32], Int32) raise @types.EncodingError
 
-pub fn decode_delta_int64(BytesView, Int32, offset? : Int32) -> (Array[Int64], Int32) raise @types.EncodingError
+pub fn decode_delta_int64(BytesView, Int32, offset? : Int32, max_values? : Int32) -> (Array[Int64], Int32) raise @types.EncodingError
 
-pub fn decode_delta_length_byte_array(BytesView, Int32, offset? : Int32) -> (Array[Bytes], Int32) raise @types.EncodingError
+pub fn decode_delta_length_byte_array(BytesView, Int32, offset? : Int32, max_values? : Int32) -> (Array[Bytes], Int32) raise @types.EncodingError
 
-pub fn decode_dictionary(BytesView, BytesView, @types.PhysicalType, Int32, Int32) -> @types.ColBuf raise @types.EncodingError
+pub fn decode_dictionary(BytesView, BytesView, @types.PhysicalType, Int32, Int32, max_values? : Int32) -> @types.ColBuf raise @types.EncodingError
 
 pub fn decode_double(BytesView, Int32) -> Array[Double] raise @types.EncodingError
 
@@ -39,7 +39,7 @@ pub fn decode_int32(BytesView, Int32) -> Array[Int32] raise @types.EncodingError
 
 pub fn decode_int64(BytesView, Int32) -> Array[Int64] raise @types.EncodingError
 
-pub fn decode_rle_hybrid(BytesView, Int32, Int32, offset? : Int32) -> (Array[Int64], Int32) raise @types.EncodingError
+pub fn decode_rle_hybrid(BytesView, Int32, Int32, offset? : Int32, max_values? : Int32) -> (Array[Int64], Int32) raise @types.EncodingError
 
 pub fn decode_roaring(BytesView) -> Array[Int32] raise @types.EncodingError
 
