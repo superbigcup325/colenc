@@ -279,3 +279,49 @@ test "rle hybrid decode clamps a repeated run to the requested count" {
   assert_eq(values, [1L, 1L, 1L])
   assert_eq(consumed, 2)
 }
+
+///|
+test "rle hybrid decode refuses a count above the ceiling" {
+  // A hybrid stream at bit width zero encodes 2^31 - 1 values in a handful of
+  // bytes, so no input check can reject the count: without the ceiling this
+  // call allocated 16 GiB and then failed, and on wasm-gc the request trapped
+  // the process. The ceiling turns it into a typed error before any allocation.
+  let error = capture_error(() => ignore(decode_rle_hybrid(b"", 1, 2147483647)))
+  match error {
+    @types.EncodingError::TooManyValues(count, limit) => {
+      assert_eq(count, 2147483647)
+      assert_eq(limit, @types.DEFAULT_MAX_VALUES)
+    }
+    _ => abort("expected TooManyValues")
+  }
+
+  // The ceiling is a policy, so a caller can raise or lower it per call, and
+  // the boundary is inclusive.
+  let (values, consumed) = decode_rle_hybrid(b"\x10\x01", 1, 3, max_values=3) catch {
+    _ => ([], 0)
+  }
+  assert_eq(values, [1L, 1L, 1L])
+  assert_eq(consumed, 2)
+  let error = capture_error(() => {
+    ignore(decode_rle_hybrid(b"\x10\x01", 1, 4, max_values=3))
+  })
+  match error {
+    @types.EncodingError::TooManyValues(count, limit) => {
+      assert_eq(count, 4)
+      assert_eq(limit, 3)
+    }
+    _ => abort("expected TooManyValues(4, 3)")
+  }
+}
+
+///|
+test "bool rle decode refuses a count above the ceiling" {
+  let error = capture_error(() => {
+    ignore(decode_bool_rle(b"\x00\x00\x00\x00", 2147483647))
+  })
+  match error {
+    @types.EncodingError::TooManyValues(count, _) =>
+      assert_eq(count, 2147483647)
+    _ => abort("expected TooManyValues")
+  }
+}

@@ -6,6 +6,22 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `EncodingError::TooManyValues(count, limit)` and an optional `max_values`
+  ceiling on `decode_column` and on the decoders that size their output from the
+  value count alone (`decode_rle_hybrid`, `decode_bool_rle`, both
+  `DELTA_BINARY_PACKED` decoders, the two delta byte-array decoders and
+  `decode_dictionary`), defaulting to `types.DEFAULT_MAX_VALUES` (2^24). A page
+  header supplies that count, and a hybrid stream at bit width zero, a delta
+  block whose deltas are all zero and a dictionary repeat run each describe
+  2^31 - 1 values in a handful of bytes, so no input check can reject the count
+  while the decoder still has to allocate the output: 16 GiB of `Int64`, and on
+  wasm-gc the request traps the process instead of raising. The ceiling caps
+  that at 128 MiB and answers with a typed error. It is a policy, not a format
+  limit: pass a larger `max_values` when a caller legitimately decodes more than
+  that in one page.
+
 ### Changed
 
 - `decode_delta_byte_array` keeps the suffix bytes as views into the input and
@@ -84,6 +100,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   documented rather than fixed: `decode_rle_hybrid`, both DELTA_BINARY_PACKED
   decoders and the dictionary index decoders still size their output from the
   caller's count, which a valid stream can make large in a few bytes.
+- A value count above `DEFAULT_MAX_VALUES` (2^24) is refused by the decoders
+  listed under Added instead of being decoded. Every count at or below the
+  ceiling behaves exactly as before, and no encoded byte changes.
 - A check only holds if it runs before the allocation it protects. The RLE
   hybrid decoder sized its output from the caller's count *before* the walk
   validated that count, so a negative `num_values` reached

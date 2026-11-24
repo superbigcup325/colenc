@@ -561,8 +561,8 @@ tracked documents ship in the release archive.
   set produced a negative size and panicked inside `Array::make`. The residual
   is worth stating in the same breath: `decode_rle_hybrid` still sizes its
   output from the caller's count, which is correct for a valid stream (a few
-  bytes can encode 2^31 - 1 values) and therefore a policy question, not a
-  check
+  bytes can encode 2^31 - 1 values) and therefore a policy question, not an
+  input check. See the ceiling entry below for how that policy is expressed
 - **A check that runs after the allocation is not a check** → `decode_rle_hybrid`
   sized its output with `Array::unsafe_make_uninit(count)` and only then built
   the walk that validates `count`, so a negative `num_values` reached
@@ -573,13 +573,27 @@ tracked documents ship in the release archive.
   family" with no RLE row in it, so nothing failed. Two lessons: validate the
   arguments before the first allocation, and enumerate the branches of the
   dispatch from `facade.mbt` when a test claims to cover every family. The
-  oversized-count residual is separate and stays a policy question: a hybrid
-  stream at bit width zero, a delta column whose deltas are all zero, and a
-  dictionary repeat run all encode ~2^31 values in a handful of bytes, so
-  `decode_rle_hybrid`, both DELTA_BINARY_PACKED decoders and the dictionary
-  index decoders still size their output from the caller's count, and a caller
-  that passes a page header straight through can be made to allocate gigabytes.
-  Bounding that needs a page-size policy in the caller, not another input check
+  oversized count is a separate problem with its own entry below: no input check
+  can bound it, because the count is legal in the format
+- **A format that can encode 2^31 values in six bytes makes the count a
+  policy** → a hybrid stream at bit width zero, a delta block whose deltas are
+  all zero and a dictionary repeat run each describe 2^31 - 1 values in a handful
+  of bytes, so the decoder cannot reject the count on input grounds without
+  rejecting a page a writer could have produced, while `Array::unsafe_make_uninit`
+  of that count is 16 GiB (and on wasm-gc the request traps the process instead
+  of raising). Decision, 2026-11-24, on the maintainer's request: every decoder
+  that sizes its output from the count takes an optional `max_values~` ceiling
+  with `types.DEFAULT_MAX_VALUES` = 2^24 as the default, and answers
+  `TooManyValues(count, limit)` above it. 2^24 is 4096 times the batch the
+  in-tree consumer writes as one page and 16 times the most values a 1 MiB page
+  of one-byte values can hold, so a real page stays far below it, and the worst
+  allocation an untrusted header can force is 128 MiB of `Int64`. The ceiling is
+  a policy, not a format limit: a caller that legitimately decodes more passes a
+  larger `max_values~`. What it does not do is make the allocation proportional
+  to the input for a *truncated* stream below the ceiling (a count of 2^24 over a
+  four-byte body still allocates 128 MiB before `Incomplete`); bounding that
+  would need a validation pass before the allocation, which was not built
+  because the ceiling already caps the damage
 - **A public primitive is part of the decode surface** → the hardening sweep
   covered the `encoders/` decoders and stopped at the package boundary, so
   `primitives.bit_unpack` kept `need = (bit_width * count + 7) / 8` in `Int32`:

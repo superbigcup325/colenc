@@ -17,6 +17,8 @@ pub(all) suberror EncodingError {
   Incomplete(Int32, Int32)
   /// A dictionary index outside the dictionary: index, dictionary size.
   InvalidIndex(Int32, Int32)
+  /// The requested value count is above the decoder's ceiling: count, ceiling.
+  TooManyValues(Int32, Int32)
   /// An unexpected tag or mode byte in a colenc framing.
   InvalidTag(Int32)
   /// A value outside the range the encoding can represent: value, offset.
@@ -44,6 +46,8 @@ pub fn EncodingError::message(self : EncodingError) -> String {
       "stream ended after \{decoded} values, \{expected} requested"
     InvalidIndex(index, size) =>
       "dictionary index \{index} outside 0..\{size - 1}"
+    TooManyValues(count, limit) =>
+      "value count \{count} exceeds the decoder limit \{limit}"
     InvalidTag(tag) => "unexpected tag \{tag}"
     OutOfRange(value, offset) =>
       "byte \{offset}: value \{value} outside the representable range"

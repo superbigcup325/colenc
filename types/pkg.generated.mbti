@@ -2,6 +2,8 @@
 package "superbigcup325/colenc/types"
 
 // Values
+pub const DEFAULT_MAX_VALUES : Int32 = 16777216
+
 pub fn encoding_name(Encoding) -> String
 
 pub fn physical_type_name(PhysicalType) -> String
@@ -15,6 +17,7 @@ pub(all) suberror EncodingError {
   TypeMismatch(PhysicalType, Encoding)
   Incomplete(Int32, Int32)
   InvalidIndex(Int32, Int32)
+  TooManyValues(Int32, Int32)
   InvalidTag(Int32)
   OutOfRange(Int64, Int32)
   Corrupt(Int32)

@@ -480,6 +480,7 @@ pub fn decode_dictionary(
   ty : @types.PhysicalType,
   count : Int32,
   dictionary_size : Int32,
+  max_values~ : Int32 = @types.DEFAULT_MAX_VALUES,
 ) -> @types.ColBuf raise @types.EncodingError {
   if dictionary_size < 0 {
     raise @types.EncodingError::InvalidCount(dictionary_size)
@@ -497,7 +498,7 @@ pub fn decode_dictionary(
   // whole index stream before the dictionary page and before any lookup, so it
   // reported a stream error where the fused walk reports the bad index it
   // reaches first. Both are typed errors; only the reported offset can differ.
-  let walk = hybrid_walk(indices[1:], width, count, 0)
+  let walk = hybrid_walk(indices[1:], width, count, 0, max_values~)
   match ty {
     Int32 => {
       let values = decode_int32(dictionary, dictionary_size)

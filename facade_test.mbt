@@ -115,33 +115,55 @@ test "facade decode refuses hostile counts without allocating" {
   // A page header can claim any value count. Every family has to reject a count
   // its handful of bytes cannot hold with a typed error, before an output is
   // sized from it; the vectors below are the page bodies a malformed file would
-  // carry.
-  let cases : Array[(Bytes, @types.PhysicalType, @types.Encoding, Int32)] = [
-    (b"", @types.Int32, @types.Plain, 2147483647),
-    (b"", @types.Int64, @types.Plain, 536870912),
-    (b"", @types.Float, @types.Plain, 1073741824),
-    (b"", @types.Double, @types.Plain, 268435456),
-    (b"", @types.Bool, @types.Plain, 2147483647),
-    (b"", @types.ByteArray, @types.Plain, 2147483647),
-    (b"\x00\x00\x00\x00", @types.Float, @types.ByteStreamSplit, 536870912),
-    (b"", @types.Double, @types.ByteStreamSplit, 268435456),
-    (b"", @types.Int32, @types.DeltaBinaryPacked, 2147483647),
-    (b"", @types.Int64, @types.DeltaBinaryPacked, 2147483647),
-    (b"", @types.ByteArray, @types.DeltaLength, 2147483647),
-    (b"", @types.ByteArray, @types.DeltaByteArray, 2147483647),
-    (b"\x01\xff\xff\xff\x7f", @types.ByteArray, @types.Fsst, 2147483647),
+  // carry. The families that size their output from the count alone answer with
+  // the ceiling instead, because their streams can declare that many values in
+  // a few bytes; the flag says which error each row expects.
+  let cases : Array[(Bytes, @types.PhysicalType, @types.Encoding, Int32, Bool)] = [
+    (b"", @types.Int32, @types.Plain, 2147483647, false),
+    (b"", @types.Int64, @types.Plain, 536870912, false),
+    (b"", @types.Float, @types.Plain, 1073741824, false),
+    (b"", @types.Double, @types.Plain, 268435456, false),
+    (b"", @types.Bool, @types.Plain, 2147483647, false),
+    (b"", @types.ByteArray, @types.Plain, 2147483647, false),
+    (b"\x00\x00\x00\x00", @types.Bool, @types.Rle, 2147483647, true),
+    (
+      b"\x00\x00\x00\x00",
+      @types.Float,
+      @types.ByteStreamSplit,
+      536870912,
+      false,
+    ),
+    (b"", @types.Double, @types.ByteStreamSplit, 268435456, false),
+    (b"", @types.Int32, @types.DeltaBinaryPacked, 2147483647, true),
+    (b"", @types.Int64, @types.DeltaBinaryPacked, 2147483647, true),
+    (b"", @types.ByteArray, @types.DeltaLength, 2147483647, true),
+    (b"", @types.ByteArray, @types.DeltaByteArray, 2147483647, true),
+    (b"\x01\xff\xff\xff\x7f", @types.ByteArray, @types.Fsst, 2147483647, false),
   ]
   for case in cases {
-    let (bytes, ty, encoding, count) = case
+    let (bytes, ty, encoding, count, wants_ceiling) = case
     let error = capture_error(() => {
       ignore(@colenc.decode_column(bytes, ty, encoding, count))
     })
-    match error {
-      @types.EncodingError::Truncated(_, _, _) => ()
-      other =>
-        fail(
-          "\{@types.physical_type_name(ty)} \{@types.encoding_name(encoding)}: expected Truncated, got \{@types.EncodingError::message(other)}",
-        )
+    if wants_ceiling {
+      match error {
+        @types.EncodingError::TooManyValues(c, limit) => {
+          assert_eq(c, count)
+          assert_eq(limit, @types.DEFAULT_MAX_VALUES)
+        }
+        other =>
+          fail(
+            "\{@types.physical_type_name(ty)} \{@types.encoding_name(encoding)}: expected TooManyValues, got \{@types.EncodingError::message(other)}",
+          )
+      }
+    } else {
+      match error {
+        @types.EncodingError::Truncated(_, _, _) => ()
+        other =>
+          fail(
+            "\{@types.physical_type_name(ty)} \{@types.encoding_name(encoding)}: expected Truncated, got \{@types.EncodingError::message(other)}",
+          )
+      }
     }
   }
 }
