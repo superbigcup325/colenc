@@ -538,3 +538,33 @@ test "dictionary decode validates the index stream before the dictionary page" {
     _ => abort("expected Truncated(0, 4, 0)")
   }
 }
+
+///|
+test "dictionary rejects the physical type before walking the index stream" {
+  // `ty` is an argument, so it is judged with the others. It used to be the
+  // last arm of the `match`, which only worked because the index walk was lazy;
+  // once the walk became unconditional (`hybrid_produced`), a wrong type was
+  // reported only if the stream happened to be sound.
+  let short = b"\x01\x04\x05"
+  let error = capture_error(() => {
+    ignore(decode_dictionary(b"\x05\x00\x00\x00", short, Bool, 4, 1))
+  })
+  match error {
+    @types.EncodingError::TypeMismatch(@types.Bool, @types.Dictionary) => ()
+    other =>
+      abort(
+        "short stream: expected TypeMismatch, got \{@types.EncodingError::message(other)}",
+      )
+  }
+  let sound = b"\x01\x08\x05"
+  let error = capture_error(() => {
+    ignore(decode_dictionary(b"\x05\x00\x00\x00", sound, Bool, 4, 1))
+  })
+  match error {
+    @types.EncodingError::TypeMismatch(@types.Bool, @types.Dictionary) => ()
+    other =>
+      abort(
+        "sound stream: expected TypeMismatch, got \{@types.EncodingError::message(other)}",
+      )
+  }
+}

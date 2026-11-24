@@ -11,6 +11,8 @@ pub(all) suberror PrimitivesError {
   InvalidBitWidth(Int32)
   /// A negative value count passed to a decoder.
   InvalidCount(Int32)
+  /// A value count above the ceiling the caller allows: count, limit.
+  TooManyValues(Int32, Int32)
 }
 
 ///|
@@ -21,5 +23,7 @@ pub fn PrimitivesError::message(self : PrimitivesError) -> String {
     InvalidVarint(offset) => "byte \{offset}: varint longer than 64 bits"
     InvalidBitWidth(width) => "bit width \{width} outside 0..64"
     InvalidCount(count) => "negative value count \{count}"
+    TooManyValues(count, limit) =>
+      "value count \{count} exceeds the decoder limit \{limit}"
   }
 }

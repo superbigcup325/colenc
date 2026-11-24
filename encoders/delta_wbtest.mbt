@@ -415,3 +415,81 @@ test "delta validation pass round trips just above the threshold" {
     _ => abort("expected Truncated")
   }
 }
+
+///|
+test "delta miniblock payload must be a whole number of bytes" {
+  // The probe charges `floor(miniblock_size * width / 8)` bytes for a miniblock
+  // and the decode loop hands that same slice to `bit_unpack`, which needs
+  // `ceil(take * width / 8)`. A short `take` hides the difference: with
+  // miniblock_size 12, width 1 and a count of 3 the take is 2, and its one byte
+  // is exactly what the probe charged, so both readers decoded it. The drift
+  // needs `take == miniblock_size`, which is a count of 13 here — the decode
+  // then asked for two bytes of a one-byte miniblock, and by that point
+  // `Array::unsafe_make_uninit(count)` had already run. Reaching it through the
+  // probe needs a count above `PREVALIDATE_ABOVE` as well; the probe is called
+  // directly below, so the shape is the same either way.
+  let out = @buffer.Buffer()
+  @primitives.put_uleb128(out, 12UL)
+  @primitives.put_uleb128(out, 1UL)
+  @primitives.put_uleb128(out, 13UL)
+  @primitives.put_zigzag(out, 0L)
+  @primitives.put_zigzag(out, 0L)
+  out.write_byte(b'\x01')
+  out.write_byte(b'\x00')
+  let bytes = out.to_bytes()
+  // Both decoders refuse it, with the same error: the rule is shared, and a
+  // regression in either copy has to fail here.
+  let wide = capture_error(() => ignore(decode_delta_int64(bytes, 13)))
+  match wide {
+    @types.EncodingError::Corrupt(6) => ()
+    other =>
+      abort(
+        "int64: expected Corrupt(6), got \{@types.EncodingError::message(other)}",
+      )
+  }
+  let narrow = capture_error(() => ignore(decode_delta_int32(bytes, 13)))
+  match narrow {
+    @types.EncodingError::Corrupt(6) => ()
+    other =>
+      abort(
+        "int32: expected Corrupt(6), got \{@types.EncodingError::message(other)}",
+      )
+  }
+  let (header, header_len) = read_delta_header(bytes, 0) catch {
+    e => abort("header: \{@types.EncodingError::message(e)}")
+  }
+  let probed = capture_error(() => {
+    delta_probe(bytes, 13, header_len, header, 64)
+  })
+  match probed {
+    @types.EncodingError::Corrupt(6) => ()
+    other =>
+      abort(
+        "probe: expected Corrupt(6), got \{@types.EncodingError::message(other)}",
+      )
+  }
+  // The header shape is refused whatever the count: the format defines a
+  // miniblock's payload as `miniblock_size * width / 8` bytes, which is only a
+  // whole number when the size is a multiple of eight, so a shorter take is not
+  // a licence to read the stream — that is the narrowing this rule makes, and
+  // the Parquet spec requires a miniblock size that is a multiple of 32.
+  let short_take = capture_error(() => ignore(decode_delta_int64(bytes, 3)))
+  match short_take {
+    @types.EncodingError::Corrupt(6) => ()
+    other =>
+      abort(
+        "short take: expected Corrupt(6), got \{@types.EncodingError::message(other)}",
+      )
+  }
+  // The shape a writer produces (block 128 or 256, four miniblocks, so a
+  // miniblock of 32 or 64) satisfies the invariant and still decodes.
+  let values : Array[Int64] = [1L, 2L, 3L, 4L, 5L]
+  let wave = @buffer.Buffer()
+  encode_delta_int64(values[:], wave) catch {
+    _ => ()
+  }
+  let (back, _) = decode_delta_int64(wave.to_bytes(), 5) catch {
+    e => abort(@types.EncodingError::message(e))
+  }
+  assert_eq(back, values)
+}

@@ -94,6 +94,40 @@ test "bit_unpack at width 0 and count 0" {
 }
 
 ///|
+test "bit_unpack refuses a count above the ceiling" {
+  // At width zero no bytes are needed, so the length check admits every count
+  // and the output is sized from the count alone: `bit_unpack(b"", 0, 2^31 - 1)`
+  // asked for 16 GiB and, run under a memory limit, died inside
+  // `moonbit_malloc_array` instead of raising. The ceiling is checked with the
+  // other arguments, before anything is allocated.
+  let error = capture_error(() => ignore(bit_unpack(b"", 0, 2147483647)))
+  match error {
+    TooManyValues(count, limit) => {
+      assert_eq(count, 2147483647)
+      assert_eq(limit, DEFAULT_MAX_VALUES)
+    }
+    other =>
+      abort("expected TooManyValues, got \{PrimitivesError::message(other)}")
+  }
+  // The ceiling is a policy: the boundary is inclusive and a caller can move
+  // it per call.
+  let values = bit_unpack(b"", 0, 10, max_values=10) catch { _ => [] }
+  assert_eq(values.length(), 10)
+  assert_eq(values[9], 0L)
+  let error = capture_error(() => ignore(bit_unpack(b"", 0, 11, max_values=10)))
+  match error {
+    TooManyValues(count, limit) => {
+      assert_eq(count, 11)
+      assert_eq(limit, 10)
+    }
+    other =>
+      abort(
+        "expected TooManyValues(11, 10), got \{PrimitivesError::message(other)}",
+      )
+  }
+}
+
+///|
 test "bit_unpack ignores trailing bytes" {
   let values = bit_unpack(b"\x39\xff", 2, 3) catch { _ => [] }
   assert_eq(values, [1L, 2L, 3L])
@@ -274,8 +308,12 @@ test "the word lanes report truncation instead of reading past the end" {
 test "bit_unpack rejects a count whose bit requirement wraps in Int32" {
   // 64 bits times 2^26 values is exactly 2^32, which wrapped to zero and let
   // the count through a length check against an empty buffer; the unpacker then
-  // allocated 512 MB and read past the end.
-  let error = capture_error(() => ignore(bit_unpack(b"", 64, 67108864)))
+  // allocated 512 MB and read past the end. 2^26 values is above the default
+  // ceiling, so the ceiling is raised here: this case pins the 64-bit
+  // derivation of the requirement, which the ceiling would otherwise preempt.
+  let error = capture_error(() => {
+    ignore(bit_unpack(b"", 64, 67108864, max_values=67108864))
+  })
   match error {
     Truncated(offset, need, available) => {
       assert_eq(offset, 0)

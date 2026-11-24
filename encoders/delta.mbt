@@ -280,6 +280,7 @@ fn delta_probe(
   max_width : Int32,
 ) -> Unit raise @types.EncodingError {
   let miniblock_size = header.block_size / header.miniblocks
+  let miniblock_remainder = miniblock_size % 8
   let mut pos = start
   let mut produced = 1
   while produced < count {
@@ -300,6 +301,19 @@ fn delta_probe(
       let width = data[widths_at + block_index].to_int()
       if width > max_width {
         raise @types.EncodingError::InvalidBitWidth(width)
+      }
+      // A miniblock's payload has to be a whole number of bytes: the probe
+      // below charges `floor(miniblock_size * width / 8)` for it while the
+      // decode loops hand that same slice to `bit_unpack`, which needs
+      // `ceil(take * width / 8)`, so the two readers agree only when the
+      // product is a multiple of eight. The writer pads every miniblock to its
+      // full size, so a stream it produces always satisfies this; a header that
+      // does not would let the probe accept a stream the decode loop then
+      // refuses, and by then `Array::unsafe_make_uninit(count)` has run.
+      // Checked here rather than in the header so a header the input cannot
+      // hold is still diagnosed by the miniblock-count check.
+      if miniblock_remainder != 0 && miniblock_remainder * width % 8 != 0 {
+        raise @types.EncodingError::Corrupt(pos)
       }
       // `miniblock_size * width` wraps in `Int32` for a block size the input
       // cannot hold, so the requirement is derived in 64 bits.
@@ -362,6 +376,7 @@ pub fn decode_delta_int64(
   let mut current = header.first
   let mut pos = offset + header_len
   let miniblock_size = header.block_size / header.miniblocks
+  let miniblock_remainder = miniblock_size % 8
   while produced < count {
     let (min_delta, consumed) = read_zigzag(data, pos)
     pos += consumed
@@ -383,6 +398,10 @@ pub fn decode_delta_int64(
       let width = widths[block_index]
       if width > 64 {
         raise @types.EncodingError::InvalidBitWidth(width)
+      }
+      // Same whole-byte invariant as `delta_probe`.
+      if miniblock_remainder != 0 && miniblock_remainder * width % 8 != 0 {
+        raise @types.EncodingError::Corrupt(pos)
       }
       // `miniblock_size * width` wraps in `Int32` for a block size the input
       // cannot hold, so the requirement is derived in 64 bits.
@@ -407,6 +426,7 @@ pub fn decode_delta_int64(
         data[pos:pos + byte_count.to_int()],
         width,
         take,
+        max_values~,
       ) catch {
         @primitives.PrimitivesError::Truncated(at, need, available) =>
           raise @types.EncodingError::Truncated(at, need, available)
@@ -455,6 +475,7 @@ pub fn decode_delta_int32(
   let mut current = header.first.to_int()
   let mut pos = offset + header_len
   let miniblock_size = header.block_size / header.miniblocks
+  let miniblock_remainder = miniblock_size % 8
   while produced < count {
     let (min_delta, consumed) = read_zigzag(data, pos)
     pos += consumed
@@ -476,6 +497,10 @@ pub fn decode_delta_int32(
       let width = widths[block_index]
       if width > 32 {
         raise @types.EncodingError::InvalidBitWidth(width)
+      }
+      // Same whole-byte invariant as `delta_probe`.
+      if miniblock_remainder != 0 && miniblock_remainder * width % 8 != 0 {
+        raise @types.EncodingError::Corrupt(pos)
       }
       // `miniblock_size * width` wraps in `Int32` for a block size the input
       // cannot hold, so the requirement is derived in 64 bits.
@@ -500,6 +525,7 @@ pub fn decode_delta_int32(
         data[pos:pos + byte_count.to_int()],
         width,
         take,
+        max_values~,
       ) catch {
         @primitives.PrimitivesError::Truncated(at, need, available) =>
           raise @types.EncodingError::Truncated(at, need, available)

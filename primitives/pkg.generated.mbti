@@ -6,9 +6,11 @@ import {
 }
 
 // Values
+pub const DEFAULT_MAX_VALUES : Int32 = 16777216
+
 pub fn bit_pack(ArrayView[Int64], Int32, @buffer.Buffer) -> Unit raise PrimitivesError
 
-pub fn bit_unpack(BytesView, Int32, Int32) -> Array[Int64] raise PrimitivesError
+pub fn bit_unpack(BytesView, Int32, Int32, max_values? : Int32) -> Array[Int64] raise PrimitivesError
 
 pub fn bit_width_for(UInt64) -> Int32
 
@@ -30,6 +32,7 @@ pub(all) suberror PrimitivesError {
   InvalidVarint(Int32)
   InvalidBitWidth(Int32)
   InvalidCount(Int32)
+  TooManyValues(Int32, Int32)
 }
 pub fn PrimitivesError::message(Self) -> String
 

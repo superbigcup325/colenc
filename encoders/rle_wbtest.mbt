@@ -402,3 +402,45 @@ test "hybrid validation pass round trips just above the threshold" {
     _ => abort("expected Incomplete(8, count)")
   }
 }
+
+///|
+test "bool rle judges the count before the length prefix" {
+  // The count is an argument and the prefix is a stream byte. With the prefix
+  // check first, a hostile prefix reported `Truncated` while the same call with
+  // a benign prefix reported `TooManyValues`, so which error a caller saw
+  // depended on the bytes rather than on the call.
+  let error = capture_error(() => {
+    ignore(decode_bool_rle(b"\xff\xff\xff\x7f", 2147483647))
+  })
+  match error {
+    @types.EncodingError::TooManyValues(count, limit) => {
+      assert_eq(count, 2147483647)
+      assert_eq(limit, @types.DEFAULT_MAX_VALUES)
+    }
+    other =>
+      abort(
+        "expected TooManyValues, got \{@types.EncodingError::message(other)}",
+      )
+  }
+  // Below the ceiling the prefix is still what reports a short page.
+  let error = capture_error(() => {
+    ignore(decode_bool_rle(b"\x05\x00\x00\x00\x00", 4))
+  })
+  match error {
+    @types.EncodingError::Truncated(4, 5, 1) => ()
+    other =>
+      abort(
+        "expected Truncated(4, 5, 1), got \{@types.EncodingError::message(other)}",
+      )
+  }
+}
+
+///|
+test "the primitive and model ceilings are the same number" {
+  // `primitives` cannot import `types` (that package declares no imports, which
+  // is what keeps consumer types out of the public API), so the ceiling exists
+  // twice. A primitives ceiling smaller than the model's would make the per-run
+  // unpack inside `HybridWalk::next` refuse a count the caller had explicitly
+  // allowed, and the catch there would report it as a truncated stream.
+  assert_eq(@primitives.DEFAULT_MAX_VALUES, @types.DEFAULT_MAX_VALUES)
+}

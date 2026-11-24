@@ -337,7 +337,7 @@ fn decode_indices_int32(
       }
     }
   }
-  // `probe.produced()` established this; the check stays as the guard that
+  // `hybrid_produced` established this; the check stays as the guard that
   // would catch the two passes diverging.
   if filled < count {
     raise @types.EncodingError::Incomplete(filled, count)
@@ -486,6 +486,23 @@ pub fn decode_dictionary(
 ) -> @types.ColBuf raise @types.EncodingError {
   if dictionary_size < 0 {
     raise @types.EncodingError::InvalidCount(dictionary_size)
+  }
+  // Arguments come first, and the physical type is one of them: with the type
+  // arm at the end of the `match`, a wrong `ty` was reported only if the index
+  // stream happened to be sound, so `decode_dictionary(.., Bool, 4, ..)`
+  // answered `stream ended after 2 values` instead of `DICTIONARY does not
+  // apply to BOOLEAN` (it answered the type mismatch before the index walk
+  // became unconditional). The count ceiling is an argument check too, so it
+  // lands here rather than inside `hybrid_walk` below.
+  if count < 0 {
+    raise @types.EncodingError::InvalidCount(count)
+  }
+  if count > max_values {
+    raise @types.EncodingError::TooManyValues(count, max_values)
+  }
+  match ty {
+    Bool => raise @types.EncodingError::TypeMismatch(Bool, Dictionary)
+    _ => ()
   }
   if indices.length() < 1 {
     raise @types.EncodingError::Truncated(0, 1, indices.length())

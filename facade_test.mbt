@@ -173,10 +173,10 @@ test "facade decode rejects a negative count on every family" {
   // A page header can carry a negative count as easily as an oversized one.
   // Every family has to answer with `InvalidCount`; the RLE path used to abort
   // inside `Array::unsafe_make_uninit(-1)` because it sized its output before
-  // validating the count, and the hostile-count test above has no RLE row
-  // because a hybrid stream legitimately encodes 2^31 - 1 values in six bytes
-  // (the residual documented in AGENTS.md), so its oversized count is a policy
-  // question rather than an input check.
+  // validating the count. The oversized count is a different question — a
+  // hybrid stream legitimately encodes 2^31 - 1 values in six bytes, so that
+  // one is answered by the ceiling rather than by an input check, which is what
+  // the table above this test carries an RLE row for.
   let cases : Array[(Bytes, @types.PhysicalType, @types.Encoding)] = [
     (b"", @types.Int32, @types.Plain),
     (b"", @types.Int64, @types.Plain),
@@ -236,5 +236,53 @@ test "facade round trips both delta byte-array families" {
       ByteArrays(got) => assert_eq(got, values)
       _ => abort("round trip changed the physical type")
     }
+  }
+}
+
+///|
+test "facade forwards a non-default max_values to every family that honours it" {
+  // The test above uses the default ceiling, which equals the decoders' own
+  // default, so a dropped forward is invisible to it: deleting every
+  // `max_values~` at the dispatch sites kept the whole suite green. These rows
+  // ask for 4 values with a ceiling of 3, which only a forwarded ceiling can
+  // refuse.
+  let cases : Array[(Bytes, @types.PhysicalType, @types.Encoding)] = [
+    (b"\x00\x00\x00\x00", @types.Bool, @types.Rle),
+    (b"", @types.Int32, @types.DeltaBinaryPacked),
+    (b"", @types.Int64, @types.DeltaBinaryPacked),
+    (b"", @types.ByteArray, @types.DeltaLength),
+    (b"", @types.ByteArray, @types.DeltaByteArray),
+  ]
+  for case in cases {
+    let (bytes, ty, encoding) = case
+    let error = capture_error(() => {
+      ignore(@colenc.decode_column(bytes, ty, encoding, 4, max_values=3))
+    })
+    match error {
+      @types.EncodingError::TooManyValues(count, limit) => {
+        assert_eq(count, 4)
+        assert_eq(limit, 3)
+      }
+      other =>
+        fail(
+          "\{@types.physical_type_name(ty)} \{@types.encoding_name(encoding)}: expected TooManyValues(4, 3), got \{@types.EncodingError::message(other)}",
+        )
+    }
+  }
+  // The dictionary has its own entry point, and its own forward to pin.
+  let error = capture_error(() => {
+    ignore(
+      @colenc.decode_dictionary(b"", b"\x00", @types.Int32, 4, 0, max_values=3),
+    )
+  })
+  match error {
+    @types.EncodingError::TooManyValues(count, limit) => {
+      assert_eq(count, 4)
+      assert_eq(limit, 3)
+    }
+    other =>
+      fail(
+        "decode_dictionary: expected TooManyValues(4, 3), got \{@types.EncodingError::message(other)}",
+      )
   }
 }
