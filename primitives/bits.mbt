@@ -149,12 +149,23 @@ pub fn bit_unpack(
   data : BytesView,
   bit_width : Int32,
   count : Int32,
+  max_values~ : Int32 = DEFAULT_MAX_VALUES,
 ) -> Array[Int64] raise PrimitivesError {
   if bit_width < 0 || bit_width > 64 {
     raise InvalidBitWidth(bit_width)
   }
   if count < 0 {
     raise InvalidCount(count)
+  }
+  // The count sizes the output, and a width of zero says nothing about it: no
+  // bytes are needed at that width, so the length check below admits every
+  // count and `bit_unpack(b"", 0, 2^31 - 1)` used to ask for 16 GiB (a native
+  // process under a memory limit died in `moonbit_malloc_array` instead of
+  // raising). The ceiling is checked with the other arguments, before any
+  // allocation, and a caller that legitimately wants more passes a larger
+  // `max_values`.
+  if count > max_values {
+    raise TooManyValues(count, max_values)
   }
   // `bit_width * count` wraps in `Int32`: at width 64 a count of 2^26 asks for
   // exactly 2^32 bits and the product reads back as zero, which used to pass

@@ -467,6 +467,18 @@ pub fn decode_bool_rle(
   count : Int32,
   max_values~ : Int32 = @types.DEFAULT_MAX_VALUES,
 ) -> Array[Bool] raise @types.EncodingError {
+  // The count is an argument and the length prefix is a stream byte, so the
+  // count is judged first: with the prefix check ahead of the walk, a hostile
+  // prefix reported `Truncated` while the same call with a benign prefix
+  // reported `TooManyValues`, and which error a caller sees should not depend
+  // on the bytes. `decode_rle_hybrid` validates the same two things again, for
+  // the callers that reach it directly.
+  if count < 0 {
+    raise @types.EncodingError::InvalidCount(count)
+  }
+  if count > max_values {
+    raise @types.EncodingError::TooManyValues(count, max_values)
+  }
   if data.length() < 4 {
     raise @types.EncodingError::Truncated(0, 4, data.length())
   }

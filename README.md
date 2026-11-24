@@ -114,16 +114,21 @@ let back = @colenc.decode_column(
 )
 ```
 
-`decode_column` and the per-family decoders take an optional `max_values`
-ceiling, defaulting to `@colenc_types.DEFAULT_MAX_VALUES` (2^24). A page header
-supplies the value count, and the RLE hybrid, the delta family and the
-dictionary indices can each describe 2^31 - 1 values in a few bytes, which is a
-valid stream: the ceiling is what keeps an untrusted header from asking for a
-16 GiB output, and above `types.PREVALIDATE_ABOVE` values those decoders also
-walk the stream once before allocating, so a body that ends short is refused
-without paying for the count. Raise the ceiling per call when a caller really
-decodes more than that in one page; the error is
-`EncodingError::TooManyValues(count, limit)`.
+`decode_column` takes an optional `max_values` ceiling, defaulting to
+`@colenc_types.DEFAULT_MAX_VALUES` (2^24), and forwards it to the families whose
+stream can declare a value count independent of the input: the RLE hybrid, the
+delta family and the dictionary indices. Each of those can describe 2^31 - 1
+values in a few bytes, which is a valid stream, so no input check can refuse the
+count: the ceiling is what keeps an untrusted header from asking for a 16 GiB
+output, and above `types.PREVALIDATE_ABOVE` values those decoders also walk the
+stream once before allocating, so a body that ends short is refused without
+paying for the count. The remaining families — PLAIN, BYTE_STREAM_SPLIT and
+FSST — size their output from a count the input already bounds (`count` against
+`data.length() / width`, or against the frame's own count), so they take no
+ceiling of their own. Raise it per call when a caller really decodes more than
+2^24 values in one page; the error is
+`EncodingError::TooManyValues(count, limit)`. The `bit_unpack` primitive takes
+the same ceiling, as `primitives.DEFAULT_MAX_VALUES`.
 
 Dictionary encoding has two output streams (dictionary page plus indices), so it
 uses `encode_dictionary` / `decode_dictionary` instead of `encode_column`.

@@ -589,8 +589,12 @@ tracked documents ship in the release archive.
   of one-byte values can hold, so a real page stays far below it, and the worst
   allocation an untrusted header can force is 128 MiB of `Int64`. The ceiling is
   a policy, not a format limit: a caller that legitimately decodes more passes a
-  larger `max_values~`. The ceiling bounds the worst case but does not make the
-  allocation proportional to the stream, which is the separate entry below
+  larger `max_values~`. PLAIN, BYTE_STREAM_SPLIT and FSST take no ceiling at
+  all, because their count is already bounded by the input (`count` against
+  `data.length() / width`, or against the frame's own count), and the README
+  says which families honour the one on `decode_column`. The ceiling bounds the
+  worst case but does not make the allocation proportional to the stream, which
+  is the separate entry below
 - **The stream can be walked twice cheaper than the output can be allocated
   once, but not for free** → the ceiling bounds the worst case, yet the output
   was still allocated from the count before the stream was read, so a four-byte
@@ -621,7 +625,9 @@ tracked documents ship in the release archive.
   because the per-value lookups dominate), which makes its error order
   deterministic — arguments, index stream, dictionary page, lookups — where the
   interleaved walk reported whichever of a short stream and a bad index it
-  reached first
+  reached first. The guard that was supposed to hold those two copies together
+  only exercised the shape a writer produces, and that shape is exactly the one
+  where the arithmetic agrees — see the miniblock entry below
 - **A public primitive is part of the decode surface** → the hardening sweep
   covered the `encoders/` decoders and stopped at the package boundary, so
   `primitives.bit_unpack` kept `need = (bit_width * count + 7) / 8` in `Int32`:
@@ -675,6 +681,61 @@ tracked documents ship in the release archive.
   deltas then need a second pass over the whole output array. Price a
   destination-shape change on every caller of the shared routine, not on the one
   it was written for
+- **A validation pass that charges different bytes is not a validation pass** →
+  `delta_probe` charged `floor(miniblock_size * width / 8)` bytes for a
+  miniblock while the decode loop handed the same slice to `bit_unpack`, which
+  needs `ceil(take * width / 8)`. They agree only when a miniblock's payload is
+  a whole number of bytes — which the writer guarantees by padding every
+  miniblock to its full size, and which a header is free to violate:
+  `block_size = 12, miniblocks = 1` at width 1 made the probe accept a stream
+  the decode then refused with `need 2, available 1`, and by then
+  `Array::unsafe_make_uninit(count)` had already run, so the 128 MiB the pass
+  exists to prevent was paid anyway (a 4.2 MB body reaches the ceiling's worth
+  of values at that shape). Both readers now check
+  `(miniblock_size % 8) * width % 8 == 0` and raise `Corrupt` — one compare per
+  miniblock on the real path, since the remainder is hoisted out of the loop.
+  The check sits at the miniblock, not in `read_delta_header`, because a header
+  the input cannot hold has to keep answering with the miniblock-count
+  truncation the hostile-header tests pin (`block_size = miniblocks = 2^31 - 2`
+  is a miniblock size of 1, and folding the rule into the header turned that
+  `Truncated` into a `Corrupt`, moving two pinned expectations for no gain).
+  The lesson generalizes: a second copy of a walk is only as faithful as its
+  arithmetic, so a pass that charges bytes has to derive the charge from the
+  same expression as the decoder, or prove the invariant that makes them equal
+- **A width of zero makes the count the only input** → `bit_unpack(b"", 0, n)`
+  needs no bytes at all, so the length check derives a requirement of zero and
+  admits every count; the output was then `Array::make(count, 0L)`, which at
+  2^31 - 1 is 16 GiB. Under a 1 GiB address-space limit that call died inside
+  `moonbit_malloc_array` (exit 139, no output) while the same call at width 64
+  raised `Truncated` — the failure class of the `unsafe_make_uninit(-1)` entry,
+  in the package that sweep stopped at. `bit_unpack` takes `max_values~` with
+  `primitives.DEFAULT_MAX_VALUES`; that constant is a second copy of
+  `types.DEFAULT_MAX_VALUES` on purpose, because `types` declares no imports and
+  the primitive cannot borrow its ceiling, so the two values have to move
+  together. Both library callers already clamp what they ask for, which is why
+  no in-tree path could reach it and no cheap test caught it
+- **A ceiling that is only tested at its default value is not tested** →
+  deleting all six `max_values~` forwards in `facade.mbt` left the suite at
+  225 passed, because `facade_test` exercised the default ceiling and the
+  decoders' default is the same number, so a dropped pass-through is
+  indistinguishable from a forwarded one. The test now asks for 4 values with
+  `max_values = 3` on every honouring branch plus `decode_dictionary`, and
+  dropping any single forward fails it (`BOOLEAN RLE: expected
+  TooManyValues(4, 3), got stream ended after 0 values, 4 requested`). An
+  optional parameter whose default equals the callee's default cannot see the
+  bug: test it with a non-default value, and enumerate the call sites from the
+  dispatch when deciding how many rows that takes
+- **An argument that is checked after the stream is checked last, not first** →
+  `decode_dictionary` validated the index stream unconditionally once the walk
+  became eager, and the `Bool` arm that raises `TypeMismatch` sat at the end of
+  the `match`, so `decode_dictionary(.., Bool, 4, ..)` answered `stream ended
+  after 2 values` for a short stream and the type mismatch for a sound one — the
+  reported error depended on the bytes rather than on the call. The physical
+  type and the count ceiling are arguments and are now judged before the width
+  byte, the index stream and the dictionary page; `decode_bool_rle` got the same
+  treatment, where a hostile 4-byte length prefix used to outrank the ceiling.
+  When a decoder documents an error order, the argument checks in it have to be
+  enumerated from the signature, not from the code that reads the stream
 
 ## Command reference
 

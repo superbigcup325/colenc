@@ -415,3 +415,53 @@ test "delta validation pass round trips just above the threshold" {
     _ => abort("expected Truncated")
   }
 }
+
+///|
+test "delta miniblock payload must be a whole number of bytes" {
+  // block_size=12 with one miniblock and width 1: the probe charged
+  // `floor(12 * 1 / 8)` = 1 byte for the miniblock and `bit_unpack` needed
+  // `ceil(12 * 1 / 8)` = 2, so before this rule the probe accepted the stream
+  // and the decode refused it with `need 2, available 1` — after
+  // `Array::unsafe_make_uninit(count)` had already run. That is the whole point
+  // of the validation pass, so both readers refuse the miniblock itself now,
+  // with the same error, and neither allocates first.
+  let out = @buffer.Buffer()
+  @primitives.put_uleb128(out, 12UL)
+  @primitives.put_uleb128(out, 1UL)
+  @primitives.put_uleb128(out, 3UL)
+  @primitives.put_zigzag(out, 0L)
+  @primitives.put_zigzag(out, 0L)
+  out.write_byte(b'\x01')
+  out.write_byte(b'\x00')
+  let bytes = out.to_bytes()
+  let decoded = capture_error(() => ignore(decode_delta_int64(bytes, 3)))
+  match decoded {
+    @types.EncodingError::Corrupt(6) => ()
+    other =>
+      abort(
+        "decode: expected Corrupt(6), got \{@types.EncodingError::message(other)}",
+      )
+  }
+  let (header, header_len) = read_delta_header(bytes, 0) catch {
+    e => abort("header: \{@types.EncodingError::message(e)}")
+  }
+  let probed = capture_error(() => delta_probe(bytes, 3, header_len, header, 64))
+  match probed {
+    @types.EncodingError::Corrupt(6) => ()
+    other =>
+      abort(
+        "probe: expected Corrupt(6), got \{@types.EncodingError::message(other)}",
+      )
+  }
+  // The shape the writer produces (block 128 or 256, four miniblocks, so a
+  // miniblock of 32 or 64) satisfies the invariant and still decodes.
+  let values : Array[Int64] = [1L, 2L, 3L, 4L, 5L]
+  let wave = @buffer.Buffer()
+  encode_delta_int64(values[:], wave) catch {
+    _ => ()
+  }
+  let (back, _) = decode_delta_int64(wave.to_bytes(), 5) catch {
+    e => abort(@types.EncodingError::message(e))
+  }
+  assert_eq(back, values)
+}
