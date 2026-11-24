@@ -128,3 +128,19 @@ test "fsst decode refuses a count the buffer cannot hold" {
     _ => abort("expected Truncated(14, 2147483647, 0)")
   }
 }
+
+///|
+test "fsst decode rejects a negative offset" {
+  // The offset reached the mode byte as `data[-1]` and panicked; the other
+  // offset-taking decoders reject it, so this one does too.
+  let error = capture_error(() => ignore(decode_fsst(b"\x01", 1, offset=-1)))
+  match error {
+    @types.EncodingError::Truncated(offset, _, _) => assert_eq(offset, -1)
+    _ => abort("expected a Truncated that reports the negative offset")
+  }
+  let error = capture_error(() => ignore(decode_fsst(b"", 0, offset=1)))
+  match error {
+    @types.EncodingError::Truncated(offset, _, _) => assert_eq(offset, 1)
+    _ => abort("expected a Truncated that reports the offset past the end")
+  }
+}

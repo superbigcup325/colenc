@@ -563,6 +563,36 @@ tracked documents ship in the release archive.
   output from the caller's count, which is correct for a valid stream (a few
   bytes can encode 2^31 - 1 values) and therefore a policy question, not a
   check
+- **A check that runs after the allocation is not a check** → `decode_rle_hybrid`
+  sized its output with `Array::unsafe_make_uninit(count)` and only then built
+  the walk that validates `count`, so a negative `num_values` reached
+  `unsafe_make_uninit(-1)` and aborted the process (native `PanicError` in
+  `moonbit_malloc_array`, wasm-gc `RuntimeError: unreachable`) instead of raising
+  `InvalidCount`. The path is reachable from `decode_column` with `RLE` on
+  `BOOLEAN`, and the batch that hardened this surface had a test walking "every
+  family" with no RLE row in it, so nothing failed. Two lessons: validate the
+  arguments before the first allocation, and enumerate the branches of the
+  dispatch from `facade.mbt` when a test claims to cover every family. The
+  oversized-count residual is separate and stays a policy question: a hybrid
+  stream at bit width zero, a delta column whose deltas are all zero, and a
+  dictionary repeat run all encode ~2^31 values in a handful of bytes, so
+  `decode_rle_hybrid`, both DELTA_BINARY_PACKED decoders and the dictionary
+  index decoders still size their output from the caller's count, and a caller
+  that passes a page header straight through can be made to allocate gigabytes.
+  Bounding that needs a page-size policy in the caller, not another input check
+- **A public primitive is part of the decode surface** → the hardening sweep
+  covered the `encoders/` decoders and stopped at the package boundary, so
+  `primitives.bit_unpack` kept `need = (bit_width * count + 7) / 8` in `Int32`:
+  width 64 with 2^26 values is exactly 2^32 bits, the product wrapped to zero,
+  the length check passed against an empty buffer, and the unpacker allocated
+  512 MB and then indexed past the end. No library path could reach it (the RLE
+  and delta callers bound `byte_count` in 64 bits first), but a consumer calling
+  the primitive directly could, and 512 MB is the *cheapest* wrap this shape
+  admits — that is why no cheap test caught it. The requirement is derived in
+  64 bits with a saturated report now. The same pass found `decode_fsst`
+  accepting a negative `offset` and indexing `data[-1]`: every offset-taking
+  decoder has to reject a negative offset with the typed error, not just the
+  ones whose offset is threaded through a helper
 - **A word load is not a win when the gather around it grows** → both
   BYTE_STREAM_SPLIT decoders assembled a value from one strided byte load per
   plane. Replacing those with one bulk load per plane covering eight values and

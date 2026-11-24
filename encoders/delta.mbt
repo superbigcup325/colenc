@@ -241,6 +241,15 @@ fn read_delta_header(
   let (miniblocks, b) = read_uleb(data, offset + a)
   let (count, c) = read_uleb(data, offset + a + b)
   let (first, d) = read_zigzag(data, offset + a + b + c)
+  // Each field is an unsigned 64-bit varint in the format, and `to_int`
+  // truncates: a header declaring 2^32 + 3 values read back as 3, so the
+  // decoder reported a short stream (`have 3`) instead of refusing a header no
+  // page can describe. Reject before the narrowing conversion.
+  if block_size > 2147483647UL ||
+    miniblocks > 2147483647UL ||
+    count > 2147483647UL {
+    raise @types.EncodingError::Corrupt(offset)
+  }
   let header = {
     block_size: block_size.to_int(),
     miniblocks: miniblocks.to_int(),

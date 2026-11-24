@@ -81,8 +81,31 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   delta, BYTE_STREAM_SPLIT, FSST and both roaring fixtures still match. Thirteen
   new tests feed the hostile count or length with a handful of bytes and assert
   the typed error; each one fails with the fix reverted. One residual is
-  documented rather than fixed: `decode_rle_hybrid` still sizes its output from
-  the caller's count, which a valid hybrid stream can make large in a few bytes.
+  documented rather than fixed: `decode_rle_hybrid`, both DELTA_BINARY_PACKED
+  decoders and the dictionary index decoders still size their output from the
+  caller's count, which a valid stream can make large in a few bytes.
+- A check only holds if it runs before the allocation it protects. The RLE
+  hybrid decoder sized its output from the caller's count *before* the walk
+  validated that count, so a negative `num_values` reached
+  `Array::unsafe_make_uninit(-1)` and aborted the process instead of raising
+  `InvalidCount`; the path is reachable through `decode_column` with `RLE` on
+  `BOOLEAN`, and the test that walks every family had no RLE row, which is how
+  the earlier sweep missed it. `decode_fsst` accepted a negative offset and
+  indexed `data[-1]`; it is rejected the way the RLE and delta decoders reject
+  it. `primitives.bit_unpack` still derived `ceil(bit_width * count / 8)` in
+  `Int32`, so width 64 with 2^26 values wrapped to zero, passed the length
+  check, and read past an empty buffer after allocating 512 MB; the requirement
+  is derived in 64 bits and the reported one saturates. `read_delta_header`
+  narrowed each `u64` field with `to_int`, so a header declaring 2^32 + 3 values
+  decoded as 3 and the error said `have 3` rather than refusing the header; a
+  field wider than `Int32` is `Corrupt` now. No encoded byte changes: the RLE,
+  dictionary, delta and BYTE_STREAM_SPLIT fixtures still match byte for byte.
+  Six guards that no test could fail were also covered: a repeated run longer
+  than the requested count, both `Int32` delta block guards, the fused
+  dictionary walk's `INT64`/`FLOAT`/`DOUBLE` repeated-run branches (each has its
+  own copy of the write loop), and the facade's `DELTA_LENGTH` decode branch,
+  which shares a signature with `DELTA_BYTE_ARRAY` and could be swapped with the
+  whole suite and CI green.
 
 ## [0.1.4] - 2026-11-08
 

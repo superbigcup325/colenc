@@ -226,3 +226,56 @@ test "bool rle decode rejects a length field that would wrap" {
     _ => abort("expected Truncated(4, 2147483647, 2)")
   }
 }
+
+///|
+test "rle hybrid decode validates its arguments before allocating" {
+  // `Array::unsafe_make_uninit(-1)` is a runtime abort, not a typed error, and
+  // a page header supplies this count. The allocation used to run before the
+  // walk's own argument checks, so a negative count killed the process where
+  // every other decoder reported `InvalidCount`.
+  let error = capture_error(() => ignore(decode_rle_hybrid(b"", 1, -1)))
+  match error {
+    @types.EncodingError::InvalidCount(count) => assert_eq(count, -1)
+    _ => abort("expected InvalidCount(-1)")
+  }
+  let error = capture_error(() => ignore(decode_rle_hybrid(b"", 65, 1)))
+  match error {
+    @types.EncodingError::InvalidBitWidth(width) => assert_eq(width, 65)
+    _ => abort("expected InvalidBitWidth(65)")
+  }
+  let error = capture_error(() => {
+    ignore(decode_rle_hybrid(b"", 1, 1, offset=-1))
+  })
+  match error {
+    @types.EncodingError::Truncated(offset, _, _) => assert_eq(offset, -1)
+    _ => abort("expected a Truncated that reports the negative offset")
+  }
+}
+
+///|
+test "bool rle decode rejects a negative count" {
+  let error = capture_error(() => {
+    ignore(decode_bool_rle(b"\x00\x00\x00\x00", -1))
+  })
+  match error {
+    @types.EncodingError::InvalidCount(count) => assert_eq(count, -1)
+    _ => abort("expected InvalidCount(-1)")
+  }
+}
+
+///|
+test "rle hybrid decode clamps a repeated run to the requested count" {
+  // A run longer than the caller asked for is a legal prefix (and a cheap way
+  // for a hostile page to overrun the output). The walk hands out only the
+  // values that are left; the whole run's bytes are still consumed.
+  let (values, consumed) = decode_rle_hybrid(b"\x10\x01", 1, 1) catch {
+    _ => ([], 0)
+  }
+  assert_eq(values, [1L])
+  assert_eq(consumed, 2)
+  let (values, consumed) = decode_rle_hybrid(b"\x10\x01", 1, 3) catch {
+    _ => ([], 0)
+  }
+  assert_eq(values, [1L, 1L, 1L])
+  assert_eq(consumed, 2)
+}

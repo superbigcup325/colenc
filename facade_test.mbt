@@ -145,3 +145,74 @@ test "facade decode refuses hostile counts without allocating" {
     }
   }
 }
+
+///|
+test "facade decode rejects a negative count on every family" {
+  // A page header can carry a negative count as easily as an oversized one.
+  // Every family has to answer with `InvalidCount`; the RLE path used to abort
+  // inside `Array::unsafe_make_uninit(-1)` because it sized its output before
+  // validating the count, and the hostile-count test above has no RLE row
+  // because a hybrid stream legitimately encodes 2^31 - 1 values in six bytes
+  // (the residual documented in AGENTS.md), so its oversized count is a policy
+  // question rather than an input check.
+  let cases : Array[(Bytes, @types.PhysicalType, @types.Encoding)] = [
+    (b"", @types.Int32, @types.Plain),
+    (b"", @types.Int64, @types.Plain),
+    (b"", @types.Float, @types.Plain),
+    (b"", @types.Double, @types.Plain),
+    (b"", @types.ByteArray, @types.Plain),
+    (b"", @types.Bool, @types.Plain),
+    (b"\x00\x00\x00\x00", @types.Bool, @types.Rle),
+    (b"", @types.Int32, @types.DeltaBinaryPacked),
+    (b"", @types.Int64, @types.DeltaBinaryPacked),
+    (b"", @types.ByteArray, @types.DeltaLength),
+    (b"", @types.ByteArray, @types.DeltaByteArray),
+    (b"", @types.Float, @types.ByteStreamSplit),
+    (b"", @types.Double, @types.ByteStreamSplit),
+    (b"", @types.ByteArray, @types.Fsst),
+  ]
+  for case in cases {
+    let (bytes, ty, encoding) = case
+    let error = capture_error(() => {
+      ignore(@colenc.decode_column(bytes, ty, encoding, -1))
+    })
+    match error {
+      @types.EncodingError::InvalidCount(count) => assert_eq(count, -1)
+      other =>
+        fail(
+          "\{@types.physical_type_name(ty)} \{@types.encoding_name(encoding)}: expected InvalidCount(-1), got \{@types.EncodingError::message(other)}",
+        )
+    }
+  }
+}
+
+///|
+test "facade round trips both delta byte-array families" {
+  // The two branches share a signature (`ByteArray` in, `ByteArrays` out), so
+  // swapping them is invisible to the type checker and to every test that only
+  // covers one of them: the DELTA_LENGTH page then parses as DELTA_BYTE_ARRAY
+  // and the values come back wrong with no error at all. One round trip per
+  // family through the dispatch is the guard.
+  let values : Array[Bytes] = [b"", b"a", b"beat", b"bead", b"zzzz"]
+  let column = @types.ColBuf::ByteArrays(values)
+  for encoding in [@types.DeltaLength, @types.DeltaByteArray] {
+    let out = @buffer.Buffer()
+    ignore(
+      @colenc.encode_column(column, encoding, out) catch {
+        _ => abort("encode failed for \{@types.encoding_name(encoding)}")
+      },
+    )
+    let back = @colenc.decode_column(
+      out.to_bytes(),
+      @types.ByteArray,
+      encoding,
+      values.length(),
+    ) catch {
+      _ => abort("decode failed for \{@types.encoding_name(encoding)}")
+    }
+    match back {
+      ByteArrays(got) => assert_eq(got, values)
+      _ => abort("round trip changed the physical type")
+    }
+  }
+}

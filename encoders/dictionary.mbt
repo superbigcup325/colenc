@@ -491,8 +491,12 @@ pub fn decode_dictionary(
   if width < 0 || width > 32 {
     raise @types.EncodingError::InvalidBitWidth(width)
   }
-  // The walk validates the stream's arguments before the dictionary page is
-  // decoded, which is the order the two-step version reported errors in.
+  // The walk validates its *arguments* before the dictionary page is decoded,
+  // which is the order the two-step version reported them in. A malformed run
+  // inside the stream is a different matter: the two-step version decoded the
+  // whole index stream before the dictionary page and before any lookup, so it
+  // reported a stream error where the fused walk reports the bad index it
+  // reaches first. Both are typed errors; only the reported offset can differ.
   let walk = hybrid_walk(indices[1:], width, count, 0)
   match ty {
     Int32 => {

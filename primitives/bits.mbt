@@ -156,8 +156,13 @@ pub fn bit_unpack(
   if count < 0 {
     raise InvalidCount(count)
   }
-  let need = (bit_width * count + 7) / 8
-  if need > data.length() {
+  // `bit_width * count` wraps in `Int32`: at width 64 a count of 2^26 asks for
+  // exactly 2^32 bits and the product reads back as zero, which used to pass
+  // the length check and reach the unpacker with an empty buffer. The
+  // requirement is derived in 64 bits instead, and the reported one saturates.
+  let need64 = (bit_width.to_int64() * count.to_int64() + 7L) / 8L
+  if need64 > data.length().to_int64() {
+    let need = if need64 > 2147483647L { 2147483647 } else { need64.to_int() }
     raise Truncated(0, need, data.length())
   }
   if bit_width == 0 {

@@ -419,3 +419,42 @@ test "fused dictionary decode reports an incomplete index stream" {
   ignore(result)
   abort("expected Incomplete")
 }
+
+///|
+test "fused dictionary decode fills every repeated run for each numeric type" {
+  // The fused walk has one copy of the repeated-run branch per physical type,
+  // and a dictionary column whose values repeat is the most common shape there
+  // is: a branch that writes one value too few would shorten the output, and
+  // nothing else in the suite reaches INT64, FLOAT or DOUBLE there.
+  let repeated = 20
+  let int64s = Array::make(repeated, 9L)
+  let floats = Array::make(repeated, Float(1.5))
+  let doubles = Array::make(repeated, 2.5)
+  let columns : Array[@types.ColBuf] = [
+    @types.ColBuf::Int64s(int64s),
+    @types.ColBuf::Floats(floats),
+    @types.ColBuf::Doubles(doubles),
+  ]
+  for column in columns {
+    let encoding = match encode_dictionary(column) {
+      Some(encoding) => encoding
+      None => abort("expected a dictionary")
+    }
+    let count = column.value_count()
+    let got = decode_dictionary(
+      encoding.dictionary,
+      encoding.indices,
+      column.physical_type(),
+      count,
+      encoding.dictionary_size,
+    ) catch {
+      error => abort(@types.EncodingError::message(error))
+    }
+    match (column, got) {
+      (Int64s(want), Int64s(have)) => assert_eq(have, want)
+      (Floats(want), Floats(have)) => assert_eq(have, want)
+      (Doubles(want), Doubles(have)) => assert_eq(have, want)
+      _ => abort("dictionary decode changed the physical type")
+    }
+  }
+}

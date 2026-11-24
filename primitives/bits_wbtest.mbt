@@ -269,3 +269,19 @@ test "the word lanes report truncation instead of reading past the end" {
     }
   }
 }
+
+///|
+test "bit_unpack rejects a count whose bit requirement wraps in Int32" {
+  // 64 bits times 2^26 values is exactly 2^32, which wrapped to zero and let
+  // the count through a length check against an empty buffer; the unpacker then
+  // allocated 512 MB and read past the end.
+  let error = capture_error(() => ignore(bit_unpack(b"", 64, 67108864)))
+  match error {
+    Truncated(offset, need, available) => {
+      assert_eq(offset, 0)
+      assert_eq(need, 536870912)
+      assert_eq(available, 0)
+    }
+    _ => abort("expected Truncated")
+  }
+}
