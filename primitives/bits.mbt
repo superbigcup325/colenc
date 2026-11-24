@@ -182,7 +182,7 @@ fn unpack_words(
   bit_width : Int32,
   count : Int32,
 ) -> Array[Int64] {
-  let out = Array::make(count, 0L)
+  let out = Array::unsafe_make_uninit(count)
   let mask = (1UL << bit_width) - 1UL
   let mut buffer = 0UL
   let mut bits = 0
@@ -203,7 +203,7 @@ fn unpack_words(
 ///|
 /// Width 64 has no bits to carry: eight bytes per value, little endian.
 fn unpack_full_words(data : BytesView, count : Int32) -> Array[Int64] {
-  let out = Array::make(count, 0L)
+  let out = Array::unsafe_make_uninit(count)
   for index in 0..<count {
     let mut value = 0UL
     let base = index * 8
@@ -222,7 +222,7 @@ fn unpack_bits(
   bit_width : Int32,
   count : Int32,
 ) -> Array[Int64] {
-  let out = Array::make(count, 0L)
+  let out = Array::unsafe_make_uninit(count)
   let mut bit_pos = 0
   for index in 0..<count {
     let mut acc = 0UL

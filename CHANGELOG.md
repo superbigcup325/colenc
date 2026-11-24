@@ -53,6 +53,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (+12.6% and +7.3% MB/s). Native did not move beyond the rigs' swing: the two
   rigs disagree in sign there, so it is recorded as unresolved rather than as a
   win.
+- `decode_delta_int64` and `decode_delta_int32` allocate their output once at
+  the caller's count and write by index instead of pushing one value at a time
+  from an empty array, and the three `bit_unpack` unpackers no longer zero-fill
+  arrays their loops overwrite. Decoded values, consumed lengths and typed
+  errors are unchanged, and the encoders and their reference bytes are
+  untouched. On `harness/perf -- families`, native: int64 monotonic delta decode
+  1008.0 to 502.9 us (-50.1%), int32 low-cardinality delta 1571.6 to 1005.2 us
+  (-36.0%), int32 random delta 2331.2 to 1770.6 us (-24.0%), DELTA_BYTE_ARRAY of
+  200k shared-prefix strings -9.3%, DELTA_LENGTH_BYTE_ARRAY -5.7%, boolean RLE
+  -2.6%; wasm-gc -50.6%, -35.7%, -24.1%, -14.4%, -18.1% and -6.4%, with
+  `harness/bench` agreeing in sign and magnitude.
 
 ### Fixed
 

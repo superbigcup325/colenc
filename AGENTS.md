@@ -583,6 +583,26 @@ tracked documents ship in the release archive.
   faster, and that misreading survived two A/B rounds before a second rig
   disagreed with it. Cross-check a perf number against `harness/bench` on the
   same trees before writing it into a document
+- **A sweep for one shape misses the loop that hides it** → K10 and K11 sized
+  every decoder output that had a known count, and both `DELTA_BINARY_PACKED`
+  decoders were skipped: their `values.push` sat inside a block walk rather than
+  in one loop over the count, so grepping for "push into an empty array" found
+  the byte-array decoders and not them. Sizing the output once took int64
+  monotonic delta decode from 1008.0 to 502.9 us native (-50.1%) and int32
+  low-cardinality from 1571.6 to 1005.2 us (-36.0%), a year after the same
+  pattern was fixed one file over. When a sweep is by code shape, enumerate the
+  functions it should cover from the public surface, not from the hits
+- **A destination passed as a parameter costs the checks a fresh array did not**
+  → giving the bit unpacker a `bit_unpack_into(data, width, count, out)` entry so
+  the delta decoder could reuse one scratch array won 8-10% on int32 delta
+  decode and lost 5-11% on every hybrid literal run (boolean RLE, both
+  dictionary decoders): with `out` as a parameter its length is unknown, so the
+  store pays a bounds check that a freshly allocated array did not, and
+  `#inline` on the unpackers did not recover it. Unpacking straight into the
+  output span instead was worse for the 64-bit path (+17.2%), because the raw
+  deltas then need a second pass over the whole output array. Price a
+  destination-shape change on every caller of the shared routine, not on the one
+  it was written for
 
 ## Command reference
 

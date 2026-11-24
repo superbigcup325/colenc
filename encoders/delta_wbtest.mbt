@@ -84,6 +84,32 @@ test "delta handles empty and single-value columns" {
 }
 
 ///|
+test "delta decode returns a prefix when asked for fewer values" {
+  // The output is sized from the caller's count rather than from the header's,
+  // so a partial decode must stop inside the block walk: it returns the first
+  // `count` values and never writes past them.
+  let ints = Array::makei(300, fn(index) { index * 3 - 50 })
+  let out = @buffer.Buffer()
+  encode_delta_int32(ints[:], out) catch {
+    _ => ()
+  }
+  let (values, _) = decode_delta_int32(out.to_bytes(), 137) catch {
+    _ => ([], 0)
+  }
+  assert_eq(values, Array::makei(137, fn(index) { index * 3 - 50 }))
+
+  let longs = Array::makei(300, fn(index) { index.to_int64() * 99991L })
+  let out = @buffer.Buffer()
+  encode_delta_int64(longs[:], out) catch {
+    _ => ()
+  }
+  let (values, _) = decode_delta_int64(out.to_bytes(), 137) catch {
+    _ => ([], 0)
+  }
+  assert_eq(values, Array::makei(137, fn(index) { index.to_int64() * 99991L }))
+}
+
+///|
 test "delta length byte array round trips" {
   let values : Array[Bytes] = [b"", b"a", b"beat", b"bead", b"zzzz"]
   let out = @buffer.Buffer()

@@ -271,11 +271,16 @@ pub fn decode_delta_int64(
   if count > header.count {
     raise @types.EncodingError::Incomplete(header.count, count)
   }
-  let values : Array[Int64] = []
   if count == 0 {
-    return (values, header_len)
+    return ([], header_len)
   }
-  values.push(header.first)
+  // The output count is known before the first block is read, so the array is
+  // allocated once at its final size: pushing would copy it about twice over
+  // as it grew. `unsafe_make_uninit` is safe here because every slot is
+  // written below (slot 0 with the header value, the rest by the block walk)
+  // and a raise drops the array instead of handing it back half-filled.
+  let values : Array[Int64] = Array::unsafe_make_uninit(count)
+  values[0] = header.first
   let mut produced = 1
   let mut current = header.first
   let mut pos = offset + header_len
@@ -332,11 +337,9 @@ pub fn decode_delta_int64(
       }
       pos += byte_count.to_int()
       for value in unpacked {
-        if produced < count {
-          current = current + (min_delta + value)
-          values.push(current)
-          produced += 1
-        }
+        current = current + (min_delta + value)
+        values[produced] = current
+        produced += 1
       }
     }
   }
@@ -357,11 +360,13 @@ pub fn decode_delta_int32(
   if count > header.count {
     raise @types.EncodingError::Incomplete(header.count, count)
   }
-  let values : Array[Int32] = []
   if count == 0 {
-    return (values, header_len)
+    return ([], header_len)
   }
-  values.push(header.first.to_int())
+  // Same as the 64-bit path: the count is known up front, so the output is
+  // allocated once instead of grown by pushes.
+  let values : Array[Int32] = Array::unsafe_make_uninit(count)
+  values[0] = header.first.to_int()
   let mut produced = 1
   let mut current = header.first.to_int()
   let mut pos = offset + header_len
@@ -418,11 +423,9 @@ pub fn decode_delta_int32(
       }
       pos += byte_count.to_int()
       for value in unpacked {
-        if produced < count {
-          current = current + (min_delta.to_int() + value.to_int())
-          values.push(current)
-          produced += 1
-        }
+        current = current + (min_delta.to_int() + value.to_int())
+        values[produced] = current
+        produced += 1
       }
     }
   }
