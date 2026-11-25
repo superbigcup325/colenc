@@ -36,7 +36,12 @@ gates are recorded in [the sketch contracts](docs/SKETCHES.md). Release
 follow-through and conditional library work are planned in
 [the current next steps](docs/NEXT-STEPS.md).
 
-Version 0.1.4 is the current release. It carries the Roaring buffer-offset and
+Version 0.2.0 adds configurable decoder limits, improves page decode
+throughput, fixes DELTA byte-array stream boundaries, and keeps t-digest
+queries and merges within their finite numeric range. See the
+[migration notes](CHANGELOG.md#020---2026-11-25) for decoder API changes.
+
+Version 0.1.4 carries the Roaring buffer-offset and
 decoder-validation fixes, HLL typed hashing and batch updates, `UInt64::clz`,
 exact inverse powers, one-pass sparse deserialization, `TDigest::quantiles`, and
 the sparse Roaring batch-iteration fix. The serialized formats and encoding
@@ -59,9 +64,9 @@ work and reusable FSST models, with a
 
 Integration with [moonlake](https://github.com/superbigcup325/moonlake) is
 merged on its `main`: Parquet decoding routed through colenc, a new write path,
-and the spill format re-encoded (40% smaller). The package is published as
-`superbigcup325/colenc@0.1.4` on mooncakes, so a consumer resolves it from the
-registry by version.
+and the spill format re-encoded (40% smaller). Resolve
+[`superbigcup325/colenc`](https://mooncakes.io/docs/superbigcup325/colenc) from
+Mooncakes by version.
 
 ## Quick start
 

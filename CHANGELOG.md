@@ -6,6 +6,18 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-25
+
+### Migration
+
+- Pass `max_values` explicitly when decoding over 2^24 values in a single
+  page through a decoder that accepts this option. The packed Roaring readers
+  take an `Int64` limit and the column decoders take an `Int32` limit.
+- Use `decode_roaring` to expand a bitmap whose expected cardinality is
+  unknown. `decode_roaring_column` requires a non-negative expected count.
+- Wrap decoder calls in a positional closure when assigning them to an
+  existing positional function type. Direct calls can omit `max_values`.
+
 ### Added
 
 - `primitives.DEFAULT_MAX_VALUES` and an optional `max_values` ceiling on
@@ -696,7 +708,8 @@ output.
 
 P0 through P4 are complete, and this is the first published release.
 
-[Unreleased]: https://github.com/superbigcup325/colenc/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/superbigcup325/colenc/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/superbigcup325/colenc/compare/v0.1.4...v0.2.0
 [0.1.4]: https://github.com/superbigcup325/colenc/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/superbigcup325/colenc/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/superbigcup325/colenc/compare/v0.1.1...v0.1.2

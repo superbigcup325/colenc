@@ -16,8 +16,8 @@ encoding family is in place: PLAIN, the RLE/bit-packed hybrid, dictionary, the
 delta family, BYTE_STREAM_SPLIT and FSST, with E1 to E6 byte-identical to the
 reference and E7 measured by round trip plus the scoreboard (no Parquet-native
 FSST exists). CI runs the three-backend test matrix plus the harness jobs.
-**P5 (moonlake) is merged on that project's `main`**, and the package is
-published as `superbigcup325/colenc@0.1.4`. **Phase two has started**: E8 is a
+**P5 (moonlake) is merged on that project's `main`**. The
+[roadmap](docs/ROADMAP.md) records release milestones. **Phase two has started**: E8 is a
 Roaring bitmap index, byte-identical to CRoaring (judged by pyroaring, not
 parquet-cpp), with its set operations and portable serialization in place, and
 the `sketches` package carries HyperLogLog and t-digest with their contracts in
