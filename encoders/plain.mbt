@@ -3,7 +3,14 @@
 /// must support, and the baseline the other families are measured against.
 
 ///|
-/// Read a 32-bit little-endian integer. Callers check the bounds first.
+/// Read a 32-bit little-endian integer.
+///
+/// Panics when the four bytes are not in bounds: the decoders check the range
+/// once per value (or once per table) and then walk with this cursor read, which
+/// is what keeps the per-value cost to one load. It is exported for the harness
+/// probes, which re-derive a family's bytes the same way; a consumer holding
+/// untrusted bytes has to bound the offset first, because this read is not a
+/// decode entry point and carries no error type.
 pub fn read_u32_le(data : BytesView, offset : Int32) -> Int32 {
   data[offset].to_int() |
   (data[offset + 1].to_int() << 8) |
@@ -210,11 +217,9 @@ pub fn decode_bool(
   if count < 0 {
     raise @types.EncodingError::InvalidCount(count)
   }
-  // `(count + 7) / 8` wraps once `count` passes `Int32::max_value - 7`, so the
-  // count is compared with what the buffer holds and the requirement saturates;
-  // no addition happens before the check.
+  // Widen the bit count before rounding up to bytes.
   if count.to_int64() > data.length().to_int64() * 8L {
-    let need = if count > 2147483640 { 2147483647 } else { (count + 7) / 8 }
+    let need = ((count.to_int64() + 7L) / 8L).to_int()
     raise @types.EncodingError::Truncated(0, need, data.length())
   }
   let out = Array::make(count, false)

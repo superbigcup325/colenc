@@ -116,8 +116,9 @@ let back = @colenc.decode_column(
 
 `decode_column` takes an optional `max_values` ceiling, defaulting to
 `@colenc_types.DEFAULT_MAX_VALUES` (2^24), and forwards it to the families whose
-stream can declare a value count independent of the input: the RLE hybrid, the
-delta family and the dictionary indices. Each of those can describe 2^31 - 1
+stream can declare a value count independent of the input: the RLE hybrid and
+the delta family (`decode_dictionary`, which is not on the generic dispatch,
+takes the same ceiling for its index stream). Each of those can describe 2^31 - 1
 values in a few bytes, which is a valid stream, so no input check can refuse the
 count: the ceiling is what keeps an untrusted header from asking for a 16 GiB
 output, and above `types.PREVALIDATE_ABOVE` values those decoders also walk the
@@ -129,6 +130,17 @@ ceiling of their own. Raise it per call when a caller really decodes more than
 2^24 values in one page; the error is
 `EncodingError::TooManyValues(count, limit)`. The `bit_unpack` primitive takes
 the same ceiling, as `primitives.DEFAULT_MAX_VALUES`.
+
+The portable bitmap reader takes the same ceiling, for the same reason: a legal
+run pair describes 65,536 ids in six bytes, so `RoaringBitmap::from_bytes`,
+`decode_roaring` and `decode_roaring_column` all take `max_values` and compare
+the set's declared cardinality against it while the container table is read —
+before any container body or id array exists. A caller that really carries a
+larger set passes a larger ceiling.
+
+When passing a decoder with `max_values~` as a function value, wrap the call in
+a positional closure such as
+`let read_bitmap = data => @colenc_encoders.RoaringBitmap::from_bytes(data)`.
 
 Dictionary encoding has two output streams (dictionary page plus indices), so it
 uses `encode_dictionary` / `decode_dictionary` instead of `encode_column`.

@@ -690,3 +690,30 @@ test "roaring: a run cookie with the top bit set is refused, not a panic" {
     _ => abort("expected Truncated(4, 131076, 0)")
   }
 }
+
+///|
+test "roaring: a declared cardinality above the ceiling is refused before it expands" {
+  // A legal run pair describes 65,536 ids in six bytes, so the id count is not
+  // bounded by the input the way PLAIN's is: a 29 KB frame reached 134M ids and
+  // sized a 1 GiB id array, because the reader took the container table at its
+  // word and nothing compared it with a ceiling.
+  let full_container = b"\x3b\x30\x00\x00\x01\x00\x00\xff\xff\x01\x00\x00\x00\xff\xff"
+  let error = capture_error(() => {
+    ignore(RoaringBitmap::from_bytes(full_container, max_values=65_535))
+  })
+  match error {
+    @types.EncodingError::TooManyValues(count, limit) => {
+      assert_eq(count, 65_536)
+      assert_eq(limit, 65_535)
+    }
+    _ => abort("expected TooManyValues(65536, 65535)")
+  }
+  // At exactly the ceiling the same frame reads, and the wide accessor agrees
+  // with the narrow one below the boundary.
+  let bitmap = RoaringBitmap::from_bytes(full_container, max_values=65_536) catch {
+    error => abort(@types.EncodingError::message(error))
+  }
+  assert_eq(bitmap.cardinality(), 65_536)
+  assert_eq(bitmap.cardinality_wide(), 65_536L)
+  assert_eq(bitmap.to_array().length(), 65_536)
+}

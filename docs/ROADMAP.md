@@ -175,11 +175,11 @@ them, not because a release is complete.
   truncated through an `Int32` conversion, and counts read from a frame header
   before the first per-value length was read. The PLAIN, BYTE_STREAM_SPLIT, RLE,
   delta, FSST and roaring decoders changed; no encoded byte did, and the six
-  byte-diff rigs plus the container gate still pass. One residual is recorded
-  instead of fixed: `decode_rle_hybrid` still sizes its output from the caller's
-  count, and a hybrid stream legitimately encodes 2^31 - 1 values in about six
-  bytes, so bounding it is a caller-side page-size policy or an incremental
-  fill, i.e. a contract decision rather than an input check.
+  byte-diff rigs plus the container gate still pass. **2026-11-25 verification**:
+  count-driven decoders now apply a caller-adjustable `max_values` ceiling before
+  allocating their output. The hybrid and numeric delta decoders also walk
+  large inputs before allocating from the count. The portable bitmap reader
+  checks the declared cardinality before loading container bodies.
 
 ### Features
 

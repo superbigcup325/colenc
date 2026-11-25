@@ -27,13 +27,72 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   block whose deltas are all zero and a dictionary repeat run each describe
   2^31 - 1 values in a handful of bytes, so no input check can reject the count
   while the decoder still has to allocate the output: 16 GiB of `Int64`, and on
-  wasm-gc the request traps the process instead of raising. The ceiling caps
-  that at 128 MiB and answers with a typed error. It is a policy, not a format
-  limit: pass a larger `max_values` when a caller legitimately decodes more than
-  that in one page.
+  wasm-gc the request traps the process instead of raising. The ceiling caps a
+  single count-sized `Int64` array at 128 MiB and answers with a typed error
+  above the ceiling. Decoding can also allocate scratch and byte payloads. Pass
+  a larger `max_values` when a caller decodes more values in one page.
+
+- An optional `max_values` ceiling on the portable bitmap reader —
+  `RoaringBitmap::from_bytes`, `from_bytes_with_consumed`, `decode_roaring` and
+  `decode_roaring_column` — defaulting to `types.DEFAULT_MAX_VALUES`. A legal run
+  pair describes 65,536 ids in six bytes, so the id count is not bounded by the
+  input any more than the hybrid's count is: 15 bytes decoded to 65,536 ids,
+  29 KB to 134M and a 1 GiB `Array[Int32]`, and a page body that small could
+  kill the process under a memory limit instead of raising. The reader sums the
+  card table in 64 bits while it is walked, so the ceiling is judged before any
+  container body or id array exists.
+- `RoaringBitmap::cardinality_wide`, the same count in `Int64`, for the one set
+  size `cardinality()` cannot report: the id domain is `0 .. 2^31 - 1`, so a set
+  of every possible id holds 2^31 of them and overflows an `Int32`.
 
 ### Fixed
 
+- t-digest compression and scalar and batch quantile queries handle finite
+  inputs whose weighted sums or distances overflow a `Double`. Compression
+  recomputes the affected centroid with a weighted blend and keeps its mean
+  within the input range, including repeated fractional values. Interpolation
+  scales the endpoints before adding them when their distance overflows and
+  returns the right centroid's mean directly at its exact rank.
+
+- `decode_delta_length_byte_array` and `decode_delta_byte_array` read their
+  second stream from the wrong byte when the caller asked for fewer values than
+  the stream declares. Both streams are sized by the header's count, while the
+  value decoders stop at the end of the block that produced the values asked
+  for, so the recorded consumed length is the stream's end only when the two
+  counts are equal. On a 1000-value DELTA_LENGTH column, `count = 2` returned
+  `b"\x0f"` and `b"\x04\x04"` instead of `b"a"` and `b"aa"` with no error at
+  all, and DELTA_BYTE_ARRAY answered `InvalidCount(13)` for `count = 0`. Both
+  now measure their streams at the declared count — with `delta_probe`'s walk,
+  which now returns where the stream ends — and a prefix decode returns the
+  correct values (regression test: both families, counts 0/1/2/50/128/500/999
+  on a 1000-value column that spans several delta blocks).
+- `TDigest::from_bytes` accepted a centroid count whose high bit is set. The
+  format's count is a u32 and the reader assembled it into an `Int32`, so `2^31`
+  came back negative, which is under the `count > 2k + 1` ceiling; `23 + count *
+  16` then wrapped to 23, which a 23-byte frame matched exactly. The reader
+  returned a digest with `has_values` and no centroids, and `quantile` indexed
+  `weights[-1]` — a process abort (native `SIGABRT`, a wasm-gc trap), not a typed
+  error. The count is checked for sign and for the ceiling before computing
+  the centroid body length, a weight *sum* that
+  overflows to an infinity is refused, and `quantile`/`quantiles` report
+  `Incomplete` for a digest with values but no centroids instead of indexing an
+  empty array. The regression test drives every high nibble of the count.
+- `decode_delta_length_byte_array` validates the whole suffix span before it
+  allocates the value array. It sized the array from the count and then checked
+  each suffix inside the build loop, so a 12-byte body that claimed the ceiling
+  reached 200 MB before the first short suffix was reported as `Truncated`; its
+  sibling `decode_delta_byte_array` already had the right order.
+- `decode_fsst` refuses a symbol longer than `FSST_MAX_SYMBOL_LENGTH` (8). The
+  frame carries the length in one byte and the reader accepted up to 255, so a
+  frame no writer can produce made one code byte expand 254x (100 KB of body
+  into a 25 MB value).
+- `decode_roaring_column` judges a negative `count` like the other decoders
+  (`InvalidCount`). Use `encoders.decode_roaring` to read a set without an
+  expected count. The facade checks the parsed cardinality before expanding the
+  ids and both entry points return the expanded array directly.
+- `types.DEFAULT_MAX_VALUES` documents that the ceiling applies to individual
+  count-sized arrays. `types.PREVALIDATE_ABOVE` documents the strict `>`
+  comparison. `encoders.read_u32_le` documents its bounds precondition.
 - `delta_probe` charged a miniblock `floor(miniblock_size * width / 8)` bytes
   while the decode loop handed the same slice to `bit_unpack`, which needs
   `ceil(take * width / 8)`. The two agree only when a miniblock's payload is a
@@ -65,6 +124,20 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   where a hostile 4-byte length prefix used to outrank the ceiling, so the same
   call no longer reports a different first error depending on the bytes.
 ### Changed
+
+- Direct calls to decoders with a new `max_values~` parameter can omit it.
+  Code that passes one of these decoders as a positional function value should
+  use a closure, for example
+  `let read_bitmap = data => @colenc_encoders.RoaringBitmap::from_bytes(data)`.
+
+- The RLE hybrid's literal-run guard answers `Corrupt` instead of
+  `Truncated(need = 2^31 - 1)` when a run declares more values than a page can
+  hold. No input can satisfy such a run, so the old class invited a caller to
+  retry with more bytes, and its `need` field carried a value count where every
+  other truncated report carries a byte count. The repeat guard already answered
+  `Corrupt`, and both copies of the walk (the decode loop and the
+  pre-validation pass) now agree on it; the pinned test covers both run shapes
+  and both copies.
 
 - `decode_delta_byte_array` keeps the suffix bytes as views into the input and
   builds each value with one allocation at its exact size, instead of decoding

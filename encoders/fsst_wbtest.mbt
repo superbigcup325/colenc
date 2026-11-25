@@ -52,6 +52,32 @@ test "fsst decode reports malformed input" {
 }
 
 ///|
+test "fsst decode refuses a symbol longer than the writer emits" {
+  // The length travels in a byte, but the writer caps a symbol at
+  // `FSST_MAX_SYMBOL_LENGTH`, so a nine-byte symbol is a state no writer
+  // produces -- and one code byte would then expand to 255 bytes, a 254x
+  // amplification this family budgets for nowhere. The frame stops right after
+  // the symbol length, so the error has to come from the length, not the body.
+  let error = capture_error(() => ignore(decode_fsst(b"\x00\x01\x09", 0)))
+  match error {
+    @types.EncodingError::Corrupt(2) => ()
+    _ => abort("expected Corrupt(2)")
+  }
+  // Eight bytes is what the trainer can produce, and a frame carrying one still
+  // reads.
+  let values = [b"abcdefghabcdefgh", b"abcdefghzz"]
+  let out = @buffer.Buffer()
+  encode_fsst(values, out)
+  let back = decode_fsst(out.to_bytes(), values.length()) catch {
+    error =>
+      abort(
+        "a frame the encoder wrote was refused: \{@types.EncodingError::message(error)}",
+      )
+  }
+  assert_eq(back.0, values)
+}
+
+///|
 fn pseudo_random_strings(
   count : Int32,
   length : Int32,

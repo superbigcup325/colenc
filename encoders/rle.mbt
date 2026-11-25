@@ -243,12 +243,12 @@ fn HybridWalk::next(self : HybridWalk) -> HybridRun? raise @types.EncodingError 
     // Both are derived in 64 bits and compared against what is left first.
     let groups = (header >> 1).reinterpret_as_int64()
     if groups > 268435455L {
-      // 2^28 - 1 groups is already 2^31 - 8 values: no page can ask for it.
-      raise @types.EncodingError::Truncated(
-        self.pos,
-        2147483647,
-        data.length() - self.pos,
-      )
+      // 2^28 - 1 groups is already 2^31 - 8 values: no page can ask for it, so
+      // no input can satisfy the run. That is a structural violation, not a
+      // short stream, and it answers `Corrupt` like the repeat guard below --
+      // reporting `Truncated(need = 2^31 - 1)` invited a caller to read it as
+      // "fetch more bytes", and put a value count in a byte-count field.
+      raise @types.EncodingError::Corrupt(self.pos)
     }
     let produced = (groups * 8L).to_int()
     let byte_count = groups * self.bit_width.to_int64()
@@ -351,11 +351,9 @@ fn hybrid_produced(
     if (header & 1UL) == 1UL {
       let groups = (header >> 1).reinterpret_as_int64()
       if groups > 268435455L {
-        raise @types.EncodingError::Truncated(
-          pos,
-          2147483647,
-          data.length() - pos,
-        )
+        // Same rule as `HybridWalk::next`, and the same error class as the
+        // repeat guard below it.
+        raise @types.EncodingError::Corrupt(pos)
       }
       let produced = (groups * 8L).to_int()
       let byte_count = groups * bit_width.to_int64()

@@ -15,8 +15,13 @@
 /// it when a caller legitimately decodes more than this in one page. The
 /// default is 4096 times the largest batch the in-tree consumer writes (one
 /// page per 4096-row batch) and 16 times the most values a 1 MiB page of
-/// one-byte values can hold, so a real page stays far below it, while the worst
-/// allocation an untrusted header can force is 128 MiB.
+/// one-byte values can hold, so a real page stays far below it.
+///
+/// The ceiling bounds the size of each array allocated from the value count.
+/// One `Int64` array at the default takes 128 MiB of element storage. Peak
+/// memory also depends on the family: the hybrid and numeric delta decoders can
+/// hold unpacking scratch alongside their output, while the delta byte-array
+/// decoders hold length streams, the output array and decoded byte payloads.
 pub const DEFAULT_MAX_VALUES : Int32 = 16777216
 
 ///|
@@ -31,10 +36,8 @@ pub const DEFAULT_MAX_VALUES : Int32 = 16777216
 /// 500k values when the pass ran unconditionally, which is the same 20% the
 /// last three decode PRs bought back.
 ///
-/// So the pass runs only where the allocation is worth protecting. At 2^20
-/// values the output is at least 4 MiB and at most 8 MiB, which is above any
-/// page a writer produces: the in-tree consumer writes 4096-value pages, and a
-/// 1 MiB Parquet page holds at most about 1M one-byte values. Below the
-/// threshold the allocation is a few megabytes at worst and the single-pass
-/// path stays, so a real page decodes exactly as fast as it did before.
+/// At exactly 2^20 values the first count-sized array contains 4 MiB of
+/// `Int32` or 8 MiB of `Int64` elements. The extra walk starts strictly above
+/// that count. The in-tree consumer writes 4096-value pages, which stay on the
+/// single-pass path.
 pub const PREVALIDATE_ABOVE : Int32 = 1048576
