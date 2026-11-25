@@ -111,6 +111,10 @@ pub fn encode_roaring_column(
 ///|
 /// Decode `count` values of physical type `ty`. The input may be longer than
 /// needed; trailing bytes belong to the caller.
+///
+/// For families with a decoder that returns `(values, consumed)` and accepts
+/// `offset~`, use that decoder to walk a buffer page by page. The next page
+/// starts at `offset + consumed` after a complete page decode.
 pub fn decode_column(
   data : BytesView,
   ty : @types.PhysicalType,
@@ -194,18 +198,33 @@ pub fn decode_column(
 /// Decode a Roaring bitmap into its ids. `count` is the expected cardinality;
 /// a disagreement is a caller error, not a short read, because a set carries
 /// its own size.
+///
+/// The ceiling bounds the expansion, not just the output array: the set's
+/// declared cardinality is checked against it while the container table is
+/// read, so a frame that claims more ids than the caller allowed is refused
+/// before any of them is materialized.
 pub fn decode_roaring_column(
   data : BytesView,
   ty : @types.PhysicalType,
   count : Int32,
+  max_values~ : Int32 = @types.DEFAULT_MAX_VALUES,
 ) -> @types.ColBuf raise @types.EncodingError {
   match ty {
     Int32 => {
-      let values = @encoders.decode_roaring(data)
-      if count >= 0 && count != values.length() {
-        raise @types.EncodingError::Incomplete(values.length(), count)
+      // `count` is an argument, so it is judged like one: `-1` used to mean
+      // "do not check", which is the one thing no other decoder does.
+      if count < 0 {
+        raise @types.EncodingError::InvalidCount(count)
       }
-      @types.ColBuf::Int32s(values)
+      let bitmap = @encoders.RoaringBitmap::from_bytes(
+        data,
+        max_values=max_values.to_int64(),
+      )
+      let actual = bitmap.cardinality()
+      if count != actual {
+        raise @types.EncodingError::Incomplete(actual, count)
+      }
+      @types.ColBuf::Int32s(bitmap.to_array())
     }
     _ => raise @types.EncodingError::TypeMismatch(ty, Roaring)
   }

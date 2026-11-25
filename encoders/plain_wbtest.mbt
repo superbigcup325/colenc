@@ -316,13 +316,13 @@ test "plain bool decode rejects counts whose bit length wraps" {
   // buffer. The count is now compared with what the bytes can hold.
   let error = capture_error(() => ignore(decode_bool(b"", 2147483647)))
   match error {
-    @types.EncodingError::Truncated(0, 2147483647, 0) => ()
-    _ => abort("expected a saturated Truncated")
+    @types.EncodingError::Truncated(0, 268435456, 0) => ()
+    _ => abort("expected Truncated(0, 268435456, 0)")
   }
   let error = capture_error(() => ignore(decode_bool(b"\x00", 2147483641)))
   match error {
-    @types.EncodingError::Truncated(0, 2147483647, 1) => ()
-    _ => abort("expected a saturated Truncated")
+    @types.EncodingError::Truncated(0, 268435456, 1) => ()
+    _ => abort("expected Truncated(0, 268435456, 1)")
   }
   // the boundary keeps its exact requirement: eight values fit one byte
   let eight = decode_bool(b"\xff", 8) catch { _ => [] }

@@ -140,6 +140,32 @@ test "delta byte array shares prefixes and round trips" {
 }
 
 ///|
+test "delta byte array consumes both headers of an empty page" {
+  let out = @buffer.Buffer()
+  out.write_byte(b'\xff')
+  encode_delta_byte_array([], out)
+  let next_page = out.length()
+  encode_delta_byte_array([b"next"], out)
+  let bytes = out.to_bytes()
+  let (empty, consumed) = decode_delta_byte_array(bytes, 0, offset=1)
+  assert_true(empty.is_empty())
+  assert_eq(1 + consumed, next_page)
+  let (next, _) = decode_delta_byte_array(bytes, 1, offset=1 + consumed)
+  assert_eq(next, [b"next"])
+}
+
+///|
+test "delta byte array consumes both headers for a zero-length single-value prefix" {
+  let out = @buffer.Buffer()
+  out.write_byte(b'\xff')
+  encode_delta_byte_array([b"abc"], out)
+  let bytes = out.to_bytes()
+  let (prefix, consumed) = decode_delta_byte_array(bytes, 0, offset=1)
+  assert_true(prefix.is_empty())
+  assert_eq(consumed, bytes.length() - 1 - b"abc".length())
+}
+
+///|
 test "delta decode reports truncation and count mismatches" {
   let error = capture_error(() => ignore(decode_delta_int32(b"", 1)))
   match error {
@@ -343,6 +369,72 @@ test "delta decode refuses a count above the ceiling" {
 }
 
 ///|
+/// A column long enough that its delta streams span several 128-value blocks,
+/// with values that differ so a wrong byte offset cannot pass unnoticed.
+fn delta_prefix_column() -> Array[Bytes] {
+  Array::makei(1000, fn(index) {
+    let fill = (index % 251 + 1).to_byte()
+    let length = index % 9 + 1
+    Bytes::from_array(FixedArray::make(length, fill).exact_view())
+  })
+}
+
+///|
+test "delta length byte array: a prefix decode starts at the right raw offset" {
+  // The two streams are laid out end to end, and the raw bytes start where the
+  // *whole* length stream ends. Decoding `count` lengths stops at the end of the
+  // block that produced them, so for a count below the header's the raw stream
+  // used to be read from inside the length stream: `count = 2` on this column
+  // answered `b"\x0f"`, `b"\x04\x04"` with no error at all.
+  let values = delta_prefix_column()
+  let out = @buffer.Buffer()
+  encode_delta_length_byte_array(values, out) catch {
+    _ => abort("encode")
+  }
+  let bytes = out.to_bytes()
+  let (all, consumed) = decode_delta_length_byte_array(bytes, 1000) catch {
+    _ => abort("full decode")
+  }
+  assert_eq(all, values)
+  assert_eq(consumed, bytes.length())
+  for count in [0, 1, 2, 50, 128, 500, 999] {
+    let (prefix, _) = decode_delta_length_byte_array(bytes, count) catch {
+      error => abort("prefix \{count}: \{@types.EncodingError::message(error)}")
+    }
+    assert_eq(prefix.length(), count)
+    for index in 0..<count {
+      assert_eq(prefix[index], values[index])
+    }
+  }
+}
+
+///|
+test "delta byte array: a prefix decode starts at both right stream offsets" {
+  // Same shape, twice: the prefix-length stream and then the suffix-length
+  // stream both have to be measured at the header's count, not at the caller's.
+  let values = delta_prefix_column()
+  let out = @buffer.Buffer()
+  encode_delta_byte_array(values, out) catch {
+    _ => abort("encode")
+  }
+  let bytes = out.to_bytes()
+  let (all, consumed) = decode_delta_byte_array(bytes, 1000) catch {
+    _ => abort("full decode")
+  }
+  assert_eq(all, values)
+  assert_eq(consumed, bytes.length())
+  for count in [0, 1, 2, 50, 128, 500, 999] {
+    let (prefix, _) = decode_delta_byte_array(bytes, count) catch {
+      error => abort("prefix \{count}: \{@types.EncodingError::message(error)}")
+    }
+    assert_eq(prefix.length(), count)
+    for index in 0..<count {
+      assert_eq(prefix[index], values[index])
+    }
+  }
+}
+
+///|
 test "delta decode refuses a short stream before allocating" {
   // The header declares 2^31 - 1 values and the count is at the ceiling, so the
   // ceiling check passes; the body ends at byte 9. The output used to be
@@ -459,7 +551,7 @@ test "delta miniblock payload must be a whole number of bytes" {
     e => abort("header: \{@types.EncodingError::message(e)}")
   }
   let probed = capture_error(() => {
-    delta_probe(bytes, 13, header_len, header, 64)
+    ignore(delta_probe(bytes, 13, header_len, header, 64))
   })
   match probed {
     @types.EncodingError::Corrupt(6) => ()
@@ -492,4 +584,125 @@ test "delta miniblock payload must be a whole number of bytes" {
     e => abort(@types.EncodingError::message(e))
   }
   assert_eq(back, values)
+}
+
+///|
+test "delta ignores unused miniblock widths" {
+  // Both pages contain one delta. The remaining three width bytes are
+  // arbitrary and have no corresponding bodies. The trailing byte belongs
+  // to the caller.
+  let narrow = b"\x80\x01\x04\x02\x14\x02\x00\xff\x01\x02\xaa"
+  let wide = b"\x80\x02\x04\x02\x14\x02\x00\xff\x01\x02\xaa"
+  let (narrow_values, narrow_consumed) = decode_delta_int32(narrow, 2)
+  let (wide_values, wide_consumed) = decode_delta_int64(wide, 2)
+  assert_eq(narrow_values, [10, 11])
+  assert_eq(wide_values, [10L, 11L])
+  assert_eq(narrow_consumed, narrow.length() - 1)
+  assert_eq(wide_consumed, wide.length() - 1)
+}
+
+///|
+test "delta partial decodes consume the present miniblocks in the block" {
+  let values = Array::makei(65, index => {
+    if index < 33 {
+      index
+    } else {
+      33 + (index - 33) * 3
+    }
+  })
+  let out = Buffer()
+  encode_delta_int32(values[:], out)
+  let bytes = out.to_bytes()
+  let (prefix, consumed) = decode_delta_int32(bytes, 2)
+  assert_eq(prefix, [0, 1])
+  assert_eq(consumed, bytes.length())
+}
+
+///|
+test "delta byte-array prefixes skip unused miniblock bodies" {
+  // Both length values are 1. The unused widths have no payload, so the
+  // length stream ends immediately before the two suffix bytes.
+  let lengths = b"\x80\x01\x04\x02\x02\x00\x00\x01\x02\x03ab"
+  let with_prefixes = b"\x80\x01\x04\x02\x00\x00\x00\xff\x01\x02" + lengths
+  let (length_prefix, length_consumed) = decode_delta_length_byte_array(
+    lengths, 1,
+  )
+  let (value_prefix, value_consumed) = decode_delta_byte_array(with_prefixes, 1)
+  assert_eq(length_prefix, [b"a"])
+  assert_eq(value_prefix, [b"a"])
+  assert_eq(length_consumed, lengths.length() - 1)
+  assert_eq(value_consumed, with_prefixes.length() - 1)
+  let (values, full_consumed) = decode_delta_byte_array(with_prefixes, 2)
+  assert_eq(values, [b"a", b"b"])
+  assert_eq(full_consumed, with_prefixes.length())
+}
+
+///|
+test "delta byte array rejects different prefix and suffix counts" {
+  let out = Buffer()
+  encode_delta_int32([0][:], out)
+  let suffix_offset = out.to_bytes().length()
+  encode_delta_length_byte_array([b"a", b"b"], out)
+  let error = capture_error(() => {
+    ignore(decode_delta_byte_array(out.to_bytes(), 1))
+  })
+  match error {
+    @types.EncodingError::Corrupt(offset) => assert_eq(offset, suffix_offset)
+    other =>
+      fail(
+        "expected corrupt suffix stream, got \{@types.EncodingError::message(other)}",
+      )
+  }
+}
+
+///|
+test "delta probe ends exactly where the encoded stream ends" {
+  // The two-stream byte-array decoders locate their second stream with this
+  // walk when the caller asks for fewer values than the header declares, so the
+  // returned position is a correctness dependency, not just a memory guard: a
+  // walk that stops one block early reads the next stream from the wrong byte.
+  let longs = Array::makei(300, fn(index) { index.to_int64() * 7L })
+  let out = @buffer.Buffer()
+  encode_delta_int64(longs[:], out) catch {
+    e => abort(@types.EncodingError::message(e))
+  }
+  let bytes = out.to_bytes()
+  let (header, header_len) = read_delta_header(bytes, 0) catch {
+    e => abort(@types.EncodingError::message(e))
+  }
+  assert_eq(header.count, 300)
+  let end = delta_probe(bytes, 300, header_len, header, 64) catch {
+    e => abort(@types.EncodingError::message(e))
+  }
+  assert_eq(end, bytes.length())
+  // A count below the declared one stops *inside* the stream, which is exactly
+  // why a decoder may not read the layout from the position it stops at.
+  let midway = delta_probe(bytes, 100, header_len, header, 64) catch {
+    e => abort(@types.EncodingError::message(e))
+  }
+  assert_true(midway > header_len)
+  assert_true(midway < bytes.length())
+}
+
+///|
+test "hybrid produced counts what the decoder would decode" {
+  let values = Array::makei(900, fn(index) { (index % 5).to_int64() })
+  let out = @buffer.Buffer()
+  encode_rle_hybrid(values[:], 3, out) catch {
+    e => abort(@types.EncodingError::message(e))
+  }
+  let bytes = out.to_bytes()
+  let produced = hybrid_produced(bytes, 3, 900, 0) catch {
+    e => abort(@types.EncodingError::message(e))
+  }
+  assert_eq(produced, 900)
+  // A stream that ends early is refused by the walk before anything is
+  // allocated: either the run it cannot satisfy raises, or the walk reports how
+  // many values it could produce, and both are < 900.
+  let cut = bytes[:bytes.length() - 3]
+  let short = hybrid_produced(cut, 3, 900, 0) catch {
+    @types.EncodingError::Truncated(_, _, _) => -1
+    e => abort("probe: \{@types.EncodingError::message(e)}")
+  }
+  assert_true(short < 900)
 }

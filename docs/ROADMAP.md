@@ -13,6 +13,11 @@
 **Follow-through (2026-10-27)**: moonlake consumes the released 0.1.3 at `344d739` and published its accepted scope as 0.5.1 on 2026-10-27. The grouped-HLL cost refresh, sparse-state adoption and budgeted-GROUP-BY input work are complete. The scope previously called 0.6.0 was renumbered by that project's owner; no 0.6.0 publication remains pending. [The follow-through record](NEXT-STEPS.md) carries the current evidence and the join-to-aggregation delivery in 0.6.4, and [the implementation record](OPTIMIZATION-PLAN.md) retains the completed kernel scope and results. Sparse HLL shipped in 0.1.3 ([delivery record](NEXT-STEPS.md#sparse-hll-state-delivery-record), [cost table](SKETCHES.md#state-cost)); consumer FSST reuse and the Roaring index experiment retain their workload triggers. The engine work used the existing kernel
 **Release follow-through (2026-11-09)**: 0.1.4 is published from `d7d0579`, tagged `v0.1.4`, and verified from the registry on all three backends. Issue #7 is closed. PR #2 through #10 are merged and issue #1 is closed. No serialized format or encoding choice bit changed. Issues #8 and #9 remain the consumer-led evidence gates for FSST model reuse and immutable-table Roaring. [Follow-through](NEXT-STEPS.md#post-release-status-2026-11-09) and the [K7 implementation record](OPTIMIZATION-PLAN.md#k7-post-release-cpu-and-query-measurements) carry the evidence and remaining triggers.
 
+**0.2.0** collects the decoder allocation limits, page decode improvements,
+DELTA and Roaring boundary fixes, and t-digest numeric fixes. The
+[changelog](../CHANGELOG.md#020---2026-11-25) covers migration and the changes
+since 0.1.4.
+
 **Next work** follows the [post-0.1.4 plan](#8-work-after-014).
 
 ---
@@ -175,11 +180,11 @@ them, not because a release is complete.
   truncated through an `Int32` conversion, and counts read from a frame header
   before the first per-value length was read. The PLAIN, BYTE_STREAM_SPLIT, RLE,
   delta, FSST and roaring decoders changed; no encoded byte did, and the six
-  byte-diff rigs plus the container gate still pass. One residual is recorded
-  instead of fixed: `decode_rle_hybrid` still sizes its output from the caller's
-  count, and a hybrid stream legitimately encodes 2^31 - 1 values in about six
-  bytes, so bounding it is a caller-side page-size policy or an incremental
-  fill, i.e. a contract decision rather than an input check.
+  byte-diff rigs plus the container gate still pass. **2026-11-25 verification**:
+  count-driven decoders now apply a caller-adjustable `max_values` ceiling before
+  allocating their output. The hybrid and numeric delta decoders also walk
+  large inputs before allocating from the count. The portable bitmap reader
+  checks the declared cardinality before loading container bodies.
 
 ### Features
 

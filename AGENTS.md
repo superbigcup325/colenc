@@ -16,8 +16,8 @@ encoding family is in place: PLAIN, the RLE/bit-packed hybrid, dictionary, the
 delta family, BYTE_STREAM_SPLIT and FSST, with E1 to E6 byte-identical to the
 reference and E7 measured by round trip plus the scoreboard (no Parquet-native
 FSST exists). CI runs the three-backend test matrix plus the harness jobs.
-**P5 (moonlake) is merged on that project's `main`**, and the package is
-published as `superbigcup325/colenc@0.1.4`. **Phase two has started**: E8 is a
+**P5 (moonlake) is merged on that project's `main`**. The
+[roadmap](docs/ROADMAP.md) records release milestones. **Phase two has started**: E8 is a
 Roaring bitmap index, byte-identical to CRoaring (judged by pyroaring, not
 parquet-cpp), with its set operations and portable serialization in place, and
 the `sketches` package carries HyperLogLog and t-digest with their contracts in
@@ -586,8 +586,8 @@ tracked documents ship in the release archive.
   with `types.DEFAULT_MAX_VALUES` = 2^24 as the default, and answers
   `TooManyValues(count, limit)` above it. 2^24 is 4096 times the batch the
   in-tree consumer writes as one page and 16 times the most values a 1 MiB page
-  of one-byte values can hold, so a real page stays far below it, and the worst
-  allocation an untrusted header can force is 128 MiB of `Int64`. The ceiling is
+  of one-byte values can hold, so a real page stays far below it. One `Int64`
+  array at the default ceiling contains 128 MiB of elements. The ceiling is
   a policy, not a format limit: a caller that legitimately decodes more passes a
   larger `max_values~`. PLAIN, BYTE_STREAM_SPLIT and FSST take no ceiling at
   all, because their count is already bounded by the input (`count` against
@@ -627,7 +627,16 @@ tracked documents ship in the release archive.
   interleaved walk reported whichever of a short stream and a bad index it
   reached first. The guard that was supposed to hold those two copies together
   only exercised the shape a writer produces, and that shape is exactly the one
-  where the arithmetic agrees — see the miniblock entry below
+  where the arithmetic agrees — see the miniblock entry below. A later mutation
+  pass measured the limit of that guard: deleting the `PREVALIDATE_ABOVE` gate
+  in `decode_rle_hybrid` or either delta decoder, or flipping its `>` to `>=`,
+  leaves `moon test` green, because both paths raise the same `Incomplete` or
+  `Truncated` and only the *allocation* differs. So the copies are pinned by
+  direct unit tests on `hybrid_produced` / `delta_probe` (their produced count,
+  their end position, their error on a truncated stream) and the gate's effect
+  is asserted at process level — a `ulimit -v` probe, as above — not by the
+  suite. The end position matters twice over: the two-stream byte-array
+  decoders use it to find where their second stream starts
 - **A public primitive is part of the decode surface** → the hardening sweep
   covered the `encoders/` decoders and stopped at the package boundary, so
   `primitives.bit_unpack` kept `need = (bit_width * count + 7) / 8` in `Int32`:
@@ -745,6 +754,62 @@ tracked documents ship in the release archive.
   treatment, where a hostile 4-byte length prefix used to outrank the ceiling.
   When a decoder documents an error order, the argument checks in it have to be
   enumerated from the signature, not from the code that reads the stream
+- **A u32 field read into an `Int32` makes "greater than" a lie** →
+  `TDigest::from_bytes` read the centroid count with a helper that assembles four
+  bytes into an `Int32`, so a count of `2^31` came back negative: a negative
+  count is always under the `count > 2k + 1` ceiling, and `23 + count * 16`
+  wrapped to 23, which a 23-byte frame matches exactly. The reader then returned
+  `has_values: true` with no centroids, and `quantile` indexed `weights[-1]`
+  — native `SIGABRT`, wasm-gc trap, not a typed error. The reader now checks the
+  sign and the compression-dependent ceiling before calculating the centroid
+  body length. `quantile` and `quantiles` report `Incomplete` for an empty
+  centroid state, and the reader checks that the weights' *sum* is
+  finite — each weight was validated, but two near the `Double` ceiling sum to
+  an infinity and every quantile then answers NaN. The regression test drives
+  the count's high nibble at all eight values, because the format's u32 has two
+  ways to be invalid (above the ceiling, and negative) and the suite only
+  exercised the first
+- **The sweep stopped at the package the previous fix had opened** → the ceiling
+  went on every page family in `encoders/` and on `bit_unpack`, and the portable
+  bitmap reader in the *same directory* kept none: a legal run pair describes
+  65,536 ids in six bytes, so 15 bytes decoded to 65,536 ids, 29 KB to 134M and
+  a 1 GiB `Array[Int32]`, and `decode_roaring_column` compared the caller's
+  count only after that materialisation (under `ulimit -v 128M` the call died
+  instead of raising). `from_bytes` now takes `max_values~`, sums the card table
+  in 64 bits while it is read — before any container body or id array exists —
+  and `decode_roaring_column` judges a negative `count` like every other
+  decoder instead of treating it as "do not check". Enumerate the decode
+  surface from `pkg.generated.mbti` when a sweep claims to cover it, not from
+  the files the last fix touched
+- **A value-count ceiling applies per allocation** → one `Int64` array at the
+  default takes 128 MiB of element storage. A peak-memory estimate also needs
+  the hybrid or numeric delta unpack scratch, or the length arrays and decoded
+  values of a delta byte-array page. The scratch size varies by run or
+  miniblock, and the decoded byte payloads vary by value length.
+- **A check that lands after the allocation is not a check, part two** →
+  `decode_delta_length_byte_array` sized its output array from the count and
+  then validated each suffix inside the build loop, so a 12-byte body that
+  claimed the ceiling reached 200 MB before the first short suffix was reported
+  as `Truncated`. Its sibling `decode_delta_byte_array` had the right shape
+  already — validate the whole suffix span, then build — and the two live ten
+  lines apart. When two decoders share a shape, read them side by side before
+  believing either
+- **A byte is not a domain** → the FSST frame carries a symbol length in one
+  byte, and `decode_fsst` accepted up to 255 while the trainer caps a symbol at
+  `FSST_MAX_SYMBOL_LENGTH` (8), so a frame no writer can produce made one code
+  byte expand 254x (100 KB of body → a 25 MB value, and nothing in the family
+  budgets for output bytes). The decode now refuses `length > 8` with `Corrupt`.
+  The general rule: a field's width says what a hostile writer *could* put
+  there, the encoder says what a legitimate one *does*; where the decoder's job
+  is to reject the states its own writer cannot produce, the encoder's constant
+  is the bound, not the field width
+- **An exported helper with a precondition is a panic on the public surface** →
+  `encoders.read_u32_le` is `pub` and indexes four bytes unchecked; the decoders
+  bound the offset first, but a consumer that passes `-1` aborts the process.
+  It stays unchecked because the per-value cost of the check is what the cursor
+  loops exist to avoid, and the harness probes read bytes through it, so the
+  doc comment now says it panics instead of the earlier "callers check the
+  bounds first" — a contract stated in the code the caller reads
 
 ## Command reference
 

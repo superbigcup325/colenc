@@ -40,6 +40,45 @@ fn tdigest_is_finite(value : Double) -> Bool {
 }
 
 ///|
+fn tdigest_interpolate(
+  left : Double,
+  right : Double,
+  fraction : Double,
+) -> Double {
+  // At the right centroid, rounding the difference and adding it back can
+  // overflow even when the endpoint and the rounded difference are finite.
+  if fraction == 1.0 {
+    return right
+  }
+  let delta = right - left
+  if tdigest_is_finite(delta) {
+    left + delta * fraction
+  } else {
+    // An overflowing distance between finite endpoints crosses zero. Scaling
+    // each endpoint first keeps both terms finite and gives them opposite signs.
+    left * (1.0 - fraction) + right * fraction
+  }
+}
+
+///|
+/// Recompute a centroid whose weighted sum overflowed, blending its inputs
+/// without multiplying a mean by the centroid's full weight.
+fn tdigest_blend_centroid(
+  means : Array[Double],
+  weights : Array[Double],
+  start : Int32,
+  end : Int32,
+) -> Double {
+  let mut mean = means[start]
+  let mut weight = weights[start]
+  for index in (start + 1)..<end {
+    weight += weights[index]
+    mean = tdigest_interpolate(mean, means[index], weights[index] / weight)
+  }
+  mean
+}
+
+///|
 /// The k1 scale function: monotone in q, so "this centroid spans one unit of
 /// k-space at most" is a checkable statement.
 fn tdigest_scale(compression : Int32, q : Double) -> Double {
@@ -106,7 +145,18 @@ fn tdigest_compress_centroids(
       weighted = weighted + means[next] * weights[next]
       next += 1
     }
-    out_means.push(weighted / weight)
+    let average = weighted / weight
+    let mean = if tdigest_is_finite(average) {
+      average
+    } else {
+      tdigest_blend_centroid(means, weights, index, next)
+    }
+    // Rounding can move an average just outside its inputs, including a run
+    // of identical fractional means. The pass can visit either sort order.
+    let first = means[index]
+    let last = means[next - 1]
+    let (low, high) = if first <= last { (first, last) } else { (last, first) }
+    out_means.push(mean.clamp(min=low, max=high))
     out_weights.push(weight)
     before = before + weight
     index = next
@@ -348,6 +398,10 @@ pub fn TDigest::merge(
       "compression \{self.compression} does not match \{other.compression}",
     )
   }
+  let total = self.total + other.total
+  if !tdigest_is_finite(total) {
+    raise @types.EncodingError::InvalidArgument("merged count is not finite")
+  }
   // Both operands are read through `tdigest_pairs`, which folds a raw buffer into
   // a temporary list: neither digest is compressed in place, so a caller's sketch
   // answers the same before and after the merge.
@@ -378,7 +432,6 @@ pub fn TDigest::merge(
     weights.push(right_weights[right])
     right += 1
   }
-  let total = self.total + other.total
   let (folded_means, folded_weights) = tdigest_compress_centroids(
     self.compression,
     means,
@@ -432,6 +485,12 @@ pub fn TDigest::quantile(
     return self.maximum
   }
   let count = self.means.length()
+  // `has_values` with no centroids is a state the writer cannot produce and
+  // `from_bytes` refuses; the guard stays so a future hole in that reader
+  // reports an error instead of indexing `weights[-1]`.
+  if count == 0 {
+    raise @types.EncodingError::Incomplete(0, 1)
+  }
   if count == 1 {
     return self.means[0]
   }
@@ -445,13 +504,12 @@ pub fn TDigest::quantile(
       if index == 0 {
         let span = center
         let t = if span == 0.0 { 0.0 } else { target / span }
-        return self.minimum + (self.means[0] - self.minimum) * t
+        return tdigest_interpolate(self.minimum, self.means[0], t)
       }
       let previous_center = before - self.weights[index - 1] / 2.0
       let span = center - previous_center
       let t = if span == 0.0 { 0.0 } else { (target - previous_center) / span }
-      return self.means[index - 1] +
-        (self.means[index] - self.means[index - 1]) * t
+      return tdigest_interpolate(self.means[index - 1], self.means[index], t)
     }
     before = before + weight
     index += 1
@@ -459,7 +517,7 @@ pub fn TDigest::quantile(
   let last_center = before - self.weights[count - 1] / 2.0
   let span = self.total - last_center
   let t = if span == 0.0 { 0.0 } else { (target - last_center) / span }
-  self.means[count - 1] + (self.maximum - self.means[count - 1]) * t
+  tdigest_interpolate(self.means[count - 1], self.maximum, t)
 }
 
 ///|
@@ -484,6 +542,11 @@ pub fn TDigest::quantiles(
   }
   self.compress()
   let count = self.means.length()
+  // Same invariant as `quantile`: a digest that has values always has at least
+  // one centroid, and an empty one must not reach `weights[count - 1]`.
+  if count == 0 {
+    raise @types.EncodingError::Incomplete(0, 1)
+  }
   let centers : Array[Double] = Array(capacity=count)
   let cumulative : Array[Double] = Array(capacity=count)
   let mut before = 0.0
@@ -521,22 +584,20 @@ pub fn TDigest::quantiles(
       let last_center = cumulative[count - 1] + self.weights[count - 1] / 2.0
       let span = self.total - last_center
       let t = if span == 0.0 { 0.0 } else { (target - last_center) / span }
-      out.push(
-        self.means[count - 1] + (self.maximum - self.means[count - 1]) * t,
-      )
+      out.push(tdigest_interpolate(self.means[count - 1], self.maximum, t))
       continue
     }
     let center = centers[low]
     if low == 0 {
       let span = center
       let t = if span == 0.0 { 0.0 } else { target / span }
-      out.push(self.minimum + (self.means[0] - self.minimum) * t)
+      out.push(tdigest_interpolate(self.minimum, self.means[0], t))
       continue
     }
     let previous_center = cumulative[low] - self.weights[low - 1] / 2.0
     let span = center - previous_center
     let t = if span == 0.0 { 0.0 } else { (target - previous_center) / span }
-    out.push(self.means[low - 1] + (self.means[low] - self.means[low - 1]) * t)
+    out.push(tdigest_interpolate(self.means[low - 1], self.means[low], t))
   }
   out
 }
@@ -623,14 +684,18 @@ pub fn TDigest::from_bytes(
     )
   }
   let count = tdigest_read_u32_le(bytes, 3)
-  if count > compression * TDIGEST_CENTROID_FACTOR + 1 {
+  // A u32 with its top bit set reads back as a negative Int32. Validate both
+  // bounds before multiplying by the size of a centroid pair.
+  if count < 0 || count > compression * TDIGEST_CENTROID_FACTOR + 1 {
     raise @types.EncodingError::Corrupt(3)
   }
-  if bytes.length() != TDIGEST_HEADER_BYTES + count * 16 {
+  let needed = count * 16
+  let available = bytes.length() - TDIGEST_HEADER_BYTES
+  if available != needed {
     raise @types.EncodingError::Truncated(
       TDIGEST_HEADER_BYTES,
-      count * 16,
-      bytes.length() - TDIGEST_HEADER_BYTES,
+      needed,
+      available,
     )
   }
   let minimum = tdigest_read_f64_le(bytes, 7)
@@ -677,6 +742,15 @@ pub fn TDigest::from_bytes(
       has_values: false,
       reverse: false,
     }
+  }
+  // Each weight is finite, but their sum need not be: two weights near the
+  // `Double` ceiling overflow to an infinity, and every quantile then works in
+  // infinities and answers NaN. The writer's weights are value counts, so it
+  // cannot produce that state either.
+  if !tdigest_is_finite(total) {
+    raise @types.EncodingError::Corrupt(
+      TDIGEST_HEADER_BYTES + (count - 1) * 16 + 8,
+    )
   }
   {
     compression,

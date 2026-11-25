@@ -177,13 +177,32 @@ test "rle hybrid decode rejects a run whose byte count wraps" {
     _ => abort("expected a saturated Truncated")
   }
   // 2^28 groups is 2^31 values, which no page can ask for: `groups * 8` used
-  // to wrap as well.
-  let error = capture_error(() => {
-    ignore(decode_rle_hybrid(b"\x81\x80\x80\x80\x02", 1, 4))
-  })
-  match error {
-    @types.EncodingError::Truncated(5, 2147483647, 0) => ()
-    _ => abort("expected a saturated Truncated")
+  // to wrap as well. No input can satisfy such a run, so it is a structural
+  // violation and answers `Corrupt` like the repeat guard — the earlier
+  // `Truncated(need = 2^31 - 1)` read as "fetch more bytes" and carried a value
+  // count in a byte-count field.
+  let declared : Array[Bytes] = [
+    b"\x81\x80\x80\x80\x02", b"\x80\x80\x80\x80\x10",
+  ]
+  for stream in declared {
+    let error = capture_error(() => ignore(decode_rle_hybrid(stream, 1, 4)))
+    match error {
+      @types.EncodingError::Corrupt(5) => ()
+      other =>
+        abort(
+          "decode: expected Corrupt(5), got \{@types.EncodingError::message(other)}",
+        )
+    }
+    // The pre-validation copy has to agree, or the pass would accept a stream
+    // the decode refuses.
+    let error = capture_error(() => ignore(hybrid_produced(stream, 1, 4, 0)))
+    match error {
+      @types.EncodingError::Corrupt(5) => ()
+      other =>
+        abort(
+          "probe: expected Corrupt(5), got \{@types.EncodingError::message(other)}",
+        )
+    }
   }
 }
 

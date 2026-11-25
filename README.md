@@ -36,7 +36,12 @@ gates are recorded in [the sketch contracts](docs/SKETCHES.md). Release
 follow-through and conditional library work are planned in
 [the current next steps](docs/NEXT-STEPS.md).
 
-Version 0.1.4 is the current release. It carries the Roaring buffer-offset and
+Version 0.2.0 adds configurable decoder limits, improves page decode
+throughput, fixes DELTA byte-array stream boundaries, and keeps t-digest
+queries and merges within their finite numeric range. See the
+[migration notes](CHANGELOG.md#020---2026-11-25) for decoder API changes.
+
+Version 0.1.4 carries the Roaring buffer-offset and
 decoder-validation fixes, HLL typed hashing and batch updates, `UInt64::clz`,
 exact inverse powers, one-pass sparse deserialization, `TDigest::quantiles`, and
 the sparse Roaring batch-iteration fix. The serialized formats and encoding
@@ -59,9 +64,9 @@ work and reusable FSST models, with a
 
 Integration with [moonlake](https://github.com/superbigcup325/moonlake) is
 merged on its `main`: Parquet decoding routed through colenc, a new write path,
-and the spill format re-encoded (40% smaller). The package is published as
-`superbigcup325/colenc@0.1.4` on mooncakes, so a consumer resolves it from the
-registry by version.
+and the spill format re-encoded (40% smaller). Resolve
+[`superbigcup325/colenc`](https://mooncakes.io/docs/superbigcup325/colenc) from
+Mooncakes by version.
 
 ## Quick start
 
@@ -116,8 +121,9 @@ let back = @colenc.decode_column(
 
 `decode_column` takes an optional `max_values` ceiling, defaulting to
 `@colenc_types.DEFAULT_MAX_VALUES` (2^24), and forwards it to the families whose
-stream can declare a value count independent of the input: the RLE hybrid, the
-delta family and the dictionary indices. Each of those can describe 2^31 - 1
+stream can declare a value count independent of the input: the RLE hybrid and
+the delta family (`decode_dictionary`, which is not on the generic dispatch,
+takes the same ceiling for its index stream). Each of those can describe 2^31 - 1
 values in a few bytes, which is a valid stream, so no input check can refuse the
 count: the ceiling is what keeps an untrusted header from asking for a 16 GiB
 output, and above `types.PREVALIDATE_ABOVE` values those decoders also walk the
@@ -129,6 +135,19 @@ ceiling of their own. Raise it per call when a caller really decodes more than
 2^24 values in one page; the error is
 `EncodingError::TooManyValues(count, limit)`. The `bit_unpack` primitive takes
 the same ceiling, as `primitives.DEFAULT_MAX_VALUES`.
+
+The portable bitmap reader takes the same ceiling, for the same reason: a legal
+run pair describes 65,536 ids in six bytes, so `RoaringBitmap::from_bytes`,
+`decode_roaring` and `decode_roaring_column` all take `max_values` and compare
+the set's declared cardinality against it while the container table is read —
+before any container body or id array exists. The packed readers
+`RoaringBitmap::from_bytes` and `from_bytes_with_consumed` accept an `Int64`
+ceiling, so `max_values=2147483648L` permits a set covering the full supported
+id domain. The column decoders use an `Int32` ceiling for the expanded array.
+
+When passing a decoder with `max_values~` as a function value, wrap the call in
+a positional closure such as
+`let read_bitmap = data => @colenc_encoders.RoaringBitmap::from_bytes(data)`.
 
 Dictionary encoding has two output streams (dictionary page plus indices), so it
 uses `encode_dictionary` / `decode_dictionary` instead of `encode_column`.

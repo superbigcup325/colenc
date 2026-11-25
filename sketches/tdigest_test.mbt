@@ -67,6 +67,41 @@ test "a single value answers every quantile" {
 }
 
 ///|
+test "opposite finite extremes interpolate to a finite median" {
+  let digest = tdigest_of([-1.0e308, 1.0e308])
+  assert_eq(digest.quantile(0.5), 0.0)
+  assert_eq(digest.quantiles([0.25, 0.5, 0.75]), [-1.0e308, 0.0, 1.0e308])
+}
+
+///|
+test "a quantile at the largest finite centroid returns its mean" {
+  let largest = 1.7976931348623157e308
+  let lower = 2.9937604643020797e292
+  let digest = tdigest_of([lower, largest])
+  assert_eq(digest.quantile(0.75), largest)
+  assert_eq(digest.quantiles([0.75]), [largest])
+}
+
+///|
+test "repeated finite extremes compress to centroids that survive serialization" {
+  for value in [-1.0e308, 1.0e308] {
+    let digest = tdigest_of(Array::make(1000, value))
+    let back = @sketches.TDigest::from_bytes(digest.to_bytes().exact_view())
+    assert_eq(back.count(), 1000.0)
+    assert_eq(back.quantile(0.5), value)
+  }
+}
+
+///|
+test "compressing repeated fractional values preserves their exact extrema" {
+  for value in [-0.1, 0.1] {
+    let digest = tdigest_of(Array::make(1000, value))
+    let restored = @sketches.TDigest::from_bytes(digest.to_bytes().exact_view())
+    assert_eq(restored.quantile(0.5), value)
+  }
+}
+
+///|
 test "a NaN or an infinite value is rejected" {
   let digest = @sketches.TDigest::new_default()
   let nan = 0.0 / 0.0
@@ -237,6 +272,25 @@ test "merging different compression parameters is rejected" {
 }
 
 ///|
+test "self merge rejects a count that would overflow" {
+  let mut digest = tdigest_of([0.0])
+  for _ in 0..<1023 {
+    digest = digest.merge(digest)
+  }
+  let bytes = digest.to_bytes()
+  let round_trip = @sketches.TDigest::from_bytes(bytes.exact_view())
+  assert_eq(round_trip.count(), digest.count())
+  let outcome = try {
+    let merged = digest.merge(digest)
+    "merge succeeded with count \{merged.count()}"
+  } catch {
+    @types.EncodingError::InvalidArgument(_) => "rejected"
+    error => @types.EncodingError::message(error)
+  }
+  assert_eq(outcome, "rejected")
+}
+
+///|
 test "malformed streams are rejected" {
   let digest = tdigest_of([1.0, 2.0, 3.0, 4.0, 5.0])
   let bytes = digest.to_bytes()
@@ -259,6 +313,103 @@ test "malformed streams are rejected" {
   assert_true(rejects(corrupt(0, 9).exact_view()))
   assert_true(rejects(corrupt(1, 1).exact_view()))
   assert_true(rejects(bytes.exact_view(start=0, end=10)))
+}
+
+///|
+test "a short t-digest reports the size of the missing centroid body" {
+  let bytes = tdigest_of([1.0]).to_bytes()
+  let needed = try {
+    ignore(@sketches.TDigest::from_bytes(bytes.exact_view(end=23)))
+    abort("expected a truncated centroid")
+  } catch {
+    @types.EncodingError::Truncated(23, need, 0) => need
+    _ => abort("expected a Truncated at the first centroid")
+  }
+  assert_eq(needed, 16)
+}
+
+///|
+test "a centroid count whose high bit is set is refused" {
+  // The count is a u32 in the format, and the reader assembles it into an
+  // `Int32`, so 2^31 comes back negative: a negative count passes the
+  // `count > 2k + 1` ceiling, and `23 + count * 16` wraps to 23, which a
+  // 23-byte frame matches exactly. The reader then returned `has_values` with
+  // no centroids, and `quantile` indexed `weights[-1]`, which aborts the
+  // process instead of raising. Every high nibble that overflows `count * 16`
+  // has to be refused, not just the one a test happens to pick.
+  for high in [0x80, 0x90, 0xA0, 0xB0, 0xC0, 0xD0, 0xE0, 0xF0] {
+    let frame = FixedArray::make(23, b'\x00')
+    frame[0] = b'\x01' // version
+    frame[1] = b'\x0a' // compression 10
+    frame[2] = b'\x00'
+    frame[3] = b'\x00'
+    frame[4] = b'\x00'
+    frame[5] = b'\x00'
+    frame[6] = high.to_byte() // the count's top byte
+    let bytes = Bytes::from_array(frame.exact_view())
+    let at = try {
+      let _ = @sketches.TDigest::from_bytes(bytes.exact_view())
+      abort("a negative centroid count was accepted")
+    } catch {
+      @types.EncodingError::Corrupt(at) => at
+      _ => abort("expected Corrupt(3)")
+    }
+    assert_eq(at, 3)
+  }
+}
+
+///|
+fn tdigest_frame_put_f64(
+  out : FixedArray[Byte],
+  at : Int32,
+  value : Double,
+) -> Unit {
+  let bits = value.reinterpret_as_int64()
+  for index in 0..<8 {
+    out[at + index] = ((bits >> (index * 8)) & 0xFFL).to_int().to_byte()
+  }
+}
+
+///|
+test "a centroid count above 2k + 1 and an infinite weight sum are refused" {
+  // A frame whose length matches its count is not enough: the count itself has
+  // a ceiling (`2k + 1`, here 21 at compression 10), and the weights, each
+  // finite, can still sum to an infinity that every quantile would work in.
+  let over = FixedArray::make(23 + 22 * 16, b'\x00')
+  over[0] = b'\x01'
+  over[1] = b'\x0a'
+  over[2] = b'\x00'
+  over[3] = b'\x16' // count 22
+  let over_bytes = Bytes::from_array(over.exact_view())
+  let at = try {
+    let _ = @sketches.TDigest::from_bytes(over_bytes.exact_view())
+    abort("a count above 2k + 1 was accepted")
+  } catch {
+    @types.EncodingError::Corrupt(at) => at
+    _ => abort("expected Corrupt(3)")
+  }
+  assert_eq(at, 3)
+  let huge = 1.7e308
+  let overflowing = FixedArray::make(23 + 2 * 16, b'\x00')
+  overflowing[0] = b'\x01'
+  overflowing[1] = b'\x64' // compression 100
+  overflowing[2] = b'\x00'
+  overflowing[3] = b'\x02' // count 2
+  tdigest_frame_put_f64(overflowing, 7, 0.0) // minimum
+  tdigest_frame_put_f64(overflowing, 15, 1.0) // maximum
+  tdigest_frame_put_f64(overflowing, 23, 0.5)
+  tdigest_frame_put_f64(overflowing, 31, huge)
+  tdigest_frame_put_f64(overflowing, 39, 0.5)
+  tdigest_frame_put_f64(overflowing, 47, huge)
+  let overflowing_bytes = Bytes::from_array(overflowing.exact_view())
+  let weight_at = try {
+    let _ = @sketches.TDigest::from_bytes(overflowing_bytes.exact_view())
+    abort("an infinite weight sum was accepted")
+  } catch {
+    @types.EncodingError::Corrupt(at) => at
+    _ => abort("expected Corrupt at the last weight")
+  }
+  assert_eq(weight_at, 47)
 }
 
 ///|

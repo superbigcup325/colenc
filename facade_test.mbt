@@ -69,6 +69,30 @@ test "facade reports bytes appended, not total length" {
 }
 
 ///|
+test "roaring facade compares the expected count with the distinct ids" {
+  let ids = @types.ColBuf::Int32s([65536, 7, 65536, 0])
+  let out = @buffer.Buffer()
+  ignore(@colenc.encode_roaring_column(ids, out))
+  let bytes = out.to_bytes()
+  match @colenc.decode_roaring_column(bytes, @types.Int32, 3) {
+    Int32s(values) => assert_eq(values, [0, 7, 65536])
+    _ => abort("expected Int32 ids")
+  }
+  for expected in [2, 4] {
+    let error = capture_error(() => {
+      ignore(@colenc.decode_roaring_column(bytes, @types.Int32, expected))
+    })
+    match error {
+      @types.EncodingError::Incomplete(actual, requested) => {
+        assert_eq(actual, 3)
+        assert_eq(requested, expected)
+      }
+      _ => abort("expected an actual and requested count")
+    }
+  }
+}
+
+///|
 test "facade rejects unimplemented families" {
   let out = @buffer.Buffer()
   let error = capture_error(() => {
@@ -283,6 +307,30 @@ test "facade forwards a non-default max_values to every family that honours it" 
     other =>
       fail(
         "decode_dictionary: expected TooManyValues(4, 3), got \{@types.EncodingError::message(other)}",
+      )
+  }
+  // The bitmap is outside the generic dispatch, so its own entry point carries
+  // the forward. A single full run container declares 65,536 ids in 15 bytes,
+  // which is why the ceiling has to travel all the way down to the parse.
+  let full_container = b"\x3b\x30\x00\x00\x01\x00\x00\xff\xff\x01\x00\x00\x00\xff\xff"
+  let error = capture_error(() => {
+    ignore(
+      @colenc.decode_roaring_column(
+        full_container,
+        @types.Int32,
+        65_536,
+        max_values=65_535,
+      ),
+    )
+  })
+  match error {
+    @types.EncodingError::TooManyValues(count, limit) => {
+      assert_eq(count, 65_536)
+      assert_eq(limit, 65_535)
+    }
+    other =>
+      fail(
+        "decode_roaring_column: expected TooManyValues(65536, 65535), got \{@types.EncodingError::message(other)}",
       )
   }
 }

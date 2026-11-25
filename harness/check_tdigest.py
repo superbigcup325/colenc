@@ -51,18 +51,19 @@ def generate(distribution, order, size, seed):
 
 
 def run_probe(values, compression, parts=1):
-    path = Path(tempfile.gettempdir()) / "colenc-tdigest-input.f64le"
-    values.tofile(path)
     quantiles = ",".join(f"{q:g}" for q in QUANTILES)
-    completed = subprocess.run(
-        [
-            "moon", "run", "--target", "native", "harness/tdigest_probe", "--",
-            str(path), str(compression), quantiles, str(parts),
-        ],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-    )
+    with tempfile.TemporaryDirectory(prefix="colenc-tdigest-") as directory:
+        path = Path(directory) / "input.f64le"
+        values.tofile(path)
+        completed = subprocess.run(
+            [
+                "moon", "run", "--target", "native", "harness/tdigest_probe", "--",
+                str(path), str(compression), quantiles, str(parts),
+            ],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
     if completed.returncode != 0:
         raise SystemExit(f"probe failed:\n{completed.stdout}\n{completed.stderr}")
     result = {"quantiles": {}, "sequential": {}, "balanced": {}}

@@ -265,20 +265,44 @@ fn read_delta_header(
 }
 
 ///|
+/// Counts the miniblocks that have bodies in the block starting at `produced`.
+/// The whole width table is present, but the unused entries can be arbitrary.
+#inline
+fn DeltaHeader::used_miniblocks(
+  self : DeltaHeader,
+  produced : Int32,
+  miniblock_size : Int32,
+) -> Int32 {
+  let remaining = self.count - produced
+  if remaining >= self.block_size {
+    self.miniblocks
+  } else {
+    (remaining - 1) / miniblock_size + 1
+  }
+}
+
+///|
 /// Walks the blocks of a DELTA_BINARY_PACKED stream without unpacking, raising
-/// the same errors the decoder would. A second copy of the block arithmetic for
-/// the same reason `hybrid_produced` is one: sharing it with the decode loop
-/// cost 4% to 7% of decode time even when this pass never ran, because every
-/// miniblock then went through a call and a returned struct. Only reached above
-/// `PREVALIDATE_ABOVE`, and a test decodes a stream just above the threshold so
-/// the two copies cannot drift apart unnoticed.
+/// the same errors the decoder would, and returns where the stream ends. A
+/// second copy of the block arithmetic for the same reason `hybrid_produced` is
+/// one: sharing it with the decode loop cost 4% to 7% of decode time even when
+/// this pass never ran, because every miniblock then went through a call and a
+/// returned struct. Only reached above `PREVALIDATE_ABOVE`, and a test decodes a
+/// stream just above the threshold so the two copies cannot drift apart
+/// unnoticed.
+///
+/// The returned position is also what the two-stream byte-array decoders use to
+/// find where their second stream starts when the caller asks for fewer values
+/// than the stream declares: decoding `count` values stops at the end of the
+/// block that produced them, which is the end of the stream only when `count`
+/// is the header's count.
 fn delta_probe(
   data : BytesView,
   count : Int32,
   start : Int32,
   header : DeltaHeader,
   max_width : Int32,
-) -> Unit raise @types.EncodingError {
+) -> Int32 raise @types.EncodingError {
   let miniblock_size = header.block_size / header.miniblocks
   let miniblock_remainder = miniblock_size % 8
   let mut pos = start
@@ -297,7 +321,8 @@ fn delta_probe(
     }
     let widths_at = pos
     pos += header.miniblocks
-    for block_index in 0..<header.miniblocks {
+    let used_miniblocks = header.used_miniblocks(produced, miniblock_size)
+    for block_index in 0..<used_miniblocks {
       let width = data[widths_at + block_index].to_int()
       if width > max_width {
         raise @types.EncodingError::InvalidBitWidth(width)
@@ -335,6 +360,7 @@ fn delta_probe(
       produced += take
     }
   }
+  pos
 }
 
 ///|
@@ -368,7 +394,7 @@ pub fn decode_delta_int64(
   // Above the threshold the output is big enough to be worth walking the blocks
   // twice, so a stream that ends short is refused before the output exists.
   if count > @types.PREVALIDATE_ABOVE {
-    delta_probe(data, count, offset + header_len, header, 64)
+    ignore(delta_probe(data, count, offset + header_len, header, 64))
   }
   let values : Array[Int64] = Array::unsafe_make_uninit(count)
   values[0] = header.first
@@ -389,12 +415,13 @@ pub fn decode_delta_int64(
         data.length() - pos,
       )
     }
-    let widths = FixedArray::make(header.miniblocks, 0)
-    for index in 0..<header.miniblocks {
+    let used_miniblocks = header.used_miniblocks(produced, miniblock_size)
+    let widths = FixedArray::make(used_miniblocks, 0)
+    for index in 0..<used_miniblocks {
       widths[index] = data[pos + index].to_int()
     }
     pos += header.miniblocks
-    for block_index in 0..<header.miniblocks {
+    for block_index in 0..<used_miniblocks {
       let width = widths[block_index]
       if width > 64 {
         raise @types.EncodingError::InvalidBitWidth(width)
@@ -467,7 +494,7 @@ pub fn decode_delta_int32(
   // Same as the 64-bit path: the count is known up front, so the output is
   // allocated once instead of grown by pushes.
   if count > @types.PREVALIDATE_ABOVE {
-    delta_probe(data, count, offset + header_len, header, 32)
+    ignore(delta_probe(data, count, offset + header_len, header, 32))
   }
   let values : Array[Int32] = Array::unsafe_make_uninit(count)
   values[0] = header.first.to_int()
@@ -488,12 +515,13 @@ pub fn decode_delta_int32(
         data.length() - pos,
       )
     }
-    let widths = FixedArray::make(header.miniblocks, 0)
-    for index in 0..<header.miniblocks {
+    let used_miniblocks = header.used_miniblocks(produced, miniblock_size)
+    let widths = FixedArray::make(used_miniblocks, 0)
+    for index in 0..<used_miniblocks {
       widths[index] = data[pos + index].to_int()
     }
     pos += header.miniblocks
-    for block_index in 0..<header.miniblocks {
+    for block_index in 0..<used_miniblocks {
       let width = widths[block_index]
       if width > 32 {
         raise @types.EncodingError::InvalidBitWidth(width)
@@ -559,35 +587,68 @@ pub fn encode_delta_length_byte_array(
 }
 
 ///|
+/// Decode the first `count` values. The second result is the number of bytes
+/// consumed from `offset`. To advance to the next page, decode all its values.
 pub fn decode_delta_length_byte_array(
   data : BytesView,
   count : Int32,
   offset~ : Int32 = 0,
   max_values~ : Int32 = @types.DEFAULT_MAX_VALUES,
 ) -> (Array[Bytes], Int32) raise @types.EncodingError {
+  if count < 0 {
+    raise @types.EncodingError::InvalidCount(count)
+  }
+  if count > max_values {
+    raise @types.EncodingError::TooManyValues(count, max_values)
+  }
+  // The two streams are laid out end to end, so the raw bytes start where the
+  // *whole* length stream ends. Decoding `count` lengths stops at the end of the
+  // block that produced them, which is the end of the stream only when `count`
+  // is the header's count: asking for a prefix used to read the raw bytes from
+  // inside the length stream and return wrong values with no error at all.
+  let (header, header_len) = read_delta_header(data, offset)
+  if count > header.count {
+    raise @types.EncodingError::Incomplete(header.count, count)
+  }
+  if count == 0 {
+    return ([], header_len)
+  }
   let (lengths, lengths_len) = decode_delta_int32(
     data,
     count,
     offset~,
     max_values~,
   )
-  let out : Array[Bytes] = Array::make(lengths.length(), b"")
-  let mut pos = offset + lengths_len
-  let mut index = 0
+  let mut values_at = if count == header.count {
+    offset + lengths_len
+  } else {
+    delta_probe(data, header.count, offset + header_len, header, 32)
+  }
+  // The whole suffix stream is validated before the value array is allocated:
+  // `out` is sized from the count, and with the check below inside the build
+  // loop a 12-byte body that claimed the ceiling reached 200 MB before the
+  // first short suffix was reported. `decode_delta_byte_array` has the same
+  // shape for the same reason.
+  let mut end = values_at
   for length in lengths {
     if length < 0 {
       raise @types.EncodingError::InvalidCount(length)
     }
-    // `pos + length` wraps for a decoded length near `Int32::max_value`, which
+    // `end + length` wraps for a decoded length near `Int32::max_value`, which
     // used to pass this check and hand a negative end to the slice below.
-    if length > data.length() - pos {
-      raise @types.EncodingError::Truncated(pos, length, data.length() - pos)
+    if length > data.length() - end {
+      raise @types.EncodingError::Truncated(end, length, data.length() - end)
     }
-    out[index] = data[pos:pos + length].to_owned()
-    index += 1
-    pos += length
+    end += length
   }
-  (out, pos - offset)
+  let out : Array[Bytes] = Array::make(lengths.length(), b"")
+  let mut index = 0
+  for length in lengths {
+    out[index] = data[values_at:values_at + length].to_owned()
+    index += 1
+    values_at += length
+  }
+  (out, end - offset)
 }
 
 ///|
@@ -629,6 +690,9 @@ pub fn encode_delta_byte_array(
 /// DELTA_BYTE_ARRAY: prefix lengths as delta-packed int32, then the suffixes as
 /// a DELTA_LENGTH_BYTE_ARRAY stream.
 ///
+/// The consumed byte count is relative to `offset`. To advance to the next
+/// page, decode all the values in the current one.
+///
 /// The suffix bytes stay views into `data`: each value is allocated once at its
 /// exact size and the prefix and suffix are copied straight into it. Decoding
 /// the suffix stream through `decode_delta_length_byte_array` first would
@@ -639,23 +703,72 @@ pub fn decode_delta_byte_array(
   offset~ : Int32 = 0,
   max_values~ : Int32 = @types.DEFAULT_MAX_VALUES,
 ) -> (Array[Bytes], Int32) raise @types.EncodingError {
+  if count < 0 {
+    raise @types.EncodingError::InvalidCount(count)
+  }
+  if count > max_values {
+    raise @types.EncodingError::TooManyValues(count, max_values)
+  }
+  // Both streams are sized by the header's count, not by the caller's, so the
+  // starts are computed from the declared count when the caller asks for a
+  // prefix: decoding `count` values stops inside the last block it needed, and
+  // that is not where the next stream begins.
+  let (prefix_header, prefix_header_len) = read_delta_header(data, offset)
+  if count > prefix_header.count {
+    raise @types.EncodingError::Incomplete(prefix_header.count, count)
+  }
+  // Empty and single-value pages have no prefix blocks. Preserve the
+  // consumed length of both headers for a zero-value read of either page.
+  if count == 0 && prefix_header.count > 1 {
+    return ([], prefix_header_len)
+  }
   let (prefixes, prefix_len) = decode_delta_int32(
     data,
     count,
     offset~,
     max_values~,
   )
-  let suffix_offset = offset + prefix_len
+  let suffix_offset = if count == prefix_header.count {
+    offset + prefix_len
+  } else {
+    delta_probe(
+      data,
+      prefix_header.count,
+      offset + prefix_header_len,
+      prefix_header,
+      32,
+    )
+  }
+  let (length_header, length_header_len) = read_delta_header(
+    data, suffix_offset,
+  )
+  if count > length_header.count {
+    raise @types.EncodingError::Incomplete(length_header.count, count)
+  }
+  if length_header.count != prefix_header.count {
+    raise @types.EncodingError::Corrupt(suffix_offset)
+  }
   let (lengths, lengths_len) = decode_delta_int32(
     data,
     count,
     offset=suffix_offset,
     max_values~,
   )
+  let mut values_at = if count == length_header.count {
+    suffix_offset + lengths_len
+  } else {
+    delta_probe(
+      data,
+      length_header.count,
+      suffix_offset + length_header_len,
+      length_header,
+      32,
+    )
+  }
   // The whole suffix stream is validated before any value is built, so a
   // malformed length still reports the error the two-stream decoder reported
   // rather than the first prefix error the value walk would reach.
-  let mut end = suffix_offset + lengths_len
+  let mut end = values_at
   for length in lengths {
     if length < 0 {
       raise @types.EncodingError::InvalidCount(length)
@@ -668,7 +781,6 @@ pub fn decode_delta_byte_array(
   }
   let values : Array[Bytes] = Array::make(count, b"")
   let mut previous : Bytes = b""
-  let mut start = suffix_offset + lengths_len
   for index in 0..<count {
     let prefix = prefixes[index]
     if prefix < 0 || prefix > previous.length() {
@@ -677,11 +789,11 @@ pub fn decode_delta_byte_array(
     let length = lengths[index]
     let body : FixedArray[Byte] = FixedArray::make(prefix + length, b'\x00')
     body.blit_from_bytesview(0, previous[0:prefix])
-    body.blit_from_bytesview(prefix, data[start:start + length])
+    body.blit_from_bytesview(prefix, data[values_at:values_at + length])
     let value = body.unsafe_reinterpret_as_bytes()
     values[index] = value
     previous = value
-    start += length
+    values_at += length
   }
   (values, end - offset)
 }

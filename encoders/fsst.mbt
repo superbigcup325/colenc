@@ -488,6 +488,14 @@ pub fn decode_fsst(
         }
         let length = data[position].to_int()
         position += 1
+        // The frame carries the length in a byte, but the writer never emits a
+        // symbol longer than `FSST_MAX_SYMBOL_LENGTH`, so a longer one is a
+        // state no writer produces -- and one code byte would then expand to
+        // 255 bytes, which is a 254x amplification this family does not
+        // budget for anywhere.
+        if length > FSST_MAX_SYMBOL_LENGTH {
+          raise @types.EncodingError::Corrupt(position - 1)
+        }
         if position + length > data.length() {
           raise @types.EncodingError::Truncated(
             position,
