@@ -32,15 +32,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   above the ceiling. Decoding can also allocate scratch and byte payloads. Pass
   a larger `max_values` when a caller decodes more values in one page.
 
-- An optional `max_values` ceiling on the portable bitmap reader —
-  `RoaringBitmap::from_bytes`, `from_bytes_with_consumed`, `decode_roaring` and
-  `decode_roaring_column` — defaulting to `types.DEFAULT_MAX_VALUES`. A legal run
-  pair describes 65,536 ids in six bytes, so the id count is not bounded by the
-  input any more than the hybrid's count is: 15 bytes decoded to 65,536 ids,
-  29 KB to 134M and a 1 GiB `Array[Int32]`, and a page body that small could
-  kill the process under a memory limit instead of raising. The reader sums the
-  card table in 64 bits while it is walked, so the ceiling is judged before any
-  container body or id array exists.
+- An optional `max_values` ceiling on `RoaringBitmap::from_bytes`,
+  `from_bytes_with_consumed`, `decode_roaring` and `decode_roaring_column`,
+  defaulting to `types.DEFAULT_MAX_VALUES`. A legal run pair describes 65,536
+  ids in six bytes. A 29 KB bitmap with 134,217,728 ids expands to 512 MiB of
+  `Int32` elements. The reader sums the container cardinalities before
+  parsing their bodies. The bitmap readers take an `Int64` ceiling to support
+  a packed set containing all 2^31 supported ids. The column decoders take an
+  `Int32` ceiling.
 - `RoaringBitmap::cardinality_wide`, the same count in `Int64`, for the one set
   size `cardinality()` cannot report: the id domain is `0 .. 2^31 - 1`, so a set
   of every possible id holds 2^31 of them and overflows an `Int32`.
@@ -52,7 +51,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   recomputes the affected centroid with a weighted blend and keeps its mean
   within the input range, including repeated fractional values. Interpolation
   scales the endpoints before adding them when their distance overflows and
-  returns the right centroid's mean directly at its exact rank.
+  returns the right centroid's mean directly at its exact rank. Merging two
+  digests whose combined count would be infinite raises `InvalidArgument`.
 
 - `decode_delta_length_byte_array` and `decode_delta_byte_array` read their
   second stream from the wrong byte when the caller asked for fewer values than
@@ -66,6 +66,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   which now returns where the stream ends — and a prefix decode returns the
   correct values (regression test: both families, counts 0/1/2/50/128/500/999
   on a 1000-value column that spans several delta blocks).
+- The DELTA readers accept arbitrary width bytes for unused miniblocks in the
+  last block. Those entries have no bodies. The byte-array readers use this
+  rule to locate their following streams. `decode_delta_byte_array` also
+  rejects a page whose prefix and suffix streams declare different counts.
 - `TDigest::from_bytes` accepted a centroid count whose high bit is set. The
   format's count is a u32 and the reader assembled it into an `Int32`, so `2^31`
   came back negative, which is under the `count > 2k + 1` ceiling; `23 + count *

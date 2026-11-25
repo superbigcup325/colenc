@@ -209,6 +209,8 @@ fn container_shared_count(
 ///|
 /// The number of ids both bitmaps hold, equal to
 /// `self.intersect(other).cardinality()` without materializing the result.
+/// Use `intersect(other).cardinality_wide()` when the intersection can cover
+/// the full domain of 2^31 ids, which exceeds `Int32::max_value`.
 pub fn RoaringBitmap::intersection_cardinality(
   self : RoaringBitmap,
   other : RoaringBitmap,

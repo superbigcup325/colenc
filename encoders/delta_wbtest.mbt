@@ -587,6 +587,75 @@ test "delta miniblock payload must be a whole number of bytes" {
 }
 
 ///|
+test "delta ignores unused miniblock widths" {
+  // Both pages contain one delta. The remaining three width bytes are
+  // arbitrary and have no corresponding bodies. The trailing byte belongs
+  // to the caller.
+  let narrow = b"\x80\x01\x04\x02\x14\x02\x00\xff\x01\x02\xaa"
+  let wide = b"\x80\x02\x04\x02\x14\x02\x00\xff\x01\x02\xaa"
+  let (narrow_values, narrow_consumed) = decode_delta_int32(narrow, 2)
+  let (wide_values, wide_consumed) = decode_delta_int64(wide, 2)
+  assert_eq(narrow_values, [10, 11])
+  assert_eq(wide_values, [10L, 11L])
+  assert_eq(narrow_consumed, narrow.length() - 1)
+  assert_eq(wide_consumed, wide.length() - 1)
+}
+
+///|
+test "delta partial decodes consume the present miniblocks in the block" {
+  let values = Array::makei(65, index => {
+    if index < 33 {
+      index
+    } else {
+      33 + (index - 33) * 3
+    }
+  })
+  let out = Buffer()
+  encode_delta_int32(values[:], out)
+  let bytes = out.to_bytes()
+  let (prefix, consumed) = decode_delta_int32(bytes, 2)
+  assert_eq(prefix, [0, 1])
+  assert_eq(consumed, bytes.length())
+}
+
+///|
+test "delta byte-array prefixes skip unused miniblock bodies" {
+  // Both length values are 1. The unused widths have no payload, so the
+  // length stream ends immediately before the two suffix bytes.
+  let lengths = b"\x80\x01\x04\x02\x02\x00\x00\x01\x02\x03ab"
+  let with_prefixes = b"\x80\x01\x04\x02\x00\x00\x00\xff\x01\x02" + lengths
+  let (length_prefix, length_consumed) = decode_delta_length_byte_array(
+    lengths, 1,
+  )
+  let (value_prefix, value_consumed) = decode_delta_byte_array(with_prefixes, 1)
+  assert_eq(length_prefix, [b"a"])
+  assert_eq(value_prefix, [b"a"])
+  assert_eq(length_consumed, lengths.length() - 1)
+  assert_eq(value_consumed, with_prefixes.length() - 1)
+  let (values, full_consumed) = decode_delta_byte_array(with_prefixes, 2)
+  assert_eq(values, [b"a", b"b"])
+  assert_eq(full_consumed, with_prefixes.length())
+}
+
+///|
+test "delta byte array rejects different prefix and suffix counts" {
+  let out = Buffer()
+  encode_delta_int32([0][:], out)
+  let suffix_offset = out.to_bytes().length()
+  encode_delta_length_byte_array([b"a", b"b"], out)
+  let error = capture_error(() => {
+    ignore(decode_delta_byte_array(out.to_bytes(), 1))
+  })
+  match error {
+    @types.EncodingError::Corrupt(offset) => assert_eq(offset, suffix_offset)
+    other =>
+      fail(
+        "expected corrupt suffix stream, got \{@types.EncodingError::message(other)}",
+      )
+  }
+}
+
+///|
 test "delta probe ends exactly where the encoded stream ends" {
   // The two-stream byte-array decoders locate their second stream with this
   // walk when the caller asks for fewer values than the header declares, so the

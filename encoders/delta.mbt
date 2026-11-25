@@ -265,6 +265,23 @@ fn read_delta_header(
 }
 
 ///|
+/// Counts the miniblocks that have bodies in the block starting at `produced`.
+/// The whole width table is present, but the unused entries can be arbitrary.
+#inline
+fn DeltaHeader::used_miniblocks(
+  self : DeltaHeader,
+  produced : Int32,
+  miniblock_size : Int32,
+) -> Int32 {
+  let remaining = self.count - produced
+  if remaining >= self.block_size {
+    self.miniblocks
+  } else {
+    (remaining - 1) / miniblock_size + 1
+  }
+}
+
+///|
 /// Walks the blocks of a DELTA_BINARY_PACKED stream without unpacking, raising
 /// the same errors the decoder would, and returns where the stream ends. A
 /// second copy of the block arithmetic for the same reason `hybrid_produced` is
@@ -304,7 +321,8 @@ fn delta_probe(
     }
     let widths_at = pos
     pos += header.miniblocks
-    for block_index in 0..<header.miniblocks {
+    let used_miniblocks = header.used_miniblocks(produced, miniblock_size)
+    for block_index in 0..<used_miniblocks {
       let width = data[widths_at + block_index].to_int()
       if width > max_width {
         raise @types.EncodingError::InvalidBitWidth(width)
@@ -397,12 +415,13 @@ pub fn decode_delta_int64(
         data.length() - pos,
       )
     }
-    let widths = FixedArray::make(header.miniblocks, 0)
-    for index in 0..<header.miniblocks {
+    let used_miniblocks = header.used_miniblocks(produced, miniblock_size)
+    let widths = FixedArray::make(used_miniblocks, 0)
+    for index in 0..<used_miniblocks {
       widths[index] = data[pos + index].to_int()
     }
     pos += header.miniblocks
-    for block_index in 0..<header.miniblocks {
+    for block_index in 0..<used_miniblocks {
       let width = widths[block_index]
       if width > 64 {
         raise @types.EncodingError::InvalidBitWidth(width)
@@ -496,12 +515,13 @@ pub fn decode_delta_int32(
         data.length() - pos,
       )
     }
-    let widths = FixedArray::make(header.miniblocks, 0)
-    for index in 0..<header.miniblocks {
+    let used_miniblocks = header.used_miniblocks(produced, miniblock_size)
+    let widths = FixedArray::make(used_miniblocks, 0)
+    for index in 0..<used_miniblocks {
       widths[index] = data[pos + index].to_int()
     }
     pos += header.miniblocks
-    for block_index in 0..<header.miniblocks {
+    for block_index in 0..<used_miniblocks {
       let width = widths[block_index]
       if width > 32 {
         raise @types.EncodingError::InvalidBitWidth(width)
@@ -724,6 +744,9 @@ pub fn decode_delta_byte_array(
   )
   if count > length_header.count {
     raise @types.EncodingError::Incomplete(length_header.count, count)
+  }
+  if length_header.count != prefix_header.count {
+    raise @types.EncodingError::Corrupt(suffix_offset)
   }
   let (lengths, lengths_len) = decode_delta_int32(
     data,

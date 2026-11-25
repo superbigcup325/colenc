@@ -717,3 +717,40 @@ test "roaring: a declared cardinality above the ceiling is refused before it exp
   assert_eq(bitmap.cardinality_wide(), 65_536L)
   assert_eq(bitmap.to_array().length(), 65_536)
 }
+
+///|
+test "roaring: a full-domain bitmap round trips with a wide ceiling" {
+  // One run covers every low value for each of the 32768 supported high keys.
+  // This makes a full-domain fixture without materializing any expanded ids.
+  let full : RoaringBitmap = {
+    keys: Array::makei(32_768, index => index),
+    containers: Array::make(32_768, RunContainer([0, 65_535])),
+  }
+  let bytes = full.to_bytes()
+  let error = capture_error(() => {
+    ignore(RoaringBitmap::from_bytes(bytes, max_values=2_147_483_647L))
+  })
+  match error {
+    @types.EncodingError::OutOfRange(2_147_483_648L, _) => ()
+    _ => abort("expected the full-domain cardinality in the error")
+  }
+  let (back, consumed) = RoaringBitmap::from_bytes_with_consumed(
+    bytes.exact_view(),
+    max_values=2_147_483_648L,
+  )
+  assert_eq(back.cardinality_wide(), 2_147_483_648L)
+  assert_eq(consumed, bytes.length())
+  assert_true(back.contains(0))
+  assert_true(back.contains(2_147_483_647))
+}
+
+///|
+test "roaring: a negative ceiling is rejected before reading the bitmap" {
+  let error = capture_error(() => {
+    ignore(RoaringBitmap::from_bytes(b"", max_values=-1L))
+  })
+  match error {
+    @types.EncodingError::InvalidArgument(_) => ()
+    _ => abort("expected InvalidArgument for a negative max_values")
+  }
+}

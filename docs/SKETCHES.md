@@ -74,10 +74,11 @@ logical value hashes to the same bits on every backend and in every column type:
 length prefix (the caller's value boundary is the type, not a delimiter).
 
 `ColBuf` carries no nulls, so null handling is out of scope for this version
-rather than silently folded into a hash of zero. Floating-point values are hashed
-by bit pattern, not by a normalised numeric value, so `-0.0` and `0.0` count as
-two values and each NaN payload counts as its own — that is a property of the
-format, and stating it is cheaper than discovering it in a test.
+rather than silently folded into a hash of zero. Typed floating-point updates
+hash the bits supplied by the backend, so `-0.0` and `0.0` hash separately.
+The JS backend can quiet a `Float` signaling NaN before the update sees it.
+Use `add_bytes` with the original little-endian bytes to hash an exact NaN bit
+pattern.
 
 ### Surface
 
@@ -360,7 +361,8 @@ writer emits them, so the reader has to accept them. Cross-backend byte identity
   values have no rank, and silently keeping them corrupts every query.
 - `quantile` with `q` outside `[0, 1]`, or NaN, is rejected.
 - `quantile` on an empty sketch reports an incomplete stream.
-- `merge` between sketches of different compression parameters is rejected.
+- `merge` rejects different compression parameters and a combined count that
+  would overflow to infinity.
 - `from_bytes` reports a truncated header or body, an unknown version, a count
   beyond the bound, a non-positive or non-increasing centroid, with an offset.
 

@@ -135,8 +135,10 @@ The portable bitmap reader takes the same ceiling, for the same reason: a legal
 run pair describes 65,536 ids in six bytes, so `RoaringBitmap::from_bytes`,
 `decode_roaring` and `decode_roaring_column` all take `max_values` and compare
 the set's declared cardinality against it while the container table is read —
-before any container body or id array exists. A caller that really carries a
-larger set passes a larger ceiling.
+before any container body or id array exists. The packed readers
+`RoaringBitmap::from_bytes` and `from_bytes_with_consumed` accept an `Int64`
+ceiling, so `max_values=2147483648L` permits a set covering the full supported
+id domain. The column decoders use an `Int32` ceiling for the expanded array.
 
 When passing a decoder with `max_values~` as a function value, wrap the call in
 a positional closure such as

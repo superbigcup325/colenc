@@ -272,6 +272,25 @@ test "merging different compression parameters is rejected" {
 }
 
 ///|
+test "self merge rejects a count that would overflow" {
+  let mut digest = tdigest_of([0.0])
+  for _ in 0..<1023 {
+    digest = digest.merge(digest)
+  }
+  let bytes = digest.to_bytes()
+  let round_trip = @sketches.TDigest::from_bytes(bytes.exact_view())
+  assert_eq(round_trip.count(), digest.count())
+  let outcome = try {
+    let merged = digest.merge(digest)
+    "merge succeeded with count \{merged.count()}"
+  } catch {
+    @types.EncodingError::InvalidArgument(_) => "rejected"
+    error => @types.EncodingError::message(error)
+  }
+  assert_eq(outcome, "rejected")
+}
+
+///|
 test "malformed streams are rejected" {
   let digest = tdigest_of([1.0, 2.0, 3.0, 4.0, 5.0])
   let bytes = digest.to_bytes()

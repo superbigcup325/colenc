@@ -398,6 +398,10 @@ pub fn TDigest::merge(
       "compression \{self.compression} does not match \{other.compression}",
     )
   }
+  let total = self.total + other.total
+  if !tdigest_is_finite(total) {
+    raise @types.EncodingError::InvalidArgument("merged count is not finite")
+  }
   // Both operands are read through `tdigest_pairs`, which folds a raw buffer into
   // a temporary list: neither digest is compressed in place, so a caller's sketch
   // answers the same before and after the merge.
@@ -428,7 +432,6 @@ pub fn TDigest::merge(
     weights.push(right_weights[right])
     right += 1
   }
-  let total = self.total + other.total
   let (folded_means, folded_weights) = tdigest_compress_centroids(
     self.compression,
     means,

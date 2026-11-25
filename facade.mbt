@@ -216,7 +216,10 @@ pub fn decode_roaring_column(
       if count < 0 {
         raise @types.EncodingError::InvalidCount(count)
       }
-      let bitmap = @encoders.RoaringBitmap::from_bytes(data, max_values~)
+      let bitmap = @encoders.RoaringBitmap::from_bytes(
+        data,
+        max_values=max_values.to_int64(),
+      )
       let actual = bitmap.cardinality()
       if count != actual {
         raise @types.EncodingError::Incomplete(actual, count)

@@ -660,12 +660,7 @@ pub fn RoaringBitmap::contains(self : RoaringBitmap, id : Int32) -> Bool {
 /// How many ids the set holds, as an `Int32`.
 ///
 /// The id domain is `0 .. 2^31 - 1`, so a set holding every possible id holds
-/// 2^31 of them and no `Int32` can report that: the sum is defined for sets of
-/// at most `Int32::max_value` ids. A set read from bytes cannot reach the
-/// boundary, because `from_bytes` refuses a declared cardinality above its
-/// ceiling (2^24 by default), and building one by `add` would take 2^31 calls
-/// and 2 GiB of container state first. Use `cardinality_wide` when such a set
-/// is possible.
+/// 2^31 of them. Use `cardinality_wide` when the bitmap can cover the full domain.
 pub fn RoaringBitmap::cardinality(self : RoaringBitmap) -> Int32 {
   let mut total = 0
   for container in self.containers {
@@ -691,7 +686,8 @@ pub fn RoaringBitmap::is_empty(self : RoaringBitmap) -> Bool {
 }
 
 ///|
-/// The ids in ascending order.
+/// The ids in ascending order. Use `ids_after` in batches when the set can
+/// cover the full domain, which exceeds the length an array can represent.
 pub fn RoaringBitmap::to_array(self : RoaringBitmap) -> Array[Int32] {
   let ids : Array[Int32] = []
   for index in 0..<self.keys.length() {
@@ -921,15 +917,14 @@ pub fn RoaringBitmap::to_bytes(self : RoaringBitmap) -> Bytes {
 /// Parse one bitmap in the portable Roaring format. Use
 /// `from_bytes_with_consumed` to find the next bitmap in a concatenated stream.
 ///
-/// `max_values` bounds the cardinality the stream may declare. A legal run pair
-/// describes 65,536 ids in six bytes, so the id count is not bounded by the
-/// input the way PLAIN's is: a 29 KB frame reaches 134M ids and `to_array`
-/// would size an `Array[Int32]` from it (the same policy question the hybrid,
-/// delta and dictionary decoders answer with a ceiling). A caller that really
-/// carries a larger set passes a larger `max_values`.
+/// `max_values` is a non-negative ceiling on the declared cardinality, checked
+/// before container bodies are read. It defaults to `types.DEFAULT_MAX_VALUES`.
+/// Pass `2_147_483_648L` to allow a bitmap covering every non-negative `Int32`
+/// id. When the ceiling excludes that full-domain size, the error is
+/// `OutOfRange`, which can report the count in 64 bits.
 pub fn RoaringBitmap::from_bytes(
   data : BytesView,
-  max_values~ : Int32 = @types.DEFAULT_MAX_VALUES,
+  max_values~ : Int64 = @types.DEFAULT_MAX_VALUES.to_int64(),
 ) -> RoaringBitmap raise @types.EncodingError {
   RoaringBitmap::from_bytes_with_consumed(data, max_values~).0
 }
@@ -938,8 +933,13 @@ pub fn RoaringBitmap::from_bytes(
 /// Like `from_bytes`, but also reports how many bytes the bitmap occupied.
 pub fn RoaringBitmap::from_bytes_with_consumed(
   data : BytesView,
-  max_values~ : Int32 = @types.DEFAULT_MAX_VALUES,
+  max_values~ : Int64 = @types.DEFAULT_MAX_VALUES.to_int64(),
 ) -> (RoaringBitmap, Int32) raise @types.EncodingError {
+  if max_values < 0L {
+    raise @types.EncodingError::InvalidArgument(
+      "max_values must be non-negative, got \{max_values}",
+    )
+  }
   let cookie = roaring_read_u32(data, 0)
   let mut position = 4
   let with_runs = (cookie & 0xFFFF) == ROARING_COOKIE_RUN
@@ -1031,13 +1031,16 @@ pub fn RoaringBitmap::from_bytes_with_consumed(
   // container bodies below are allocated from it, so the ceiling has to be
   // judged here rather than after the parse. A full lower half is 2^31 ids,
   // which no `Int32` count can hold.
-  if declared > max_values.to_int64() {
-    let reported = if declared > 2147483647L {
-      2147483647
-    } else {
-      declared.to_int()
+  if declared > max_values {
+    if declared > ROARING_MAX_ID.to_int64() {
+      // TooManyValues carries Int32 counts. Preserve the full-domain size.
+      raise @types.EncodingError::OutOfRange(declared, cursor - 2)
     }
-    raise @types.EncodingError::TooManyValues(reported, max_values)
+    // Here 0 <= max_values < declared <= Int32::max_value.
+    raise @types.EncodingError::TooManyValues(
+      declared.to_int(),
+      max_values.to_int(),
+    )
   }
   position = cursor
   let offsets : Array[Int32] = Array::make(size, 0)
@@ -1181,7 +1184,7 @@ pub fn decode_roaring(
   data : BytesView,
   max_values~ : Int32 = @types.DEFAULT_MAX_VALUES,
 ) -> Array[Int32] raise @types.EncodingError {
-  RoaringBitmap::from_bytes(data, max_values~).to_array()
+  RoaringBitmap::from_bytes(data, max_values=max_values.to_int64()).to_array()
 }
 
 ///|
