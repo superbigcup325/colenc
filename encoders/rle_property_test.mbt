@@ -32,7 +32,7 @@ fn rle_mask(value : UInt64, width : Int32) -> Int64 {
 ///|
 test "property: run heavy values round trip at every width" {
   @qc.quick_check(
-    @qc.forall(@gen.int_range(1, 1000000), seed => {
+    @qc.forall(@gen.int_range(1, 1000000, inclusive=false), seed => {
       let rng = RleRng::new(seed)
       let width = rng.next_int(65)
       let length = rng.next_int(400)
@@ -68,7 +68,7 @@ test "property: run heavy values round trip at every width" {
 ///|
 test "property: all identical values encode as a single repeated run" {
   @qc.quick_check(
-    @qc.forall(@gen.int_range(1, 1000000), seed => {
+    @qc.forall(@gen.int_range(1, 1000000, inclusive=false), seed => {
       let rng = RleRng::new(seed)
       let width = rng.next_int(65)
       let length = 1 + rng.next_int(300)

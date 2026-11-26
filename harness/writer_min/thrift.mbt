@@ -87,7 +87,7 @@ fn put_list_header(
 fn put_binary(buf : @buffer.Buffer, value : String) -> Unit {
   let raw = @utf8.encode(value)
   put_uvarint(buf, raw.length().to_uint64())
-  buf.write_bytes(raw)
+  buf.write_bytesview(raw)
 }
 
 ///|

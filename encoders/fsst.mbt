@@ -362,7 +362,7 @@ pub fn encode_fsst_with(
   head.write_byte(symbols.length().to_byte())
   for symbol in symbols {
     head.write_byte(symbol.length().to_byte())
-    head.write_bytes(symbol)
+    head.write_bytesview(symbol)
   }
   head.write_int_le(values.length())
 
@@ -380,13 +380,13 @@ pub fn encode_fsst_with(
   let compressed_size = head.length() + 4 * values.length() + bodies.length()
   if compressed_size < stored_size {
     out.write_byte(FSST_MODE_COMPRESSED.to_byte())
-    out.write_bytes(head.to_bytes())
+    out.write_bytesview(head.to_bytes())
     let body_bytes = bodies.to_bytes()
     let mut position = 0
     for index in 0..<values.length() {
       let length = lengths[index]
       out.write_int_le(length)
-      out.write_bytes(body_bytes[position:position + length])
+      out.write_bytesview(body_bytes[position:position + length])
       position += length
     }
   } else {
@@ -394,7 +394,7 @@ pub fn encode_fsst_with(
     out.write_int_le(values.length())
     for value in values {
       out.write_int_le(value.length())
-      out.write_bytes(value)
+      out.write_bytesview(value)
     }
   }
 }
@@ -564,7 +564,7 @@ pub fn decode_fsst(
             value.write_byte(data[position])
             position += 1
           } else if code < symbols.length() {
-            value.write_bytes(symbols[code])
+            value.write_bytesview(symbols[code])
           } else {
             raise @types.EncodingError::InvalidIndex(code, symbols.length())
           }

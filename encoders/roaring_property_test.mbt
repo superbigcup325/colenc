@@ -48,7 +48,7 @@ fn roaring_model(ids : Array[Int32]) -> Array[Int32] {
 ///|
 test "property: a bitmap round trips through its serialization" {
   @qc.quick_check(
-    @qc.forall(@gen.int_range(1, 1000000), seed => {
+    @qc.forall(@gen.int_range(1, 1000000, inclusive=false), seed => {
       let rng = RoaringRng::new(seed)
       let ids = roaring_ids(rng, rng.next_int(500), 200000)
       let bitmap = @encoders.RoaringBitmap::from_ids(ids) catch {
@@ -78,7 +78,7 @@ test "property: a bitmap round trips through its serialization" {
 ///|
 test "property: run optimisation never changes the set" {
   @qc.quick_check(
-    @qc.forall(@gen.int_range(1, 1000000), seed => {
+    @qc.forall(@gen.int_range(1, 1000000, inclusive=false), seed => {
       let rng = RoaringRng::new(seed)
       let ids = roaring_ids(rng, rng.next_int(400), 20000)
       let bitmap = @encoders.RoaringBitmap::from_ids(ids) catch {
@@ -98,7 +98,7 @@ test "property: run optimisation never changes the set" {
 ///|
 test "property: union and intersect agree with a naive model" {
   @qc.quick_check(
-    @qc.forall(@gen.int_range(1, 1000000), seed => {
+    @qc.forall(@gen.int_range(1, 1000000, inclusive=false), seed => {
       let rng = RoaringRng::new(seed)
       let left_ids = roaring_ids(rng, rng.next_int(300), 70000)
       let right_ids = roaring_ids(rng, rng.next_int(300), 70000)
@@ -132,7 +132,7 @@ test "property: union and intersect agree with a naive model" {
 ///|
 test "property: the decoder rejects truncated streams" {
   @qc.quick_check(
-    @qc.forall(@gen.int_range(1, 1000000), seed => {
+    @qc.forall(@gen.int_range(1, 1000000, inclusive=false), seed => {
       let rng = RoaringRng::new(seed)
       let ids = roaring_ids(rng, 1 + rng.next_int(200), 100000)
       let bitmap = @encoders.RoaringBitmap::from_ids(ids) catch {

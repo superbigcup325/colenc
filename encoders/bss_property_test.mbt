@@ -20,7 +20,7 @@ fn BssRng::next_u64(self : BssRng) -> UInt64 {
 ///|
 test "property: byte stream split float round trips bit patterns" {
   @qc.quick_check(
-    @qc.forall(@gen.int_range(1, 1000000), seed => {
+    @qc.forall(@gen.int_range(1, 1000000, inclusive=false), seed => {
       let rng = BssRng::new(seed)
       let count = rng.next_u64().to_int() % 200
       let values = Array::makei(count, fn(_) {
@@ -50,7 +50,7 @@ test "property: byte stream split float round trips bit patterns" {
 ///|
 test "property: byte stream split double round trips bit patterns" {
   @qc.quick_check(
-    @qc.forall(@gen.int_range(1, 1000000), seed => {
+    @qc.forall(@gen.int_range(1, 1000000, inclusive=false), seed => {
       let rng = BssRng::new(seed)
       let count = rng.next_u64().to_int() % 200
       let values = Array::makei(count, fn(_) {

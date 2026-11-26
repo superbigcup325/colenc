@@ -462,7 +462,7 @@ pub fn encode_bool_rle(
   state.finish()
   let bytes = stream.to_bytes()
   out.write_int_le(bytes.length())
-  out.write_bytes(bytes)
+  out.write_bytesview(bytes)
 }
 
 ///|

@@ -58,11 +58,11 @@ test "roaring: appended serialization keeps offsets relative to its start" {
     _ => abort("from_ids raised")
   }
   let out = @buffer.Buffer()
-  out.write_bytes(b"prefix")
+  out.write_bytesview(b"prefix")
   bitmap.serialize(out)
   let expected = @buffer.Buffer()
-  expected.write_bytes(b"prefix")
-  expected.write_bytes(bitmap.to_bytes())
+  expected.write_bytesview(b"prefix")
+  expected.write_bytesview(bitmap.to_bytes())
   assert_eq(out.to_bytes(), expected.to_bytes())
   let back = RoaringBitmap::from_bytes(out.to_bytes()[6:]) catch {
     error =>

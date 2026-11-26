@@ -582,7 +582,7 @@ pub fn encode_delta_length_byte_array(
   })
   encode_delta_int32(lengths[:], out)
   for value in values {
-    out.write_bytes(value)
+    out.write_bytesview(value)
   }
 }
 

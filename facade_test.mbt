@@ -56,7 +56,7 @@ test "facade plain round trips every physical type" {
 ///|
 test "facade reports bytes appended, not total length" {
   let out = @buffer.Buffer()
-  out.write_bytes(b"prefix")
+  out.write_bytesview(b"prefix")
   let stats = @colenc.encode_column(
     @types.ColBuf::Int32s([1]),
     @types.Plain,

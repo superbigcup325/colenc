@@ -86,7 +86,7 @@ pub fn encode_double(values : Array[Double], out : @buffer.Buffer) -> Unit {
 pub fn encode_byte_arrays(values : Array[Bytes], out : @buffer.Buffer) -> Unit {
   for value in values {
     out.write_int_le(value.length())
-    out.write_bytes(value)
+    out.write_bytesview(value)
   }
 }
 

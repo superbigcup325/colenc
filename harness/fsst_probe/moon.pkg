@@ -3,7 +3,6 @@ import {
   "superbigcup325/colenc/types",
   "moonbitlang/core/env",
   "moonbitlang/x/fs",
-  "moonbitlang/x/sys",
 }
 
 pkgtype(kind: "executable")

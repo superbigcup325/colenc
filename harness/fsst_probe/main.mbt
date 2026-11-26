@@ -47,7 +47,7 @@ fn main {
   let raw = @fs.read_file_to_bytes(input) catch {
     @fs.IOError(message) => {
       eprintln("fsst_probe: cannot read \{input}: \{message}")
-      @sys.exit(1)
+      @env.exit(1)
       return
     }
   }
@@ -70,7 +70,7 @@ fn main {
   ) catch {
     error => {
       eprintln("fsst_probe: \{@types.EncodingError::message(error)}")
-      @sys.exit(1)
+      @env.exit(1)
       return
     }
   }
@@ -83,7 +83,7 @@ fn main {
   ) catch {
     error => {
       eprintln("fsst_probe: \{@types.EncodingError::message(error)}")
-      @sys.exit(1)
+      @env.exit(1)
       return
     }
   }
@@ -93,14 +93,14 @@ fn main {
   }
   if !roundtrip_ok {
     eprintln("fsst_probe: round trip mismatch")
-    @sys.exit(1)
+    @env.exit(1)
     return
   }
   if output != "" {
     @fs.write_bytes_to_file(output, encoded) catch {
       @fs.IOError(message) => {
         eprintln("fsst_probe: cannot write \{output}: \{message}")
-        @sys.exit(1)
+        @env.exit(1)
         return
       }
     }

@@ -36,7 +36,7 @@ fn mask_to_width(value : UInt64, width : Int32) -> Int64 {
 ///|
 test "property: bit_pack then bit_unpack returns the values" {
   @qc.quick_check(
-    @qc.forall(@gen.int_range(1, 1000000), seed => {
+    @qc.forall(@gen.int_range(1, 1000000, inclusive=false), seed => {
       let rng = Rng::new(seed)
       let width = rng.next_int(65)
       let count = rng.next_int(200)
@@ -59,7 +59,7 @@ test "property: bit_pack then bit_unpack returns the values" {
 ///|
 test "property: uleb128 round trips at every width" {
   @qc.quick_check(
-    @qc.forall(@gen.int_range(1, 1000000), seed => {
+    @qc.forall(@gen.int_range(1, 1000000, inclusive=false), seed => {
       let rng = Rng::new(seed)
       let values = Array::makei(1 + rng.next_int(50), _ => rng.next_u64())
       let buffer = @buffer.Buffer()
@@ -87,7 +87,7 @@ test "property: uleb128 round trips at every width" {
 ///|
 test "property: zigzag round trips signed values" {
   @qc.quick_check(
-    @qc.forall(@gen.int_range(1, 1000000), seed => {
+    @qc.forall(@gen.int_range(1, 1000000, inclusive=false), seed => {
       let rng = Rng::new(seed)
       let values = Array::makei(1 + rng.next_int(50), _ => {
         rng.next_u64().reinterpret_as_int64()

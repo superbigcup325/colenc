@@ -87,7 +87,7 @@ fn page_header(
   last = field_i32(buf, last, 2, body_len)
   last = field_i32(buf, last, 3, body_len)
   last = put_field_header(buf, last, 5, THRIFT_STRUCT)
-  buf.write_bytes(data_header)
+  buf.write_bytesview(data_header)
   put_stop(buf)
   buf.to_bytes()
 }
@@ -113,7 +113,7 @@ fn dictionary_page_header(body_len : Int32, num_values : Int32) -> Bytes {
   last = field_i32(buf, last, 2, body_len)
   last = field_i32(buf, last, 3, body_len)
   last = put_field_header(buf, last, 7, THRIFT_STRUCT)
-  buf.write_bytes(page)
+  buf.write_bytesview(page)
   put_stop(buf)
   buf.to_bytes()
 }
@@ -180,7 +180,7 @@ fn column_chunk(file_offset : Int32, meta_data : Bytes) -> Bytes {
   let mut last = 0
   last = field_i64(buf, last, 2, file_offset.to_int64())
   last = put_field_header(buf, last, 3, THRIFT_STRUCT)
-  buf.write_bytes(meta_data)
+  buf.write_bytesview(meta_data)
   put_stop(buf)
   buf.to_bytes()
 }
@@ -196,7 +196,7 @@ fn row_group(
   last = put_field_header(buf, last, 1, THRIFT_LIST)
   put_list_header(buf, columns.length(), THRIFT_STRUCT)
   for column in columns {
-    buf.write_bytes(column)
+    buf.write_bytesview(column)
   }
   last = field_i64(buf, last, 2, total_size.to_int64())
   last = field_i64(buf, last, 3, num_rows.to_int64())
@@ -216,13 +216,13 @@ fn file_meta_data(
   last = put_field_header(buf, last, 2, THRIFT_LIST)
   put_list_header(buf, schema.length(), THRIFT_STRUCT)
   for element in schema {
-    buf.write_bytes(element)
+    buf.write_bytesview(element)
   }
   last = field_i64(buf, last, 3, num_rows.to_int64())
   last = put_field_header(buf, last, 4, THRIFT_LIST)
   put_list_header(buf, row_groups.length(), THRIFT_STRUCT)
   for group in row_groups {
-    buf.write_bytes(group)
+    buf.write_bytesview(group)
   }
   last = field_binary(buf, last, 6, "colenc writer_min")
   put_stop(buf)
@@ -245,8 +245,8 @@ pub fn build_page(
 
   let file = Buffer()
   write_magic(file)
-  file.write_bytes(header)
-  file.write_bytes(body_bytes)
+  file.write_bytesview(header)
+  file.write_bytesview(body_bytes)
 
   let schema = [schema_element_root(), schema_element(column, type_id)]
   let meta = column_meta_data(
@@ -256,7 +256,7 @@ pub fn build_page(
   let groups = [row_group([chunk], total_size, count)]
   let footer = file_meta_data(schema, count, groups)
 
-  file.write_bytes(footer)
+  file.write_bytesview(footer)
   file.write_int_le(footer.length())
   write_magic(file)
   file.to_bytes()
@@ -334,10 +334,10 @@ pub fn build_dictionary_int32_page(
 
   let file = Buffer()
   write_magic(file)
-  file.write_bytes(dict_header)
-  file.write_bytes(dictionary)
-  file.write_bytes(data_header)
-  file.write_bytes(indices)
+  file.write_bytesview(dict_header)
+  file.write_bytesview(dictionary)
+  file.write_bytesview(data_header)
+  file.write_bytesview(indices)
 
   let schema = [schema_element_root(), schema_element(column, TYPE_INT32)]
   let meta = column_meta_data(
@@ -353,7 +353,7 @@ pub fn build_dictionary_int32_page(
   let groups = [row_group([chunk], total_size, count)]
   let footer = file_meta_data(schema, count, groups)
 
-  file.write_bytes(footer)
+  file.write_bytesview(footer)
   file.write_int_le(footer.length())
   write_magic(file)
   file.to_bytes()

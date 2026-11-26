@@ -1309,7 +1309,7 @@ fn bench_candidates(b : @bench.Bench, sink : @ref.Ref[Int32]) -> Unit {
         scratch[index * 2 + 1] = ((value >> 8) & 0xFF).to_byte()
       }
       let out = Buffer(capacity=WIDE_COUNT * 2)
-      out.write_bytes(Bytes::from_array(scratch))
+      out.write_bytesview(Bytes::from_array(scratch))
       sink.val = sink.val + out.length()
     },
   )

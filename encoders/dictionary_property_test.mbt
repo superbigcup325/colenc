@@ -25,7 +25,7 @@ fn DictRng::next_int(self : DictRng, bound : Int32) -> Int32 {
 ///|
 test "property: low-cardinality int columns round trip through a dictionary" {
   @qc.quick_check(
-    @qc.forall(@gen.int_range(1, 1000000), seed => {
+    @qc.forall(@gen.int_range(1, 1000000, inclusive=false), seed => {
       let rng = DictRng::new(seed)
       let cardinality = 1 + rng.next_int(10)
       let length = rng.next_int(300)
@@ -63,7 +63,7 @@ test "property: low-cardinality int columns round trip through a dictionary" {
 ///|
 test "property: low-cardinality string columns round trip through a dictionary" {
   @qc.quick_check(
-    @qc.forall(@gen.int_range(1, 1000000), seed => {
+    @qc.forall(@gen.int_range(1, 1000000, inclusive=false), seed => {
       let rng = DictRng::new(seed)
       let cardinality = 1 + rng.next_int(8)
       let length = rng.next_int(200)

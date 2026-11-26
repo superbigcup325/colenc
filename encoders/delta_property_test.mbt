@@ -25,7 +25,7 @@ fn DeltaRng::next_int(self : DeltaRng, bound : Int32) -> Int32 {
 ///|
 test "property: delta int64 round trips random sequences" {
   @qc.quick_check(
-    @qc.forall(@gen.int_range(1, 1000000), seed => {
+    @qc.forall(@gen.int_range(1, 1000000, inclusive=false), seed => {
       let rng = DeltaRng::new(seed)
       let length = rng.next_int(700)
       let values = Array::makei(length, _ => {
@@ -48,7 +48,7 @@ test "property: delta int64 round trips random sequences" {
 ///|
 test "property: delta int32 round trips random sequences" {
   @qc.quick_check(
-    @qc.forall(@gen.int_range(1, 1000000), seed => {
+    @qc.forall(@gen.int_range(1, 1000000, inclusive=false), seed => {
       let rng = DeltaRng::new(seed)
       let length = rng.next_int(400)
       let values = Array::makei(length, _ => rng.next_u64().to_int())
@@ -69,7 +69,7 @@ test "property: delta int32 round trips random sequences" {
 ///|
 test "property: delta byte array round trips shared prefixes" {
   @qc.quick_check(
-    @qc.forall(@gen.int_range(1, 1000000), seed => {
+    @qc.forall(@gen.int_range(1, 1000000, inclusive=false), seed => {
       let rng = DeltaRng::new(seed)
       let length = rng.next_int(120)
       let prefix = "pre-" + rng.next_int(50).to_string()

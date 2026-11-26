@@ -4,10 +4,9 @@ on:
   push:
     branches:
       - main
+      - 'codex/ci-*'
   pull_request:
-  # The toolchain is installed from `latest` instead of a pinned version, so a
-  # release that breaks this tree would otherwise surface only on the next push.
-  # The weekly run is that check; the dispatch is for verifying one on demand.
+  # Check the latest toolchain weekly without changing the version used on pushes.
   schedule:
     - cron: '0 3 * * 1'
   workflow_dispatch:
@@ -19,6 +18,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  MOONBIT_INSTALL_VERSION: ${{ github.event_name == 'schedule' && 'latest' || '1.0.0-rc1+3c0520448' }}
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -28,8 +30,12 @@ jobs:
         run: |
           curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
           echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
-      - name: Toolchain version
-        run: moon version --all
+      - name: Verify toolchain version
+        run: |
+          moon version --all
+          if [ "$MOONBIT_INSTALL_VERSION" != latest ]; then
+            moonc -v | grep -F "v$MOONBIT_INSTALL_VERSION ("
+          fi
       - name: Fetch dependencies
         run: |
           # `moon install` without arguments is deprecated: the toolchain

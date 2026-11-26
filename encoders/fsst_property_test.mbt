@@ -25,7 +25,7 @@ fn FsstRng::next_int(self : FsstRng, bound : Int32) -> Int32 {
 ///|
 test "property: fsst round trips repetitive columns" {
   @qc.quick_check(
-    @qc.forall(@gen.int_range(1, 1000000), seed => {
+    @qc.forall(@gen.int_range(1, 1000000, inclusive=false), seed => {
       let rng = FsstRng::new(seed)
       let pieces = ["alpha", "beta", "gamma-", "delta", "0123456789"]
       let count = rng.next_int(80)
@@ -33,7 +33,7 @@ test "property: fsst round trips repetitive columns" {
         let repeats = 1 + rng.next_int(4)
         let buffer = Buffer()
         for _ in 0..<repeats {
-          buffer.write_bytes(
+          buffer.write_bytesview(
             @utf8.encode(pieces[rng.next_int(pieces.length())]),
           )
         }

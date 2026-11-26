@@ -172,7 +172,7 @@ test "plain wide decode keeps extremes, specials and trailing bytes" {
   ]
   let out = @buffer.Buffer()
   encode_int64(longs, out)
-  out.write_bytes(b"\xaa\xbb\xcc")
+  out.write_bytesview(b"\xaa\xbb\xcc")
   let bytes = out.to_bytes()
   assert_eq(decode_int64(bytes, longs.length()) catch { _ => [] }, longs)
   assert_eq(decode_int64(bytes, 0) catch { _ => [1L] }, [])
@@ -247,7 +247,7 @@ test "plain narrow decode keeps extremes, specials and unaligned views" {
   let out = @buffer.Buffer()
   out.write_byte(b'\x7f')
   encode_int32(ints, out)
-  out.write_bytes(b"\xaa\xbb")
+  out.write_bytesview(b"\xaa\xbb")
   let view = out.to_bytes()[1:]
   assert_eq(decode_int32(view, ints.length()) catch { _ => [] }, ints)
   assert_eq(decode_int32(view, 1) catch { _ => [] }, [0])
