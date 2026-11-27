@@ -68,9 +68,21 @@ and the spill format re-encoded (40% smaller). Resolve
 [`superbigcup325/colenc`](https://mooncakes.io/docs/superbigcup325/colenc) from
 Mooncakes by version.
 
+## Install
+
+Install the [MoonBit toolchain](https://www.moonbitlang.com/download/) and run
+`moonc -v` to check that the compiler is `v1.0.0-rc1` or later. In your MoonBit
+project, add the published package:
+
+```bash
+moon add superbigcup325/colenc@0.2.0
+```
+
 ## Quick start
 
 ```bash
+git clone https://github.com/superbigcup325/colenc.git
+cd colenc
 moon run examples/encode_demo
 moon run examples/encode_demo | sort -t$'\t' -k4,4n
 ```
@@ -82,8 +94,10 @@ prints `encoding/type`, value count, encoded bytes and the ratio to PLAIN.
 
 ```bash
 moon check --deny-warn        # type-check, warnings are errors
-moon test                     # wasm-gc, the default target
-moon test --target native     # and js: backend-differing paths need both
+moon build --target wasm-gc --deny-warn . sketches examples/encode_demo
+moon test --target wasm-gc
+moon test --target native
+moon test --target js
 moon package --list           # what a release archive would contain
 ```
 

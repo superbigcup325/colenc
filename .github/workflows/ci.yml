@@ -44,6 +44,8 @@ jobs:
           moon update
       - name: Lint (check --deny-warn)
         run: moon check --deny-warn
+      - name: Build library and example (wasm-gc)
+        run: moon build --target wasm-gc --deny-warn . sketches examples/encode_demo
       - name: Format check
         run: |
           # `moon fmt --check` errors out while the module has no packages, so
